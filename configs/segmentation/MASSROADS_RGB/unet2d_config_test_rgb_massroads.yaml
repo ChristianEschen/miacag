@@ -1,0 +1,52 @@
+model_path: "/home/gandalf/MIA/runs/Feb26_13-04-27_gandalf-MS-7845_avi" #"/home/gandalf/segmento/runs/Jan19_14-08-51_gandalf-MS-7845_avi"
+
+# model class, e.g. UNet3D, ResidualUNet3D
+model_name: UNet2D
+
+# Configurations
+model:
+  dimensions: 2
+  # number of input channels to the model
+  in_channels: 3
+  # number of output classes (output channels)
+  classes: 2
+
+  channels: (16, 32, 64, 128, 256)
+  
+  strides: (2, 2, 2, 2)
+
+  num_res_units: 2
+
+
+# Data loader configuration
+loaders:
+  task_type: 'image2image'
+  task: 'costum'
+  format: 'rgb'
+
+  TestdataRoot: '/home/gandalf/MIA/data/MassRoads2D_RGB'
+  TestdataCSV: '/home/gandalf/MIA/data/MassRoads2D_RGB/test.csv'
+
+  batchSize: 1 # NOT IMPLEMENTED FOR BATCH SIZE>1
+  full_size: False
+  # In full size is not true upsampling from the following size will be performed
+
+  pixdim_height: 1
+  pixdim_width: 1
+  pixdim_depth: 999
+  height: 256
+  width: 256
+  depth: -1
+
+
+  numWorkers: 3
+  mode: testing
+
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['diceCE_loss']
+# evaluation metric configuration
+eval_metric:
+  name: [dice_class, dice_global]
+# learning rate scheduler configuration

@@ -1,0 +1,77 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+# PyTorch configuration
+local_rank: 1
+# model class, e.g. UNet3D, ResidualUNet3D
+model_name: UNet3D
+
+# model configuration
+model:
+  dimensions: 3
+  # number of input channels to the model
+  in_channels: 4
+  # number of output classes (output channels)
+  classes: 4
+  # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
+  layer_order: gcr
+  # feature maps scale factor
+  f_maps: 32
+  # number of groups in the groupnorm
+  num_groups: 8
+# Data loader configuration
+loaders:
+  task_type: 'image2image'
+  task: 'costum'
+
+
+  TraindataRoot: '/home/gandalf/MIA/data/BRATS_nifty_small'
+  TraindataCSV: '/home/gandalf/MIA/data/BRATS_nifty_small/train.csv'
+  ValdataRoot: '/home/gandalf/MIA/data/BRATS_nifty_small'
+  ValdataCSV: '/home/gandalf/MIA/data/BRATS_nifty_small/train.csv'
+
+
+  pixdim_height: 1.5
+  pixdim_width: 1.5
+  pixdim_depth: 2
+  batchSize: 2
+  height: 128
+  width: 128
+  depth: 64
+
+  numWorkers: 3
+  mode: training
+  val_method:
+    type: 'patches' #'sliding_window' 'patches'
+
+# trainer configuration
+trainer:
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_frequency: 50
+  # validation method sliding_window or patch
+
+  # max number of epochs
+  epochs: 2
+# optimizer configuration
+optimizer:
+  type: "sgd" #
+  # initial learning rate
+  learning_rate: 0.01 # 0.01 #0.0002
+  # weight decay
+  momentum: 0.99
+  weight_decay: 0.00003
+lr_scheduler:  
+  type: 'poly'
+  end_lr: 0.001
+  power: 0.9
+  milestones: [10, 30, 60]
+  gamma: 0.2
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['diceCE_loss'] #CE_pixel CE_pixel
+# evaluation metric configuration
+eval_metric:
+  name: [dice_class, dice_global]
+# learning rate scheduler configuration

@@ -1,0 +1,72 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+# PyTorch configuration
+local_rank: 1
+# model class, e.g. UNet3D, ResidualUNet3D
+model_name: ir_csn_152_
+# model configuration
+model:
+  in_channels: 1
+  # number of output classes (output channels)
+  classes: 2
+  # Pretraining if False ""
+  pretraining: "ig65m_32frms"
+# Data loader configuration
+loaders:
+  #dimension order
+  model_dim_order: CH_D_H_W # used for csn models - only relevant for nifty files for classification
+  format: 'nifty'
+  task_type: "image2scalar"
+  task: 'costum'
+  TraindataRoot: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty_single_ch'
+  TraindataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty_single_ch/data.csv'
+  ValdataRoot: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty_single_ch'
+  ValdataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty_single_ch/data.csv'
+
+  batchSize: 2
+  Resize_height: 224
+  Resize_width: 224
+  Resize_depth: -1
+
+  Crop_height: 224
+  Crop_width: 224
+  Crop_depth: 32
+  numWorkers: 3
+  
+
+  # validation method 
+  val_method:
+    type: "patches" # patches | sliding
+    samples: 5
+
+# trainer configuration
+trainer:
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_frequency: 5
+  # max number of epochs
+  epochs: 2
+
+# optimizer configuration
+optimizer:
+  type: "sgd" #
+  # initial learning rate
+  learning_rate: 0.003
+  # weight decay
+  weight_decay: 0.0001
+  momentum: 0.9
+
+lr_scheduler:
+  type: None # NOT IMPLEMENTED JET
+  lr_warmup_epochs: 10
+  milestones: [10, 30, 60]
+  gamma: 0.2
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['CE']
+# evaluation metric configuration
+eval_metric:
+  name: ['acc_top_1']
+# learning rate scheduler configuration

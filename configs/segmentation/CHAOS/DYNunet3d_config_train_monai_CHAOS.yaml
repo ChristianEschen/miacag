@@ -1,0 +1,67 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+# PyTorch configuration
+local_rank: 1
+# model class, e.g. UNet3D, ResidualUNet3D
+model_name: DYNUNet3D
+dataset_fingerprint: '/home/gandalf/MIA/configs/segmentation/CHAOS/dataset_fingerprint.json'
+# model configuration
+model:
+  dimensions: 3
+  # number of input channels to the model
+  in_channels: 1
+  # number of output classes (output channels)
+  classes: 5
+
+loaders:
+  task_type: 'image2image'
+  task: 'costum'
+
+
+
+  TraindataRoot: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2'
+  TraindataCSV: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/train.csv'
+  ValdataRoot: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2'
+  ValdataCSV: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/val.csv'
+
+  height: 192
+  width: 192
+  depth: 32
+
+  numWorkers: 3
+  mode: training
+  val_method:
+    type: 'patches'  #'sliding_window' #patches
+
+# trainer configuration
+trainer:
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_frequency: 20
+  # validation method sliding_window or patch
+
+  # max number of epochs
+  epochs: 200
+# optimizer configuration
+optimizer:
+  type: "sgd" #
+  # initial learning rate
+  learning_rate: 0.01 # 0.01 #0.0002
+  # weight decay
+  momentum: 0.99
+  weight_decay: 0.00003
+lr_scheduler:  
+  type: 'poly'
+  end_lr: 0.001
+  power: 0.9
+  milestones: [10, 30, 60]
+  gamma: 0.2
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['diceCE_loss'] #CE_pixel CE_pixel
+# evaluation metric configuration
+eval_metric:
+  name: [dice_class, dice_global]
+# learning rate scheduler configuration

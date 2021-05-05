@@ -35,9 +35,9 @@ def mkDir(directory):
         os.makedirs(directory)
 
 
-def init_metrics(metrics, classes, mode="metric"):
+def init_metrics(metrics, config=None, mode="metric"):
     if 'dice_class' in metrics:
-        for class_i in range(0, classes):
+        for class_i in range(0, config['model']['classes']):
             metrics.append('dice_class_'+str(class_i))
         metrics.remove('dice_class')
     if mode == "loss":
@@ -48,6 +48,7 @@ def init_metrics(metrics, classes, mode="metric"):
     idx = range(len(keys))
     for i in idx:
         dicts[metrics[i]] = keys[i]
+
     return dicts, metrics
 
 
@@ -115,7 +116,7 @@ def normalize_metrics(running_metrics, data_len):
     return running_metrics
 
 
-def increment_metrics(running_metrics, metrics):
+def increment_metrics(running_metrics, metrics, config=None):
     for metric in metrics:
         running_metrics[metric] += metrics[metric]
     return running_metrics

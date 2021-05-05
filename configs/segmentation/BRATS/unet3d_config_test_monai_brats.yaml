@@ -1,4 +1,4 @@
-model_path: "/home/gandalf/MIA/runs/Feb26_12-02-21_gandalf-MS-7845_avi" #"/home/gandalf/segmento/runs/Jan19_14-08-51_gandalf-MS-7845_avi"
+model_path: "/home/gandalf/MIA/runs/Mar17_10-07-29_gandalf-MS-7845_avi" #"/home/gandalf/segmento/runs/Jan19_14-08-51_gandalf-MS-7845_avi"
 
 # model class, e.g. UNet3D, ResidualUNet3D
 model_name: UNet3D
@@ -26,6 +26,8 @@ loaders:
   TestdataRoot: '/home/gandalf/MIA/data/BRATS_nifty_small'
   TestdataCSV: '/home/gandalf/MIA/data/BRATS_nifty_small/train.csv'
 
+  isCT: False
+  CropForeGround: False
   batchSize: 1 # NOT IMPLEMENTED FOR BATCH SIZE>1
   full_size: False
   # In full size is not true upsampling from the following size will be performed
@@ -38,7 +40,8 @@ loaders:
 
   numWorkers: 3
   mode: testing
-
+  val_method:
+    type: 'sliding_window'
 # loss function configuration
 loss:
   # loss function to be used during training

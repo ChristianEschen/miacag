@@ -1,5 +1,7 @@
 import importlib
 import yaml
+import torch
+import os
 
 
 def getFingerPrint(filename):
@@ -67,7 +69,6 @@ def get_model(config):
                 configuration['strides'].append(configuration['strides_temp'][i])
         configuration['upsample_kernel_size'] = configuration['strides'][1:]
         configuration['norm_name'] = "instance"
-       # configuration['deep_supervision'] = True
         configuration['deep_supr_num'] = 2
         configuration['res_block'] = False
         del configuration['dimensions']
@@ -85,8 +86,29 @@ def get_model(config):
         m = importlib.import_module('models.csn.model')
         class_name_tag = config['model_name'][3:]
         model_clazz = getattr(m, class_name_tag)
-
-
+        configuration = config['model'].copy()
+        del configuration['in_channels']
+        configuration['name'] = config['model_name']
+    elif config['model_name'] == 'CO_CLR':
+        if 'model_path' in config:
+            m = importlib.import_module('models.CoCLR.classification')
+            model_clazz = getattr(m, 'LinearClassifier')
+            configuration = config['model']
+            model = model_clazz(**configuration)
+            if config['model_path'] != "":
+                model.backbone.load_state_dict(
+                    torch.load(os.path.join(config['model_path'], 'model.pt')))
+            return model
+        else:
+            m = importlib.import_module('models.CoCLR.pretrain')
+            model_clazz = getattr(m, 'InfoNCE')
+            configuration = {}
+            configuration['input_channel'] = config['model']['in_channels']
+    elif config['model_name'] == 'SimSiam':
+        m = importlib.import_module('models.SimSiam.simsiam2d')
+        model_clazz = getattr(m, 'SimSiam')
+        configuration = config['model']
+        model = model_clazz(**configuration)
     else:
         raise ValueError(
             "model is not implemented%s" % repr(config['model_name']))

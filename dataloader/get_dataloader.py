@@ -1,10 +1,43 @@
-def get_data_from_loader(data, config, device):
+import torch
+
+
+def get_data_from_loader(data, config, device, val_phase=False):
     if config['loaders']['task_type'] in ['image2scalar']:
         inputs = data['inputs'].to(device)
-        labels = data['labels'].to(device)
+        labels = data['labels'].long().to(device)
     elif config['loaders']['task_type'] == 'image2image':
         inputs = data['inputs'].to(device)
         labels = data['seg'].to(device)
+    elif config['loaders']['task_type'] == "representation_learning":
+        if val_phase is False:
+            if config['loaders']['backend'] != 'torchvision':
+                inputs = data['inputs'].to(device)
+                if config['model_dimension'] == '2D':
+                    inputs = torch.cat(
+                        (torch.unsqueeze(inputs[::2, :, :, :], dim=1),
+                            torch.unsqueeze(inputs[1::2, :, :, :], dim=1)),
+                        dim=1)
+                elif config['model_dimension'] == '3D':
+                    inputs = torch.cat(
+                        (torch.unsqueeze(inputs[::2, :, :, :, :], dim=1),
+                            torch.unsqueeze(inputs[1::2, :, :, :, :], dim=1)),
+                        dim=1)
+                else:
+                    raise ValueError(
+                            "model dimension not implemented")
+            else:
+                inputs = torch.cat(
+                    (torch.unsqueeze(data[0][0].to(device), 1),
+                     torch.unsqueeze(data[0][1].to(device), 1)),
+                    dim=1)
+            labels = None
+        else:
+            if config['loaders']['backend'] != 'torchvision':
+                inputs = data['inputs'].to(device)
+                labels = data['labels'].long().to(device)
+            else:
+                inputs = data[0].to(device)
+                labels = data[1].long().to(device)
     else:
         raise ValueError(
                 "Data type is not implemented")
@@ -23,6 +56,12 @@ def get_dataloader_train(config):
             SegmentationLoader
         SL = SegmentationLoader()
         train_loader, val_loader = SL.get_segmentation_loader_train(config)
+        return train_loader, val_loader
+    elif config['loaders']['task_type'] == "representation_learning":
+        from dataloader.Representation.get_dataloader_representation import \
+            RepresentationLoader
+        RL = RepresentationLoader()
+        train_loader, val_loader = RL.get_representation_loader_train(config)
         return train_loader, val_loader
     else:
         raise ValueError(

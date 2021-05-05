@@ -22,6 +22,7 @@ model:
 loaders:
   task_type: 'image2image'
   task: 'costum'
+  use_amp: True
 
 
   TraindataRoot: '/home/gandalf/MIA/data/BRATS_nifty_small'
@@ -29,6 +30,8 @@ loaders:
   ValdataRoot: '/home/gandalf/MIA/data/BRATS_nifty_small'
   ValdataCSV: '/home/gandalf/MIA/data/BRATS_nifty_small/train.csv'
 
+  CropForeGround: False
+  isCT: False
 
   pixdim_height: 1.5
   pixdim_width: 1.5
@@ -41,18 +44,18 @@ loaders:
   numWorkers: 3
   mode: training
   val_method:
-    type: 'patches' #'sliding_window' 'patches'
+    type: 'sliding_window' #'sliding_window' 'patches'
 
 # trainer configuration
 trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
-  validate_frequency: 50
+  validate_frequency: 20
   # validation method sliding_window or patch
 
   # max number of epochs
-  epochs: 2
+  epochs: 400
 # optimizer configuration
 optimizer:
   type: "sgd" #

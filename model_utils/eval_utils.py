@@ -6,9 +6,10 @@ from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
 from models.image2scalar_utils.utils_3D.test_utils import build_model
+from torch import nn
 
 
-def eval_one_step(model, inputs, labels, device, criterion,
+def  eval_one_step(model, inputs, labels, device, criterion,
                   config, saliency_maps=False):
     if saliency_maps:
         model = build_model(config, device)
@@ -44,15 +45,90 @@ def eval_one_step(model, inputs, labels, device, criterion,
         else:
             raise ValueError("Invalid validation moode %s" % repr(
                 config['loaders']['val_method']['type']))
-        losses = [crit(outputs, labels) for crit in criterion]
-        loss = torch.stack(losses, dim=0).sum(dim=0)
-        if len(losses) > 1:
-            losses = [loss] + losses
-        losses = [l.item() for l in losses]
-        # add loss dict
-        metrics = get_metrics(outputs, labels, config['eval_metric']['name'])
+
+        losses, _ = get_losses(config, outputs, labels, criterion)
         losses = create_loss_dict(config, losses)
+    if config['loaders']['task_type'] == "representation_learning":
+        return outputs, losses, _
+    else:
+        metrics = get_metrics(outputs, labels,
+                              config['eval_metric_val']['name'])
     return outputs, losses, metrics
+
+
+def forward_model(inputs, model, config):
+    if config['loaders']['use_amp'] is True:
+        with torch.cuda.amp.autocast():
+            outputs = model(inputs)
+    else:
+        outputs = model(inputs)
+    return outputs
+
+
+def eval_one_step_knn(get_data_from_loader,
+                      validation_loader,
+                      model, device, criterion,
+                      config, saliency_maps=False):
+    train_loader = validation_loader[1]
+    val_loader = validation_loader[2]
+    batch_size = config['loaders']['batchSize']
+    n_data = len(train_loader)*batch_size
+    K = 1
+
+    # set model in eval mode
+    model.eval()
+    if str(device) == 'cuda':
+        torch.cuda.empty_cache()
+
+    train_features = torch.zeros([config['model']['feat_dim'], n_data],
+                                 device=device)
+    train_labels = torch.zeros([config['model']['feat_dim'], n_data],
+                                 device=device)
+    with torch.no_grad():
+        for batch_idx, data in enumerate(train_loader):
+            inputs, labels = get_data_from_loader(data, config,
+                                                  device, val_phase=True)
+            # forward
+            features = forward_model(inputs, model, config)
+            features = nn.functional.normalize(features)
+            train_features[:,
+                           batch_idx * batch_size:batch_idx
+                           * batch_size + batch_size] = features.data.t()
+            train_labels[:,
+                         batch_idx * batch_size:batch_idx
+                         * batch_size + batch_size] = labels.data.t()
+
+    total = 0
+    correct = 0
+    with torch.no_grad():
+        for batch_idx, data in enumerate(val_loader):
+            inputs, labels = get_data_from_loader(data, config,
+                                                  device, val_phase=True)
+            features = forward_model(inputs, model, config)
+            features = features.type(torch.cuda.FloatTensor)
+            dist = torch.mm(features, train_features)
+            yd, yi = dist.topk(K, dim=1, largest=True, sorted=True)
+            candidates = train_labels.view(1, -1).expand(batch_size, -1)
+            retrieval = torch.gather(candidates, 1, yi)
+
+            retrieval = retrieval.narrow(1, 0, 1).clone().view(-1)
+
+            total += labels.size(0)
+            correct += retrieval.eq(labels.data).sum().item()
+    top1 = correct / total
+    return top1
+
+
+def get_losses(config, outputs, labels, criterion):
+    if 'Siam' in config['loss']['name']:
+        losses = [crit(outputs) for crit in criterion]
+    else:
+        losses = [crit(outputs, labels) for crit in criterion]
+    loss = torch.stack(losses, dim=0).sum(dim=0)
+    if len(losses) > 1:
+        losses = [loss] + losses
+    losses = [l.item() for l in losses]
+    return losses, loss
 
 
 def set_uniform_sample_pct(validation_loader, percentage):
@@ -65,16 +141,40 @@ def set_uniform_sample_pct(validation_loader, percentage):
 def run_val_one_step(model, config, validation_loader, device, criterion,
                      saliency_maps, running_metric_val,
                      running_loss_val):
-    with torch.no_grad():
+    if config['loaders']['task_type'] != "representation_learning":
         for data in validation_loader:
-            inputs, labels = get_data_from_loader(data, config, device)
-            _, loss, metrics = eval_one_step(model, inputs,
-                                             labels, device,
-                                             criterion,
-                                             config, saliency_maps)
-
-            running_metric_val = increment_metrics(running_metric_val, metrics)
+            inputs, labels = get_data_from_loader(data, config,
+                                                    device)
+            _, loss, metrics = eval_one_step(
+                                            model, inputs,
+                                            labels, device,
+                                            criterion,
+                                            config, saliency_maps)
+            running_metric_val = increment_metrics(running_metric_val,
+                                                    metrics)
             running_loss_val = increment_metrics(loss, running_loss_val)
+    else:
+        metric = eval_one_step_knn(
+            get_data_from_loader,
+            validation_loader,
+            model.module.encoder,
+            device,
+            criterion,
+            config, saliency_maps)
+        running_metric_val[config['eval_metric_val']['name'][0]] = metric
+
+        for data in validation_loader[0]:
+            inputs, labels = get_data_from_loader(data, config,
+                                                    device)
+            _, loss, _ = eval_one_step(
+                                            model, inputs,
+                                            labels, device,
+                                            criterion,
+                                            config, saliency_maps)
+            # running_metric_val = increment_metrics(running_metric_val,
+            #                                         metrics)
+            running_loss_val = increment_metrics(loss, running_loss_val)
+
     return running_metric_val, running_loss_val
 
 
@@ -82,38 +182,25 @@ def val_one_epoch(model, criterion, config,
                   validation_loader, device,
                   running_metric_val=0.0, running_loss_val=0.0,
                   writer=False, epoch=0, saliency_maps=False):
-    if config['model_name'] in ['ir_csn_152_', 'ip_csn_152_']:
-        if config['loaders']['format'] == 'avi':
-            samples = config['loaders']['val_method']['samples']
-            frames_sample_list = [
-                i*0.1 for i in range(0, samples)]
-            for sample in range(0, samples):
-                validation_loader = set_uniform_sample_pct(
-                    validation_loader, frames_sample_list[sample])
-
-                running_metric_val, running_loss_val = run_val_one_step(
-                    model, config, validation_loader, device, criterion,
-                    saliency_maps,
-                    running_metric_val, running_loss_val)
-        elif config['loaders']['format'] == 'nifty':
-            running_metric_val, running_loss_val = run_val_one_step(
-                model, config, validation_loader, device, criterion,
-                saliency_maps, running_metric_val, running_loss_val)
-            samples = 1
-
-    elif config['model_name'] in ['UNet2D', 'UNet3D', 'DYNUNet3D']:
-        running_metric_val, running_loss_val = run_val_one_step(
-            model, config, validation_loader, device, criterion,
-            saliency_maps, running_metric_val, running_loss_val)
-        samples = 1
+    if config['loaders']['format'] == 'avi':
+        samples = config['loaders']['val_method']['samples']
+        frames_sample_list = [
+            i*0.1 for i in range(0, samples)]
+        for sample in range(0, samples):
+            validation_loader = set_uniform_sample_pct(
+                validation_loader, frames_sample_list[sample])
     else:
-        raise ValueError("Invalid model name %s" % repr(
-            config['model_name']))
+        running_metric_val, running_loss_val = run_val_one_step(
+                model, config, validation_loader, device, criterion,
+                saliency_maps,
+                running_metric_val, running_loss_val)
+        samples = 1
 
     # Normalize the metrics from the entire epoch
-    running_metric_val = normalize_metrics(
-        running_metric_val,
-        len(validation_loader)*samples)
+    if config['loaders']['task_type'] != "representation_learning":
+        running_metric_val = normalize_metrics(
+            running_metric_val,
+            len(validation_loader)*samples)
 
     running_loss_val = normalize_metrics(
         running_loss_val,

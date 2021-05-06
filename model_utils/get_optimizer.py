@@ -1,7 +1,6 @@
 import os
 import torch
 from model_utils.scheduler import WarmupMultiStepLR
-from torch_poly_lr_decay import PolynomialLRDecay
 
 
 def get_optimizer(config, model, len_train):
@@ -25,6 +24,7 @@ def get_optimizer(config, model, len_train):
     # Set learning rate scheduler
     if config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
         if config['lr_scheduler']['type'] == 'poly':
+            print('to be implemented')
             lr_scheduler = PolynomialLRDecay(
                 optimizer,
                 max_decay_steps=config['trainer']['epochs'],

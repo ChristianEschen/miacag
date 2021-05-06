@@ -77,7 +77,63 @@ class ClassificationLoader():
                     collate_fn=list_data_collate,
                     pin_memory=torch.cuda.is_available(),)
             return train_loader, val_loader
-        else:
+        elif config['loaders']['format'] == 'rgb':
+            from dataloader.Representation._2D.\
+                    dataloader_torchvision_representation_2D_RGB \
+                    import train_torchvision_representation_loader \
+                    as train_loader_rep
+            from dataloader.Representation._2D.\
+                    dataloader_torchvision_representation_2D_RGB \
+                    import val_torchvision_representation_loader \
+                    as val_loader_rep
+            train_loader = train_loader_rep(
+                config['loaders']['TraindataRoot'],
+                config['loaders']['TraindataCSV'],
+                config,
+                use_complete_data=False)
+
+            val_phase_train_loader = train_loader_rep(
+                config['loaders']['ValdataRoot'],
+                config['loaders']['ValdataCSV'],
+                config,
+                use_complete_data=False)
+            val_phase_train_loader_metric = val_loader_rep(
+                config['loaders']['TraindataRoot'],
+                config['loaders']['TraindataCSV'],
+                config,
+                use_complete_data=True)
+            val_phase_val_loader_metric = val_loader_rep(
+                config['loaders']['ValdataRoot'],
+                config['loaders']['ValdataCSV'],
+                config,
+                use_complete_data=True)
+            if config['loaders']['store_memory'] is True:
+                train_loader = datasets.CIFAR10(root=config['loaders']['TraindataRoot'],
+                                                train=True,
+                                                download=True,
+                                                transform=train_loader().transform)
+                val_loader = datasets.CIFAR10(root=config['loaders']['ValdataRoot'],
+                                        train=False,
+                                        download=True,
+                                        transform=val_phase_train_loader().transform)
+                train_loader = DataLoader(
+                    train_loader,
+                    drop_last=True,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=True,
+                    num_workers=config['loaders']['numWorkers'],
+                    collate_fn=list_data_collate,
+                    pin_memory=torch.cuda.is_available(),)
+
+                val_phase_train_loader = DataLoader(
+                    val_loader,
+                    drop_last=True,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=False,
+                    num_workers=config['loaders']['numWorkers'],
+                    collate_fn=list_data_collate,
+                    pin_memory=torch.cuda.is_available(),)
+                return train_loader, val_loader
             raise ValueError("Data type is not implemented")
 
     def get_test_type(self, config):

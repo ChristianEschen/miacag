@@ -1,6 +1,6 @@
 from dataloader.get_dataloader import get_dataloader_train
 import torch
-from model_utils.get_model import get_model
+from models.BuildModel import ModelBuilder
 from configs.config import load_config
 from torch.utils.tensorboard import SummaryWriter
 from model_utils.get_optimizer import get_optimizer
@@ -13,6 +13,15 @@ from metrics.metrics_utils import init_metrics, flatten, \
 from model_utils.eval_utils import val_one_epoch
 
 
+def get_device(config):
+    if config["cpu"] is False:
+        device = "cuda:{}".format(config['local_rank'])
+    else:
+        device = "cpu"
+    device = torch.device(device)
+    return device
+
+
 def main():
     config = BaseOptions().parse()
     config = load_config(config)
@@ -21,17 +30,20 @@ def main():
     model_file_path = os.path.join(writer.log_dir, 'model.pt')
 
     set_random_seeds(random_seed=config['manual_seed'])
-    torch.distributed.init_process_group(backend="nccl")
-    device = torch.device("cuda:{}".format(config['local_rank']))
+    torch.distributed.init_process_group(
+        backend="nccl" if config["cpu"] is False else "Gloo")
+    device = get_device(config)
 
-    model = get_model(config)
+    BuildModel = ModelBuilder(config)
+    model = BuildModel()
     model.to(device)
 
-    model = torch.nn.parallel.DistributedDataParallel(
-        model,
-        device_ids=[config['local_rank']],
-        output_device=config['local_rank'],
-        find_unused_parameters=True)
+    if config['cpu'] is False:
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[config['local_rank']],
+            output_device=config['local_rank'],
+            find_unused_parameters=True)
 
     # Get data loaders
     train_loader, val_loader = get_dataloader_train(config)

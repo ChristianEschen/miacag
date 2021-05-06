@@ -15,9 +15,9 @@ model:
   num_proj_layers: 2
   # number of output classes (output channels)
 # Data loader configuration
+task_type: "representation_learning"
 loaders:
   #dimension order
-  task_type: "representation_learning"
   format: 'rgb'
   store_memory: True
   #backend: torchvision
@@ -25,10 +25,10 @@ loaders:
 
   use_amp: True
   
-  TraindataRoot: '/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb'
-  TraindataCSV: '/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb/train_full_labels.csv'
-  ValdataRoot: '/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test'
-  ValdataCSV: '/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test/test.csv'
+  TraindataRoot: '/home/sauroman/mia/data/cifar10'
+  TraindataCSV: '/home/sauroman/mia/data/cifar10/train.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb/train_full_labels.csv'
+  ValdataRoot: '/home/sauroman/mia/data/cifar10' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test'
+  ValdataCSV: '/home/sauroman/mia/data/cifar10/test.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test/test.csv'
 
   batchSize: 1024 # datasetsize is 30
   Crop_height: 6 #0.2*32

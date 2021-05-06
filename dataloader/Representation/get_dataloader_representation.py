@@ -62,20 +62,20 @@ class RepresentationLoader():
             config,
             use_complete_data=True)
         if config['loaders']['store_memory'] is True:
-            train_loader = datasets.CIFAR10(root="/media/gandalf/AE3416073415D2E7/cifar10/cifar-10-batches-py/cifar-10-batches-py",
+            train_loader = datasets.CIFAR10(root=config['loaders']['TraindataRoot'],
                                             train=True,
                                             download=True,
                                             transform=train_loader().transform)
-            val_phase_train_loader = datasets.CIFAR10(root="/media/gandalf/AE3416073415D2E7/cifar10/cifar-10-batches-py/cifar-10-batches-py",
+            val_phase_train_loader = datasets.CIFAR10(root=config['loaders']['ValdataRoot'],
                                        train=False,
                                        download=True,
                                        transform=val_phase_train_loader().transform)
-            val_phase_train_loader_metric = datasets.CIFAR10(root="/media/gandalf/AE3416073415D2E7/cifar10/cifar-10-batches-py/cifar-10-batches-py",
+            val_phase_train_loader_metric = datasets.CIFAR10(root=config['loaders']['TraindataRoot'],
                                             train=True,
                                             download=True,
                                             transform=val_phase_train_loader_metric().transform)
 
-            val_phase_val_loader_metric = datasets.CIFAR10(root="/media/gandalf/AE3416073415D2E7/cifar10/cifar-10-batches-py/cifar-10-batches-py",
+            val_phase_val_loader_metric = datasets.CIFAR10(root=config['loaders']['ValdataRoot'],
                                             train=False,
                                             download=True,
                                             transform=val_phase_val_loader_metric().transform)

@@ -18,7 +18,10 @@ class BaseOptions():
         self.parser.add_argument("--local_rank", type=int,
                                  help="Local rank: torch.distributed.launch.")
         self.parser.add_argument("--tensorboard_comment", type=str,
-                                 default='avi', help="Tensorboard comment")
+                                 default='avi', help="Tensorboard comment"),
+        self.parser.add_argument("--cpu", type=bool,
+                                 default=False, help="Use cpu? "),
+
 
     def parse(self):
         """ Parse Arguments.

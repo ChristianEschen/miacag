@@ -5,7 +5,6 @@ from dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
-from models.image2scalar_utils.utils_3D.test_utils import build_model
 from torch import nn
 
 
@@ -74,7 +73,10 @@ def eval_one_step_knn(get_data_from_loader,
     batch_size = config['loaders']['batchSize']
     n_data = len(train_loader)*batch_size
     K = 1
-
+    if config['cpu'] is False:
+        model = model.module.encoder,
+    else:
+        model = model.encoder
     # set model in eval mode
     model.eval()
     if str(device) == 'cuda':
@@ -141,7 +143,7 @@ def set_uniform_sample_pct(validation_loader, percentage):
 def run_val_one_step(model, config, validation_loader, device, criterion,
                      saliency_maps, running_metric_val,
                      running_loss_val):
-    if config['loaders']['task_type'] != "representation_learning":
+    if config['task_type'] != "representation_learning":
         for data in validation_loader:
             inputs, labels = get_data_from_loader(data, config,
                                                     device)
@@ -157,7 +159,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
         metric = eval_one_step_knn(
             get_data_from_loader,
             validation_loader,
-            model.module.encoder,
+            model,
             device,
             criterion,
             config, saliency_maps)

@@ -2,13 +2,13 @@ import torch
 
 
 def get_data_from_loader(data, config, device, val_phase=False):
-    if config['loaders']['task_type'] in ['image2scalar']:
+    if config['task_type'] in ['image2scalar']:
         inputs = data['inputs'].to(device)
         labels = data['labels'].long().to(device)
-    elif config['loaders']['task_type'] == 'image2image':
+    elif config['task_type'] == 'image2image':
         inputs = data['inputs'].to(device)
         labels = data['seg'].to(device)
-    elif config['loaders']['task_type'] == "representation_learning":
+    elif config['task_type'] == "representation_learning":
         if val_phase is False:
             if config['loaders']['backend'] != 'torchvision':
                 inputs = data['inputs'].to(device)
@@ -45,19 +45,19 @@ def get_data_from_loader(data, config, device, val_phase=False):
 
 
 def get_dataloader_train(config):
-    if config['loaders']['task_type'] in ['image2scalar']:
+    if config['task_type'] in ['classification']:
         from dataloader.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader()
         train_loader, val_loader = CL.get_classification_loader_train(config)
         return train_loader, val_loader
-    elif config['loaders']['task_type'] == 'image2image':
+    elif config['task_type'] == 'image2image':
         from dataloader.get_dataloader_segmentation import \
             SegmentationLoader
         SL = SegmentationLoader()
         train_loader, val_loader = SL.get_segmentation_loader_train(config)
         return train_loader, val_loader
-    elif config['loaders']['task_type'] == "representation_learning":
+    elif config['task_type'] == "representation_learning":
         from dataloader.Representation.get_dataloader_representation import \
             RepresentationLoader
         RL = RepresentationLoader()
@@ -69,13 +69,13 @@ def get_dataloader_train(config):
 
 
 def get_dataloader_test(config):
-    if config['loaders']['task_type'] in ['image2scalar']:
+    if config['task_type'] in ['image2scalar']:
         from dataloader.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader()
         test_loader = CL.get_test_type(config)
         return test_loader
-    elif config['loaders']['task_type'] == 'image2image':
+    elif config['task_type'] == 'image2image':
         from dataloader.get_dataloader_segmentation import \
             SegmentationLoader
         SL = SegmentationLoader()
@@ -83,4 +83,4 @@ def get_dataloader_test(config):
         return test_loader
     else:
         raise ValueError("Data test loader mode is not implemented %s" % repr(
-                    config['loaders']['task_type']))
+                    config['task_type']))

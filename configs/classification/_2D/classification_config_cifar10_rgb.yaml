@@ -1,0 +1,75 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+# PyTorch configuration
+local_rank: 1
+# model class, e.g. UNet3D
+model_name: SimSiam
+model_dimension: 2D
+
+
+# model configuration
+model:
+  in_channels: 3
+  backbone: resnet18
+  num_classes: 10
+  # number of output classes (output channels)
+# Data loader configuration
+task_type: "classification"
+loaders:
+  #dimension order
+  format: 'rgb'
+  store_memory: True
+  #backend: torchvision
+  backend: torchvision
+
+  use_amp: True
+  
+  TraindataRoot: '/home/sauroman/mia/data/cifar10'
+  TraindataCSV: '/home/sauroman/mia/data/cifar10/train.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb/train_full_labels.csv'
+  ValdataRoot: '/home/sauroman/mia/data/cifar10' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test'
+  ValdataCSV: '/home/sauroman/mia/data/cifar10/test.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test/test.csv'
+
+  batchSize: 1024 # datasetsize is 30
+  Crop_height: 6 #0.2*32
+  Crop_width: 32
+  Resize_height: 32
+  Resize_width: 32
+  numWorkers: 8
+
+  # validation method 
+  val_method:
+    type: "patches" # patches | sliding
+    samples: 1
+
+# trainer configuration
+trainer:
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_frequency: 10
+  # max number of epochs
+  epochs: 800
+
+# optimizer configuration
+optimizer:
+  type: "sgd" # 
+  # initial learning rate
+  learning_rate: 0.12 # 0.05*BS/256 -> 0.1 if BS=512
+  # weight decay
+  weight_decay: 0.0005 #5e-4 
+  momentum: 0.9
+
+lr_scheduler:
+  type: False # NOT IMPLEMENTED JET
+  lr_warmup_epochs: 10
+  gamma: 0.2
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['CE']
+# evaluation metric configuration
+eval_metric_train:
+  name: []
+eval_metric_val:
+  name: ['knn_acc_top_1']
+# learning rate scheduler configuration

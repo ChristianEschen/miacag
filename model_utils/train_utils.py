@@ -33,7 +33,7 @@ def train_one_step(model, inputs, labels, criterion,
         scaler.update()
     else:
         outputs = model(inputs)
-        losses, loss = get_losses(outputs, labels, criterion)
+        losses, loss = get_losses(config, outputs, labels, criterion)
         loss.backward()
         optimizer.step()
 

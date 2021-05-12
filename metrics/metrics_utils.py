@@ -37,7 +37,7 @@ def mkDir(directory):
 
 def init_metrics(metrics, config=None, mode="metric"):
     if 'dice_class' in metrics:
-        for class_i in range(0, config['model']['classes']):
+        for class_i in range(0, config['model']['num_classes']):
             metrics.append('dice_class_'+str(class_i))
         metrics.remove('dice_class')
     if mode == "loss":

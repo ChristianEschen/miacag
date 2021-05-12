@@ -27,8 +27,6 @@ def main():
     config = load_config(config)
     writer = SummaryWriter(comment="_" + config['tensorboard_comment'])
 
-    model_file_path = os.path.join(writer.log_dir, 'model.pt')
-
     set_random_seeds(random_seed=config['manual_seed'])
     torch.distributed.init_process_group(
         backend="nccl" if config["cpu"] is False else "Gloo")
@@ -95,13 +93,14 @@ def main():
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
-    if config["loaders_task_type"] == "representation_video":
-        torch.save(model.module.backbone.state_dict(),
-                   model_file_path)
-    else:
-        torch.save(model.state_dict(),
-                   model_file_path)
+    model_file_path = os.path.join(writer.log_dir, 'model.pt')
+    torch.save(model.state_dict(), model_file_path)
 
+    if config["task_type"] == "representation_learning":
+        model_encoder_file_path = os.path.join(
+            writer.log_dir, 'model_encoder.pt')
+        torch.save(model.module.encoder.state_dict(),
+                   model_encoder_file_path)
 
     print('Finished Training')
 

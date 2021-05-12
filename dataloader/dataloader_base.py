@@ -148,9 +148,8 @@ def getVideoTestTransforms(nr_frames=32,
 class TwoCropsTransform:
     """Take two random crops of one image as the query and key."""
 
-    def __init__(self, base_transform, concat=False):
+    def __init__(self, base_transform):
         self.base_transform = base_transform
-        self.concat = concat
 
     def __call__(self, x):
         q = self.base_transform(x)

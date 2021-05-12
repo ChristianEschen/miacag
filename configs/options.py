@@ -15,6 +15,22 @@ class BaseOptions():
             '--config', type=str,
             help='Path to the YAML config file',
             required=True)
+        self.parser.add_argument(
+            '--TraindataRoot', type=str,
+            help='Path to train data root',
+            required=True)
+        self.parser.add_argument(
+            '--TraindataCSV', type=str,
+            help='Path to train csv file',
+            required=True)
+        self.parser.add_argument(
+            '--ValdataRoot', type=str,
+            help='Path to val data root',
+            required=True)
+        self.parser.add_argument(
+            '--ValdataCSV', type=str,
+            help='Path to val csv file',
+            required=True)
         self.parser.add_argument("--local_rank", type=int,
                                  help="Local rank: torch.distributed.launch.")
         self.parser.add_argument("--tensorboard_comment", type=str,

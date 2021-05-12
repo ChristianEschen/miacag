@@ -3,32 +3,27 @@ manual_seed: 0
 # PyTorch configuration
 local_rank: 1
 # model class, e.g. UNet3D
-model_name: SimSiam
 model_dimension: 2D
 
 
 # model configuration
 model:
+  dimension: 2D
   in_channels: 3
+  encoder_depth: 5
   backbone: resnet18
   num_classes: 10
-  # number of output classes (output channels)
+  pretrain_model: 'None'
+  pretrain_encoder: 'None'
 # Data loader configuration
 task_type: "classification"
 loaders:
   #dimension order
   format: 'rgb'
-  store_memory: True
-  #backend: torchvision
-  backend: torchvision
+  store_memory: False
 
   use_amp: True
   
-  TraindataRoot: '/home/sauroman/mia/data/cifar10'
-  TraindataCSV: '/home/sauroman/mia/data/cifar10/train.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb/train_full_labels.csv'
-  ValdataRoot: '/home/sauroman/mia/data/cifar10' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test'
-  ValdataCSV: '/home/sauroman/mia/data/cifar10/test.csv' #'/media/gandalf/AE3416073415D2E7/cifar10/cifar10_rgb_test/test.csv'
-
   batchSize: 1024 # datasetsize is 30
   Crop_height: 6 #0.2*32
   Crop_width: 32
@@ -43,12 +38,9 @@ loaders:
 
 # trainer configuration
 trainer:
-  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-  resume: null
-  # how many iterations between validations
   validate_frequency: 10
   # max number of epochs
-  epochs: 800
+  epochs: 1
 
 # optimizer configuration
 optimizer:
@@ -69,7 +61,7 @@ loss:
   name: ['CE']
 # evaluation metric configuration
 eval_metric_train:
-  name: []
+  name: ['acc_top_1']
 eval_metric_val:
-  name: ['knn_acc_top_1']
+  name: ['acc_top_1']
 # learning rate scheduler configuration

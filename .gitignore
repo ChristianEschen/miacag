@@ -1,4 +1,5 @@
 data
 runs
+configs/segmentation
 .vscode
 *.pyc

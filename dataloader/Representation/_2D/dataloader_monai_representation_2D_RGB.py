@@ -23,6 +23,7 @@ from monai.transforms import (
     ToNumpyd,
     CopyItemsd,
     RandTorchVisiond,
+    TorchVisiond,
     LoadImaged,
     LoadImage,
     MapTransform,
@@ -119,48 +120,16 @@ class train_monai_representation_loader(base_monai_representation_loader):
                                  std=(0.2023, 0.1994, 0.2010))
         ]
 
-
-
-                # OLD
-                #transforms.ToPILImage()
-                # AsChannelFirstd(keys='inputs'),
-                # RandZoomd(keys='inputs', prob=0.5,
-                #           min_zoom=1, max_zoom=1.3,
-                #           mode="bilinear",
-                #           align_corners=True),
-                # ScaleIntensityd(keys='inputs'),
-                #ToTensord(keys='inputs')
-                # RandTorchVisiond(keys='inputs',
-                #                  name="RandomResizedCrop",
-                #                  size=(self.config['loaders']['Resize_height'],
-                #                        self.config['loaders']['Resize_width']),
-                #                  scale=(0.2, 1.)),
-                # RandTorchVisiond(keys='inputs',
-                #                  name="RandomHorizontalFlip"),
-                # RandTorchVisiond(
-                #     keys='inputs', name='RandomApply',
-                #     transforms=[transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)],
-                #     p=0.8),
-                # RandTorchVisiond(keys='inputs',
-                #                  name="RandomGrayscale",
-                #                  p=0.2),
-
-                # RandTorchVisiond(keys='inputs',
-                #                  name="Normalize",
-                #                  mean=(0.4914, 0.4822, 0.4465),
-                #                  std=(0.2023, 0.1994, 0.2010))
-                #                  ]
-
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
-        # check_ds = monai.data.Dataset(data=self.data,
-        #                               transform=train_transforms)
-        # check_loader = DataLoader(
-        #     check_ds,
-        #     batch_size=self.config['loaders']['batchSize'],
-        #     num_workers=self.config['loaders']['numWorkers'],
-        #     collate_fn=list_data_collate)
-        # check_data = monai.utils.misc.first(check_loader)
+        check_ds = monai.data.Dataset(data=self.data,
+                                      transform=train_transforms)
+        check_loader = DataLoader(
+            check_ds,
+            batch_size=self.config['loaders']['batchSize'],
+            num_workers=self.config['loaders']['numWorkers'],
+            collate_fn=list_data_collate)
+        check_data = monai.utils.misc.first(check_loader)
         # # create a training data loader
 
         train_loader = monai.data.CacheDataset(
@@ -185,7 +154,7 @@ class val_monai_representation_loader(base_monai_representation_loader):
                 AsChannelFirstd(keys='inputs'),
                 ScaleIntensityd(keys='inputs'),
                 ToTensord(keys='inputs'),
-                RandTorchVisiond(keys='inputs',
+                TorchVisiond(keys='inputs',
                                  name="Normalize",
                                  mean=(0.4914, 0.4822, 0.4465),
                                  std=(0.2023, 0.1994, 0.2010)),
@@ -194,14 +163,14 @@ class val_monai_representation_loader(base_monai_representation_loader):
         # torchvision
 
         # CHECK: for debug ###
-        # check_ds = monai.data.Dataset(data=self.data,
-        #                              transform=val_transforms)
-        # check_loader = DataLoader(
-        #     check_ds,
-        #     batch_size=self.config['loaders']['batchSize'],
-        #     num_workers=self.config['loaders']['numWorkers'],
-        #     collate_fn=list_data_collate)
-        # check_data = monai.utils.misc.first(check_loader)
+        check_ds = monai.data.Dataset(data=self.data,
+                                     transform=val_transforms)
+        check_loader = DataLoader(
+            check_ds,
+            batch_size=self.config['loaders']['batchSize'],
+            num_workers=self.config['loaders']['numWorkers'],
+            collate_fn=list_data_collate)
+        check_data = monai.utils.misc.first(check_loader)
         val_loader = monai.data.Dataset(data=self.data,
                                         transform=val_transforms)
         # val_loader = monai.data.CacheDataset(data=self.data,

@@ -2,12 +2,14 @@ from torch.utils.data import DataLoader
 import torch
 from monai.data import list_data_collate
 from torchvision import datasets
+from torchvision import transforms
+from dataloader.dataloader_base import TwoCropsTransform
 
 
 class RepresentationLoader():
     def get_representation_loader_train(self, config):
-        if config['model_dimension'] == '2D':
-            if config['loaders']['backend'] == 'monai':
+        if config['model']['dimension'] in ['2D']:
+            if config['loaders']['format'] == 'rgb':
                 from dataloader.Representation._2D.\
                     dataloader_monai_representation_2D_RGB \
                     import train_monai_representation_loader \
@@ -16,69 +18,69 @@ class RepresentationLoader():
                     dataloader_monai_representation_2D_RGB \
                     import val_monai_representation_loader \
                     as val_loader_rep
-            elif config['loaders']['backend'] == 'torchvision':
-                from dataloader.Representation._2D.\
-                    dataloader_torchvision_representation_2D_RGB \
-                    import train_torchvision_representation_loader \
-                    as train_loader_rep
-                from dataloader.Representation._2D.\
-                    dataloader_torchvision_representation_2D_RGB \
-                    import val_torchvision_representation_loader \
-                    as val_loader_rep
+            elif config['loaders']['format'] == 'nifty':
+                print('not implemented')
+                raise NotImplementedError('not implemented jet')
+            else:
+                raise ValueError('Unknown format')
 
-        elif config['model_dimension'] == '3D':
+        elif config['model']['dimension'] in ['3D', '2D+T']:
             if config['loaders']['format'] == 'avi':
                 print('NOT IMPLEMENTED: AVI for representation learning')
                 #return train_loader, val_loader
 
             elif config['loaders']['format'] == 'nifty':
-                from dataloader.dataloader_monai_representation_video import \
-                    train_monai_representation_loader
-                from dataloader.dataloader_monai_representation_video import \
-                    val_monai_representation_loader
+                from dataloader.Representation._3D.dataloader_monai_representation_3D import \
+                    train_monai_representation_loader as train_loader_rep
+                from dataloader.Representation._3D.dataloader_monai_representation_3D import \
+                    val_monai_representation_loader as val_loader_rep
             else:
                 raise ValueError("Data type is not implemented")
         else:
             raise ValueError("Model dimension type not understood")
         train_loader = train_loader_rep(
-            config['loaders']['TraindataRoot'],
-            config['loaders']['TraindataCSV'],
+            config['TraindataRoot'],
+            config['TraindataCSV'],
             config,
             use_complete_data=False)
 
         val_phase_train_loader = train_loader_rep(
-            config['loaders']['ValdataRoot'],
-            config['loaders']['ValdataCSV'],
+            config['ValdataRoot'],
+            config['ValdataCSV'],
             config,
             use_complete_data=False)
         val_phase_train_loader_metric = val_loader_rep(
-            config['loaders']['TraindataRoot'],
-            config['loaders']['TraindataCSV'],
+            config['TraindataRoot'],
+            config['TraindataCSV'],
             config,
             use_complete_data=True)
         val_phase_val_loader_metric = val_loader_rep(
-            config['loaders']['ValdataRoot'],
-            config['loaders']['ValdataCSV'],
+            config['ValdataRoot'],
+            config['ValdataCSV'],
             config,
             use_complete_data=True)
         if config['loaders']['store_memory'] is True:
-            train_loader = datasets.CIFAR10(root=config['loaders']['TraindataRoot'],
-                                            train=True,
-                                            download=True,
-                                            transform=train_loader().transform)
-            val_phase_train_loader = datasets.CIFAR10(root=config['loaders']['ValdataRoot'],
-                                       train=False,
-                                       download=True,
-                                       transform=val_phase_train_loader().transform)
-            val_phase_train_loader_metric = datasets.CIFAR10(root=config['loaders']['TraindataRoot'],
-                                            train=True,
-                                            download=True,
-                                            transform=val_phase_train_loader_metric().transform)
+            train_loader = datasets.CIFAR10(
+                root=config['TraindataRoot'],
+                train=True,
+                download=True,
+                transform=self.get_train_transforms_cifar10(config))
+            val_phase_train_loader = datasets.CIFAR10(
+                root=config['ValdataRoot'],
+                train=False,
+                download=True,
+                transform=self.get_train_transforms_cifar10(config))
+            val_phase_train_loader_metric = datasets.CIFAR10(
+                root=config['TraindataRoot'],
+                train=True,
+                download=True,
+                transform=self.get_val_transforms_cifar10(config))
 
-            val_phase_val_loader_metric = datasets.CIFAR10(root=config['loaders']['ValdataRoot'],
-                                            train=False,
-                                            download=True,
-                                            transform=val_phase_val_loader_metric().transform)
+            val_phase_val_loader_metric = datasets.CIFAR10(
+                root=config['ValdataRoot'],
+                train=False,
+                download=True,
+                transform=self.get_val_transforms_cifar10(config))
         train_loader = DataLoader(
             train_loader() if config['loaders']['store_memory'] is False else train_loader,
             drop_last=True,
@@ -119,6 +121,30 @@ class RepresentationLoader():
                       val_phase_val_loader_metric)
         return train_loader, val_loader
 
+    def get_train_transforms_cifar10(self, config):
+        train_transforms = [
+                transforms.RandomResizedCrop((
+                    config['loaders']['Resize_height'],
+                    config['loaders']['Resize_width']),
+                    scale=(0.2, 1.)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomApply([
+                    transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)
+                ], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                     (0.2023, 0.1994, 0.2010))]
+        train_transforms = transforms.Compose(train_transforms)
+        train_transforms = TwoCropsTransform(train_transforms)
+        return train_transforms
+
+    def get_val_transforms_cifar10(self, config):
+        val_transforms = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                     (0.2023, 0.1994, 0.2010))])
+        return val_transforms
 
     def get_test_type(self, config):
         if config['loaders']['val_method']['type'] == 'patch_lvl':

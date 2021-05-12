@@ -47,7 +47,7 @@ def  eval_one_step(model, inputs, labels, device, criterion,
 
         losses, _ = get_losses(config, outputs, labels, criterion)
         losses = create_loss_dict(config, losses)
-    if config['loaders']['task_type'] == "representation_learning":
+    if config['task_type'] == "representation_learning":
         return outputs, losses, _
     else:
         metrics = get_metrics(outputs, labels,
@@ -74,11 +74,11 @@ def eval_one_step_knn(get_data_from_loader,
     n_data = len(train_loader)*batch_size
     K = 1
     if config['cpu'] is False:
-        model = model.module.encoder,
+        encoder_model = model.module.encoder_projector
     else:
-        model = model.encoder
+        encoder_model = model.encoder_projector
     # set model in eval mode
-    model.eval()
+    encoder_model.eval()
     if str(device) == 'cuda':
         torch.cuda.empty_cache()
 
@@ -91,7 +91,7 @@ def eval_one_step_knn(get_data_from_loader,
             inputs, labels = get_data_from_loader(data, config,
                                                   device, val_phase=True)
             # forward
-            features = forward_model(inputs, model, config)
+            features = forward_model(inputs, encoder_model, config)
             features = nn.functional.normalize(features)
             train_features[:,
                            batch_idx * batch_size:batch_idx
@@ -106,7 +106,7 @@ def eval_one_step_knn(get_data_from_loader,
         for batch_idx, data in enumerate(val_loader):
             inputs, labels = get_data_from_loader(data, config,
                                                   device, val_phase=True)
-            features = forward_model(inputs, model, config)
+            features = forward_model(inputs, encoder_model, config)
             features = features.type(torch.cuda.FloatTensor)
             dist = torch.mm(features, train_features)
             yd, yi = dist.topk(K, dim=1, largest=True, sorted=True)
@@ -199,7 +199,7 @@ def val_one_epoch(model, criterion, config,
         samples = 1
 
     # Normalize the metrics from the entire epoch
-    if config['loaders']['task_type'] != "representation_learning":
+    if config['task_type'] != "representation_learning":
         running_metric_val = normalize_metrics(
             running_metric_val,
             len(validation_loader)*samples)

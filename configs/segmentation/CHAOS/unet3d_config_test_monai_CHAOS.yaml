@@ -1,4 +1,4 @@
-model_path: "/home/gandalf/MIA/runs/Mar11_16-17-57_gandalf-MS-7845_avi" #"/home/gandalf/segmento/runs/Jan19_14-08-51_gandalf-MS-7845_avi"
+model_path: "/home/gandalf/MIA/runs/Mar16_17-17-21_gandalf-MS-7845_avi" #"/home/gandalf/segmento/runs/Jan19_14-08-51_gandalf-MS-7845_avi"
 
 # model class, e.g. UNet3D, ResidualUNet3D
 model_name: UNet3D
@@ -25,7 +25,7 @@ loaders:
   format: "nifty"
 
   TestdataRoot: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2'
-  TestdataCSV: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/val.csv'
+  TestdataCSV: '/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/train.csv'
 
   isCT: False
   CropForeGround: False
@@ -38,6 +38,7 @@ loaders:
   depth: 32
 
   numWorkers: 3
+  mode: testing
   val_method:
     type: 'sliding_window'
 

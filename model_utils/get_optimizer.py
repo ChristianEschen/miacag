@@ -23,7 +23,7 @@ def get_optimizer(config, model, len_train):
                                     weight_decay=config['optimizer']
                                                        ['weight_decay'])
     # Set learning rate scheduler
-    if config['lr_scheduler']['type'] in ['MultiStepLR', 'poly']:
+    if config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
         if config['lr_scheduler']['type'] == 'poly':
             lr_scheduler = PolynomialLRDecay(
                 optimizer,
@@ -31,7 +31,7 @@ def get_optimizer(config, model, len_train):
                 end_learning_rate=config['lr_scheduler']['end_lr'],
                 power=config['lr_scheduler']['power'])
 
-        if config['lr_scheduler']['type'] == 'MultiStepLR':
+        elif config['lr_scheduler']['type'] == 'MultiStepLR':
             warmup_iters = config['lr_scheduler']['lr_warmup_epochs'] \
                 * len_train
             lr_milestones = [
@@ -43,6 +43,9 @@ def get_optimizer(config, model, len_train):
                     warmup_iters=warmup_iters,
                     warmup_factor=1e-5,
                 )
+        elif config['lr_scheduler']['type'] == 'cos':
+            lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, config['trainer']['epochs'])
     else:
         lr_scheduler = False
 

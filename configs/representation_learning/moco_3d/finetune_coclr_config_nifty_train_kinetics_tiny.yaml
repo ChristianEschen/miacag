@@ -1,16 +1,15 @@
+model_path: ""
 # use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
 manual_seed: 0
 # PyTorch configuration
 local_rank: 1
-# model class, e.g. UNet3D, ResidualUNet3D
-model_name: ir_csn_152_
+# model class, e.g. UNet3D
+model_name: CO_CLR
 # model configuration
 model:
   in_channels: 3
-  # number of output classes (output channels)
   classes: 2
-  # Pretraining if False ""
-  pretraining: "ig65m_32frms"
+  # number of output classes (output channels)
 # Data loader configuration
 loaders:
   #dimension order
@@ -18,20 +17,20 @@ loaders:
   format: 'nifty'
   task_type: "image2scalar"
   task: 'costum'
-  use_amp: True
+  use_amp: False
   
   TraindataRoot: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data'
-  TraindataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data.csv'
+  TraindataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data_flow_train.csv'
   ValdataRoot: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data'
-  ValdataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data.csv'
+  ValdataCSV: '/home/gandalf/MIA/data/kinetics400_tiny_train_nifty/data_flow_val.csv'
 
-  batchSize: 2
-  Resize_height: 224
-  Resize_width: 224
+  batchSize: 8 # datasetsize is 30
+  Resize_height: 128
+  Resize_width: 128
   Resize_depth: -1
 
-  Crop_height: 224
-  Crop_width: 224
+  Crop_height: 128
+  Crop_width: 128
   Crop_depth: 32
   numWorkers: 3
   
@@ -39,22 +38,22 @@ loaders:
   # validation method 
   val_method:
     type: "patches" # patches | sliding
-    samples: 5
+    samples: 1
 
 # trainer configuration
 trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
-  validate_frequency: 5
+  validate_frequency: 50
   # max number of epochs
-  epochs: 2
+  epochs: 100
 
 # optimizer configuration
 optimizer:
   type: "sgd" #
   # initial learning rate
-  learning_rate: 0.003
+  learning_rate: 0.001
   # weight decay
   weight_decay: 0.0001
   momentum: 0.9

@@ -55,7 +55,7 @@ trainer:
   # validation method sliding_window or patch
 
   # max number of epochs
-  epochs: 300
+  epochs: 140
 # optimizer configuration
 optimizer:
   type: "sgd" #

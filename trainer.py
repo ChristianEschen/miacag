@@ -50,17 +50,17 @@ def main():
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
         running_loss_train, _ = init_metrics(config['loss']['name'],
-                                             config['model']['classes'],
+                                             config,
                                              mode='loss')
-        running_metric_train, config['eval_metric']['name'] = \
-            init_metrics(config['eval_metric']['name'],
-                         config['model']['classes'])
+        running_metric_train, config['eval_metric_train']['name'] = \
+            init_metrics(config['eval_metric_train']['name'],
+                         config)
         running_loss_val, _ = init_metrics(config['loss']['name'],
-                                           config['model']['classes'],
+                                           config,
                                            mode='loss')
-        running_metric_val, config['eval_metric']['name'] = \
-            init_metrics(config['eval_metric']['name'],
-                         config['model']['classes'])
+        running_metric_val, config['eval_metric_val']['name'] = \
+            init_metrics(config['eval_metric_val']['name'],
+                         config)
 
         #  validation one epoch (but not necessarily each)
         if epoch % config['trainer']['validate_frequency'] == 0:
@@ -72,7 +72,7 @@ def main():
         # train one epoch
         train_one_epoch(model, criterion,
                         train_loader, device, epoch,
-                        optimizer, lr_scheduler, config['eval_metric']['name'],
+                        optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
 
@@ -83,8 +83,14 @@ def main():
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
-    torch.save(model.state_dict(),
-               model_file_path)
+    if config["loaders_task_type"] == "representation_video":
+        torch.save(model.module.backbone.state_dict(),
+                   model_file_path)
+    else:
+        torch.save(model.state_dict(),
+                   model_file_path)
+
+
     print('Finished Training')
 
 

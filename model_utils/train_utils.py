@@ -5,6 +5,7 @@ from metrics.metrics_utils import get_metrics, increment_metrics
 from metrics.metrics_utils import create_loss_dict
 from metrics.metrics_utils import normalize_metrics, write_tensorboard
 from dataloader.get_dataloader import get_data_from_loader
+from model_utils.eval_utils import get_losses
 
 
 def set_random_seeds(random_seed=0):
@@ -16,7 +17,7 @@ def set_random_seeds(random_seed=0):
 
 
 def train_one_step(model, inputs, labels, criterion,
-                   optimizer, lr_scheduler, metrics, writer, config,
+                   optimizer, lr_scheduler, writer, config,
                    tb_step_writer, scaler):
     model.train()
     # zero the parameter gradients
@@ -26,56 +27,46 @@ def train_one_step(model, inputs, labels, criterion,
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
             outputs = model(inputs)
-            losses = [crit(outputs, labels) for crit in criterion]
-            loss = torch.stack(losses, dim=0).sum(dim=0)
-            if len(losses) > 1:
-                losses = [loss] + losses
-            losses = [l.item() for l in losses]
+            losses, loss = get_losses(config, outputs, labels, criterion)
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
     else:
         outputs = model(inputs)
-        losses = [crit(outputs, labels) for crit in criterion]
-        loss = torch.stack(losses, dim=0).sum(dim=0)
-        if len(losses) > 1:
-            losses = [loss] + losses
-        losses = [l.item() for l in losses]
-
+        losses, loss = get_losses(outputs, labels, criterion)
         loss.backward()
-
         optimizer.step()
-    if lr_scheduler is not False:
-        lr_scheduler.step()
 
-    metrics = get_metrics(outputs, labels, metrics)
     losses = create_loss_dict(config, losses)
+    metrics = get_metrics(outputs, labels,
+                          config['eval_metric_train']['name'])
     return outputs, losses, metrics
 
 
 def train_one_epoch(model, criterion,
                     train_loader, device, epoch,
-                    optimizer, lr_scheduler, metrics_dict,
+                    optimizer, lr_scheduler,
                     running_metric_train, running_loss_train,
                     writer, config, scaler):
     for i, data in enumerate(train_loader, 0):
         inputs, labels = get_data_from_loader(data, config, device)
-
         outputs, loss, metrics = train_one_step(model,
                                                 inputs,
                                                 labels,
                                                 criterion,
                                                 optimizer,
                                                 lr_scheduler,
-                                                metrics_dict,
                                                 writer,
                                                 config,
                                                 tb_step_writer=i,
                                                 scaler=scaler)
-        running_metric_train = increment_metrics(running_metric_train,
-                                                 metrics)
-        running_loss_train = increment_metrics(running_loss_train, loss)
 
+        running_metric_train = increment_metrics(running_metric_train,
+                                                 metrics,
+                                                 config=config)
+        running_loss_train = increment_metrics(running_loss_train, loss)
+    if lr_scheduler is not False:
+        lr_scheduler.step()
     running_metric_train = normalize_metrics(running_metric_train,
                                              len(train_loader))
     running_loss_train = normalize_metrics(running_loss_train,

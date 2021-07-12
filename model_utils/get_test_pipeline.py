@@ -2,6 +2,8 @@ from model_utils.eval_utils import val_one_epoch
 from model_utils.eval_utils import eval_one_step
 import os
 import json
+import pandas as pd
+import numpy as np
 
 
 class TestPipeline():
@@ -10,7 +12,7 @@ class TestPipeline():
                           normalize_metrics,
                           running_metric_test, running_loss_test):
 
-        if config['loaders']['task_type'] == "image2scalar":
+        if config['task_type'] in ["classification"]:
             self.get_test_classification_pipeline(model, criterion,
                                                   config, test_loader,
                                                   device, init_metrics,
@@ -37,12 +39,14 @@ class TestPipeline():
                                          running_metric_test,
                                          running_loss_test):
 
-        if config['loaders']['val_method']['type'] == 'patch_lvl':
-            metrics = val_one_epoch(model, criterion, config,
-                                    test_loader, device,
-                                    running_metric_val=running_metric_test,
-                                    running_loss_val=running_loss_test,
-                                    saliency_maps=False)
+        if config['loaders']['val_method']['type'] in ['patches',
+                                                       'sliding_window']:
+            metrics, confidences, predictions = val_one_epoch(
+                model, criterion, config,
+                test_loader, device,
+                running_metric_val=running_metric_test,
+                running_loss_val=running_loss_test,
+                saliency_maps=False)
 
         elif config['loaders']['val_method']['type'] in \
                 ['image_lvl', 'image_lvl+saliency_maps']:
@@ -90,11 +94,21 @@ class TestPipeline():
             raise ValueError(
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
-        with open(os.path.join(config['model_path'],
+        with open(os.path.join(config['model']['pretrain_model'],
                                'test_log.txt'), 'w') as file:
             file.write(json.dumps({**metrics, **config},
                                   sort_keys=True, indent=4,
                                   separators=(',', ': ')))
+        df_test = pd.DataFrame(test_loader.dataset.data)
+        df_pred = pd.DataFrame(
+            {'predictions': predictions.numpy(),
+             'confidences': confidences.numpy()},
+            columns=['predictions', 'confidences'])
+        df_test = pd.concat([df_test, df_pred], axis=1)
+        df_test = self.reorder_columns(df_test)
+        df_test.to_csv(
+            os.path.join(config['model']['pretrain_model'], 'results.csv'),
+            index=False)
 
     def get_test_segmentation_pipeline(self, model, criterion,
                                        config, test_loader,
@@ -109,3 +123,15 @@ class TestPipeline():
                                        running_loss_val=running_loss_test,
                                        saliency_maps=False)
         testModule()
+
+    def reorder_columns(self, df):
+        cols = df.columns[0:5].to_list()
+        cols_end = df.columns[5:].to_list()
+        start_cols = cols + ['predictions', 'confidences']
+        not_matches = self.returnNotMatches(start_cols, df.columns.to_list())
+        new_cols = start_cols + not_matches[1]
+        df = df[new_cols]
+        return df
+
+    def returnNotMatches(self, a, b):
+        return [[x for x in a if x not in b], [x for x in b if x not in a]]

@@ -5,7 +5,7 @@ from configs.config import load_config
 from torch.utils.tensorboard import SummaryWriter
 from model_utils.get_optimizer import get_optimizer
 from model_utils.get_loss_func import get_loss_func
-from configs.options import BaseOptions
+from configs.options import TrainOptions
 import os
 from model_utils.train_utils import set_random_seeds, train_one_epoch
 from metrics.metrics_utils import init_metrics, flatten, \
@@ -14,29 +14,31 @@ from model_utils.eval_utils import val_one_epoch
 
 
 def get_device(config):
-    if config["cpu"] is False:
-        device = "cuda:{}".format(config['local_rank'])
-    else:
+    if config["cpu"] == "False":
+        if config['loaders']['mode'] == 'training':
+            device = "cuda:{}".format(config['local_rank'])
+        else:
+            device = "cuda:0"
         device = "cpu"
     device = torch.device(device)
     return device
 
 
 def main():
-    config = BaseOptions().parse()
+    config = TrainOptions().parse()
     config = load_config(config)
     writer = SummaryWriter(comment="_" + config['tensorboard_comment'])
 
     set_random_seeds(random_seed=config['manual_seed'])
     torch.distributed.init_process_group(
-        backend="nccl" if config["cpu"] is False else "Gloo")
+        backend="nccl" if config["cpu"] == "False" else "Gloo")
     device = get_device(config)
 
     BuildModel = ModelBuilder(config)
     model = BuildModel()
     model.to(device)
 
-    if config['cpu'] is False:
+    if config['cpu'] == "False":
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[config['local_rank']],
@@ -94,9 +96,9 @@ def main():
     writer.flush()
     writer.close()
     model_file_path = os.path.join(writer.log_dir, 'model.pt')
-    torch.save(model.state_dict(), model_file_path)
+    torch.save(model.module.state_dict(), model_file_path)
 
-    if config["task_type"] == "representation_learning":
+    if config["task_type"] in ["representation_learning"]:
         model_encoder_file_path = os.path.join(
             writer.log_dir, 'model_encoder.pt')
         torch.save(model.module.encoder.state_dict(),

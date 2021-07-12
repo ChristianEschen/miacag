@@ -122,11 +122,11 @@ def get_dataloader_train(config):
 
 
 def get_dataloader_test(config):
-    if config['task_type'] in ['image2scalar']:
-        from dataloader.get_dataloader_classification import \
+    if config['task_type'] in ["classification"]:
+        from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader()
-        test_loader = CL.get_test_type(config)
+        test_loader = CL.get_classificationloader_patch_lvl_test(config)
         return test_loader
     elif config['task_type'] == 'image2image':
         from dataloader.get_dataloader_segmentation import \

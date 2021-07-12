@@ -117,13 +117,29 @@ class base_monai_loader(DataloaderTrain):
 
     def getMaybePad(self):
         if self.config['loaders']['mode'] == 'training':
+            if self.config['task_type'] == "classification":
+                keys_ = self.features
+            elif self.config['task_type'] == "segmentation":
+                keys_ = self.features + ["labels"]
+            else:
+                raise ValueError('not implemented')
             pad = SpatialPadd(
-                keys=self.features + ["labels"],
-                spatial_size=[self.config['loaders']['depth'],
-                              self.config['loaders']['height'],
-                              self.config['loaders']['width']])
+                keys=keys_,
+                spatial_size=[self.config['loaders']['Crop_depth'],
+                              self.config['loaders']['Crop_height'],
+                              self.config['loaders']['Crop_width']])
         elif self.config['loaders']['mode'] == 'testing':
-            pad = Identityd(keys=self.features + ["labels"])
+            if self.config['task_type'] == "classification":
+                keys_ = self.features
+                pad = SpatialPadd(
+                    keys=keys_,
+                    spatial_size=[self.config['loaders']['Crop_depth'],
+                                  self.config['loaders']['Crop_height'],
+                                  self.config['loaders']['Crop_width']])
+            elif self.config['task_type'] == "segmentation":
+                pad = Identityd(keys=self.features + ["labels"])
+            else:
+                raise ValueError('not implemented')
         else:
             raise ValueError("Invalid mode %s" % repr(
              self.config['loaders']['mode']))
@@ -141,6 +157,10 @@ class base_monai_loader(DataloaderTrain):
                     func=lambda x: np.transpose(x, (0, 3, 1, 2)))
             else:
                 raise ValueError('data model dimension not understood')
+        elif self.config['loaders']['format'] == 'dicom':
+            permute = Lambdad(
+                    keys=self.features,
+                    func=lambda x: x.transpose(1, 2, 0))
         else:
             permute = Identityd(keys=self.features + ["labels"])
         return permute

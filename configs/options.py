@@ -1,10 +1,10 @@
 import argparse
 
 
-class BaseOptions():
+class TestOptions():
     """Options class
     Returns:
-        [argparse]: argparse containing base options
+        [argparse]: argparse containing Test options
     """
 
     def __init__(self):
@@ -16,14 +16,6 @@ class BaseOptions():
             help='Path to the YAML config file',
             required=True)
         self.parser.add_argument(
-            '--TraindataRoot', type=str,
-            help='Path to train data root',
-            required=True)
-        self.parser.add_argument(
-            '--TraindataCSV', type=str,
-            help='Path to train csv file',
-            required=True)
-        self.parser.add_argument(
             '--ValdataRoot', type=str,
             help='Path to val data root',
             required=True)
@@ -31,13 +23,37 @@ class BaseOptions():
             '--ValdataCSV', type=str,
             help='Path to val csv file',
             required=True)
+        self.parser.add_argument("--cpu", type=str,
+                                 default="False", help="Use cpu? "),
+
+    def parse(self):
+        """ Parse Arguments.
+        """
+        self.opt = self.parser.parse_args()
+        return self.opt
+
+
+class TrainOptions(TestOptions):
+    """Options class
+    Returns:
+        [argparse]: argparse containing Train options
+    """
+
+    def __init__(self):
+        super(TrainOptions, self).__init__()
+        ##
+        self.parser.add_argument(
+            '--TraindataRoot', type=str,
+            help='Path to train data root',
+            required=True)
+        self.parser.add_argument(
+            '--TraindataCSV', type=str,
+            help='Path to train csv file',
+            required=True)
         self.parser.add_argument("--local_rank", type=int,
                                  help="Local rank: torch.distributed.launch.")
         self.parser.add_argument("--tensorboard_comment", type=str,
                                  default='avi', help="Tensorboard comment"),
-        self.parser.add_argument("--cpu", type=bool,
-                                 default=False, help="Use cpu? "),
-
 
     def parse(self):
         """ Parse Arguments.

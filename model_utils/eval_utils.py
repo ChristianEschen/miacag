@@ -6,6 +6,8 @@ from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
 from torch import nn
+from metrics.metrics import softmax_transform
+import numpy as np
 
 
 def  eval_one_step(model, inputs, labels, device, criterion,
@@ -17,19 +19,25 @@ def  eval_one_step(model, inputs, labels, device, criterion,
     with torch.no_grad():
         # forward
         if config['loaders']['val_method']['type'] == 'sliding_window':
-            if config['model']['dimensions'] == 3:
-                input_shape = (config['loaders']['height'],
-                               config['loaders']['width'],
-                               config['loaders']['depth'])
-            elif config['model']['dimensions'] == 2:
-                input_shape = (config['loaders']['height'],
-                               config['loaders']['width'])
+            if config['model']['dimension'] in ['2D+T', 3]:
+                input_shape = (config['loaders']['Crop_depth'],
+                               config['loaders']['Crop_height'],
+                               config['loaders']['Crop_width'],
+                               )
+            elif config['model']['dimension'] == 2:
+                input_shape = (config['loaders']['Crop_height'],
+                               config['loaders']['Crop_width'])
             if config['loaders']['use_amp'] is True:
                 with torch.cuda.amp.autocast():
                     outputs = sliding_window_inference(
                             inputs, input_shape,
                             1, model)
             else:
+              #  from monai.inferers import SaliencyInferer
+             #   SaliencyInferer('GradCam', 'encoder.layer4.1.conv2')(inputs, model)
+             import monai
+             monai.networks.nets.TorchVisionFCModel(model_name='video'
+                ).to(device)
                 outputs = sliding_window_inference(
                             inputs, input_shape,
                             1, model)
@@ -51,7 +59,7 @@ def  eval_one_step(model, inputs, labels, device, criterion,
         return outputs, losses, _
     else:
         metrics = get_metrics(outputs, labels,
-                              config['eval_metric_val']['name'])
+                              config['eval_metric']['name'])
     return outputs, losses, metrics
 
 
@@ -73,7 +81,7 @@ def eval_one_step_knn(get_data_from_loader,
     batch_size = config['loaders']['batchSize']
     n_data = len(train_loader)*batch_size
     K = 1
-    if config['cpu'] is False:
+    if config['cpu'] == "False":
         encoder_model = model.module.encoder_projector
     else:
         encoder_model = model.encoder_projector
@@ -144,14 +152,17 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                      saliency_maps, running_metric_val,
                      running_loss_val):
     if config['task_type'] != "representation_learning":
+        logits = []
         for data in validation_loader:
             inputs, labels = get_data_from_loader(data, config,
                                                     device)
-            _, loss, metrics = eval_one_step(
+            outputs, loss, metrics = eval_one_step(
                                             model, inputs,
                                             labels, device,
                                             criterion,
                                             config, saliency_maps)
+            if config['loaders']['mode'] == 'testing':
+                logits.append(outputs.cpu())
             running_metric_val = increment_metrics(running_metric_val,
                                                     metrics)
             running_loss_val = increment_metrics(loss, running_loss_val)
@@ -177,7 +188,11 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
             #                                         metrics)
             running_loss_val = increment_metrics(loss, running_loss_val)
 
-    return running_metric_val, running_loss_val
+    if config['loaders']['mode'] == 'training':
+        return running_metric_val, running_loss_val
+    else:
+        logits = torch.cat(logits, dim=0)
+        return running_metric_val, running_loss_val, logits
 
 
 def val_one_epoch(model, criterion, config,
@@ -192,10 +207,16 @@ def val_one_epoch(model, criterion, config,
             validation_loader = set_uniform_sample_pct(
                 validation_loader, frames_sample_list[sample])
     else:
-        running_metric_val, running_loss_val = run_val_one_step(
+        eval_outputs = run_val_one_step(
                 model, config, validation_loader, device, criterion,
                 saliency_maps,
                 running_metric_val, running_loss_val)
+        if config['loaders']['mode'] == 'training':
+            running_metric_val, running_loss_val, _ = eval_outputs
+        else:
+            running_metric_val, running_loss_val, logits = eval_outputs
+            confidences = softmax_transform(logits)
+            confidences, predictions = torch.max(confidences, dim=1)
         samples = 1
 
     # Normalize the metrics from the entire epoch
@@ -215,4 +236,8 @@ def val_one_epoch(model, criterion, config,
         print('metrics', running_metric_val)
         print('loss', running_loss_val)
     running_metric_val.update(running_loss_val)
-    return running_metric_val
+
+    if config['loaders']['mode'] == 'training':
+        return running_metric_val
+    else:
+        return running_metric_val, confidences, predictions

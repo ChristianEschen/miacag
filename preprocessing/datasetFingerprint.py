@@ -1,12 +1,107 @@
 import numpy as np
 import pandas as pd
 from ast import literal_eval
-from nnunet.experiment_planning.common_utils import get_pool_and_conv_props
 from nnunet.network_architecture.generic_UNet import Generic_UNet
 from copy import deepcopy
 import argparse
 import os
 import json
+import nibabel as nib
+
+
+def get_pool_and_conv_props(spacing, patch_size, min_feature_map_size, max_numpool):
+    """
+
+    :param spacing:
+    :param patch_size:
+    :param min_feature_map_size: min edge length of feature maps in bottleneck
+    :return:
+    """
+    dim = len(spacing)
+
+    current_spacing = deepcopy(list(spacing))
+    current_size = deepcopy(list(patch_size))
+
+    pool_op_kernel_sizes = []
+    conv_kernel_sizes = []
+
+    num_pool_per_axis = [0] * dim
+
+    while True:
+        # This is a problem because sometimes we have spacing 20, 50, 50 and we want to still keep pooling.
+        # Here we would stop however. This is not what we want! Fixed in get_pool_and_conv_propsv2
+        min_spacing = min(current_spacing)
+        valid_axes_for_pool = [i for i in range(dim) if current_spacing[i] / min_spacing < 2]
+        axes = []
+        for a in range(dim):
+            my_spacing = current_spacing[a]
+            partners = [i for i in range(dim) if current_spacing[i] / my_spacing < 2 and my_spacing / current_spacing[i] < 2]
+            if len(partners) > len(axes):
+                axes = partners
+        conv_kernel_size = [3 if i in axes else 1 for i in range(dim)]
+
+        # exclude axes that we cannot pool further because of min_feature_map_size constraint
+        #before = len(valid_axes_for_pool)
+        valid_axes_for_pool = [i for i in valid_axes_for_pool if current_size[i] >= 2*min_feature_map_size]
+        #after = len(valid_axes_for_pool)
+        #if after == 1 and before > 1:
+        #    break
+
+        valid_axes_for_pool = [i for i in valid_axes_for_pool if num_pool_per_axis[i] < max_numpool]
+
+        if len(valid_axes_for_pool) == 0:
+            break
+
+        #print(current_spacing, current_size)
+
+        other_axes = [i for i in range(dim) if i not in valid_axes_for_pool]
+
+        pool_kernel_sizes = [0] * dim
+        for v in valid_axes_for_pool:
+            pool_kernel_sizes[v] = 2
+            num_pool_per_axis[v] += 1
+            current_spacing[v] *= 2
+            current_size[v] = np.ceil(current_size[v] / 2)
+        for nv in other_axes:
+            pool_kernel_sizes[nv] = 1
+
+        pool_op_kernel_sizes.append(pool_kernel_sizes)
+        conv_kernel_sizes.append(conv_kernel_size)
+        #print(conv_kernel_sizes)
+
+    must_be_divisible_by = get_shape_must_be_divisible_by(num_pool_per_axis)
+    patch_size = pad_shape(patch_size, must_be_divisible_by)
+
+    # we need to add one more conv_kernel_size for the bottleneck. We always use 3x3(x3) conv here
+    conv_kernel_sizes.append([3]*dim)
+    return num_pool_per_axis, pool_op_kernel_sizes, conv_kernel_sizes, patch_size, must_be_divisible_by
+
+
+def pad_shape(shape, must_be_divisible_by):
+    """
+    pads shape so that it is divisibly by must_be_divisible_by
+    :param shape:
+    :param must_be_divisible_by:
+    :return:
+    """
+    if not isinstance(must_be_divisible_by, (tuple, list, np.ndarray)):
+        must_be_divisible_by = [must_be_divisible_by] * len(shape)
+    else:
+        assert len(must_be_divisible_by) == len(shape)
+
+    new_shp = \
+        [shape[i] + must_be_divisible_by[i] - shape[i]
+            % must_be_divisible_by[i] for i in range(len(shape))]
+
+    for i in range(len(shape)):
+        if shape[i] % must_be_divisible_by[i] == 0:
+            new_shp[i] -= must_be_divisible_by[i]
+    new_shp = np.array(new_shp).astype(int)
+    return new_shp
+
+
+def get_shape_must_be_divisible_by(net_numpool_per_axis):
+    return 2 ** np.array(net_numpool_per_axis)
 
 
 def convert_string_to_tuple(liste):
@@ -307,21 +402,23 @@ class datasetFingerprint():
         median_shape = np.median(np.vstack(new_shapes), 0)
         return median_shape
 
+def getSpacings(image_path):
+    img = nib.load(example_filename)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-train_csv_path",
+    parser.add_argument("--train_csv_path",
                         default="/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/train.csv",
                         type=str,
                         help="train csv path")
-    parser.add_argument("-val_csv_path",
+    parser.add_argument("--val_csv_path",
                         default="/media/gandalf/AE3416073415D2E7/CHAOS_pancreas_MRI_nifty/Task038_CHAOS_Task_3_5_Variant2/val.csv",
                         type=str,
                         help="val csv path")
-    parser.add_argument("-outpath",
+    parser.add_argument("--outpath",
                         default="segmentation/CHAOS",
                         type=str,
                         help="outpath")
-    parser.add_argument("-classes",
+    parser.add_argument("--classes",
                         default=5,
                         type=int,
                         help="number of classes")
@@ -331,8 +428,8 @@ if __name__ == "__main__":
     outpath = args.outpath
     classes = args.classes
 
-    train_df = pd.read_csv(train_csv)
-    val_df = pd.read_csv(val_csv)
+    train_df = pd.read_csv(train_csv, dtype=str)
+    val_df = pd.read_csv(val_csv, dtype=str)
     df = pd.concat([train_df, val_df])
     datasetF = datasetFingerprint()
 

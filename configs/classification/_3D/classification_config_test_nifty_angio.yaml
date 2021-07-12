@@ -1,0 +1,60 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+# PyTorch configuration
+local_rank: 1
+
+
+# model configuration
+model:
+# model class, e.g. UNet
+  dimension: 2D+T
+  encoder_depth: 4
+  in_channels: 1
+  backbone: r3d_18
+  num_classes: 2
+  pretrain_model: '/home/gandalf/MIA/runs/Jul09_10-29-22_gandalf-MS-7845_avi'
+  pretrain_encoder: 'None'
+# Data loader configuration
+task_type: "classification"
+loaders:
+  #dimension order
+  format: 'nifty'
+  store_memory: False
+
+  use_amp: False
+  
+
+  CropForeGround: False
+  isCT: False
+
+  spatial_resize: True
+  #pixdim_height: 0.2 # 0.213828125
+  #pixdim_width: 0.2 # 0.213828125
+  #pixdim_depth: 0.2 #66 #66.673
+  Resize_height: 224
+  Resize_width: 224
+  Resize_depth: -1
+
+
+  Crop_height: 224
+  Crop_width: 224
+  Crop_depth: 32
+
+  batchSize: 1
+
+  mode: testing
+  numWorkers: 3
+
+  # validation method 
+  val_method:
+    type: "sliding_window" # patches | sliding_window
+    samples: 10
+
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['CE'] #CE_pixel CE_pixel
+# evaluation metric configuration
+eval_metric:
+  name: ['acc_top_1']
+# learning rate scheduler configuration

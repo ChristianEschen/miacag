@@ -1,5 +1,6 @@
 import yaml
 import torch
+import os
 
 
 class ModelBuilder():
@@ -54,7 +55,8 @@ class ModelBuilder():
         if path_encoder != "None":
             model.encoder.load_state_dict(torch.load(path_encoder))
         if path_model != "None":
-            model.load_state_dict(torch.load(path_model))
+            model.load_state_dict(
+                torch.load(os.path.join(path_model, 'model.pt')))
         return model
 
     def get_segmentation_model(self):
@@ -130,7 +132,7 @@ class ModelBuilder():
         config['loaders']['batchSize'] = dataset_fingerprint['batch_size']
 
         configuration = config['model'].copy()
-        configuration['spatial_dims'] = configuration['dimensions']
+        configuration['spatial_dims'] = configuration['dimension']
         configuration['out_channels'] = configuration['classes']
         configuration['kernel_size'] = dataset_fingerprint['conv_kernel_sizes']
         configuration['strides_temp'] = dataset_fingerprint['pool_op_kernel_sizes']
@@ -145,7 +147,7 @@ class ModelBuilder():
         configuration['norm_name'] = "instance"
         configuration['deep_supr_num'] = 2
         configuration['res_block'] = False
-        del configuration['dimensions']
+        del configuration['dimension']
         del configuration['classes']
         del configuration['strides_temp']
 

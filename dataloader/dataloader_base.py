@@ -19,8 +19,9 @@ class DataloaderBase(data.Dataset):
         self.image_path = image_path
         self.csv = pd.read_csv(csv_path_file)
         if self.use_complete_data is True:
-            self.csv = self.csv.dropna()
+            self.csv = self.csv[self.csv['labels'].notna()]
             self.labels = self.csv['labels']
+            self.csv['labels'] = self.csv['labels'].astype(int)
             self.labels = self.map_labels(self.labels)
         self.num_samples = len(self.csv)
         self.transform = transform

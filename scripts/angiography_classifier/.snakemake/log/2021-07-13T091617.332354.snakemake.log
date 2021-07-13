@@ -1,0 +1,47 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job            count    min threads    max threads
+-----------  -------  -------------  -------------
+all                1              1              1
+test_model         1              1              1
+train_model        1              1              1
+total              3              1              1
+
+
+[Tue Jul 13 09:16:17 2021]
+rule train_model:
+    input: /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/train.csv, /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/val.csv
+    output: logfile.log
+    jobid: 2
+    resources: tmpdir=/tmp
+
+[Tue Jul 13 09:16:45 2021]
+Finished job 2.
+1 of 3 steps (33%) done
+
+[Tue Jul 13 09:16:45 2021]
+rule test_model:
+    input: /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/val.csv, logfile.log
+    output: logfile_test.log
+    jobid: 3
+    resources: tmpdir=/tmp
+
+[Tue Jul 13 09:16:47 2021]
+Finished job 3.
+2 of 3 steps (67%) done
+
+[Tue Jul 13 09:16:47 2021]
+localrule all:
+    input: /home/gandalf/MIA/data/angio/train.csv, /home/gandalf/MIA/data/angio/val.csv, /home/gandalf/MIA/data/angio/minc_file_path, logfile.log, logfile_test.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+Removing temporary output file logfile.log.
+Removing temporary output file logfile_test.log.
+[Tue Jul 13 09:16:47 2021]
+Finished job 0.
+3 of 3 steps (100%) done
+Complete log: /home/gandalf/MIA/scripts/angiography_classifier/.snakemake/log/2021-07-13T091617.332354.snakemake.log

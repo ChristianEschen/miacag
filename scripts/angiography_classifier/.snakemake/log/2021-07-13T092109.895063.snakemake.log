@@ -1,0 +1,47 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job            count    min threads    max threads
+-----------  -------  -------------  -------------
+all                1              1              1
+test_model         1              1              1
+train_model        1              1              1
+total              3              1              1
+
+
+[Tue Jul 13 09:21:10 2021]
+rule train_model:
+    input: /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/train.csv, /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/val.csv
+    output: runs/69770c59-21e7-48ec-9450-b9812aaad616.log
+    jobid: 2
+    resources: tmpdir=/tmp
+
+[Tue Jul 13 09:21:37 2021]
+Finished job 2.
+1 of 3 steps (33%) done
+
+[Tue Jul 13 09:21:37 2021]
+rule test_model:
+    input: /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/val.csv, runs/69770c59-21e7-48ec-9450-b9812aaad616.log
+    output: runs/558e17e0-6fc4-49f7-97d1-6728eaeb546c.log
+    jobid: 3
+    resources: tmpdir=/tmp
+
+[Tue Jul 13 09:21:56 2021]
+Finished job 3.
+2 of 3 steps (67%) done
+
+[Tue Jul 13 09:21:56 2021]
+localrule all:
+    input: /home/gandalf/MIA/data/angio/train.csv, /home/gandalf/MIA/data/angio/val.csv, /home/gandalf/MIA/data/angio/minc_file_path, runs/69770c59-21e7-48ec-9450-b9812aaad616.log, runs/558e17e0-6fc4-49f7-97d1-6728eaeb546c.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+Removing temporary output file runs/69770c59-21e7-48ec-9450-b9812aaad616.log.
+Removing temporary output file runs/558e17e0-6fc4-49f7-97d1-6728eaeb546c.log.
+[Tue Jul 13 09:21:56 2021]
+Finished job 0.
+3 of 3 steps (100%) done
+Complete log: /home/gandalf/MIA/scripts/angiography_classifier/.snakemake/log/2021-07-13T092109.895063.snakemake.log

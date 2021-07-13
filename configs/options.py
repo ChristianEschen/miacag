@@ -25,6 +25,12 @@ class TestOptions():
             required=True)
         self.parser.add_argument("--cpu", type=str,
                                  default="False", help="Use cpu? "),
+        self.parser.add_argument(
+            '--logfile', type=str,
+            help='logfile test')
+        self.parser.add_argument(
+            '--num_workers', type=int,
+            help='number of workers (cpus) for prefetching')
 
     def parse(self):
         """ Parse Arguments.

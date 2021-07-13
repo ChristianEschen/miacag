@@ -11,7 +11,8 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: r3d_18
-  num_classes: 2
+  num_classes: 3
+  pretrained: True
   pretrain_model: 'None'
   pretrain_encoder: 'None'
 # Data loader configuration
@@ -28,9 +29,9 @@ loaders:
   isCT: False
 
   spatial_resize: True
-  #pixdim_height: 0.2 # 0.213828125
-  #pixdim_width: 0.2 # 0.213828125
-  #pixdim_depth: 0.2 #66 #66.673
+  pixdim_height: 0.213828125
+  pixdim_width: 0.213828125
+  pixdim_depth: 66.673
   Resize_height: 224
   Resize_width: 224
   Resize_depth: -1
@@ -40,14 +41,14 @@ loaders:
   Crop_width: 224
   Crop_depth: 32
 
-  batchSize: 2
+  batchSize: 1
 
   mode: training
-  numWorkers: 3
+
 
   # validation method 
   val_method:
-    type: "patches" # patches | sliding
+    type: "patches" # patches | sliding_window
     samples: 10
 
 # trainer configuration

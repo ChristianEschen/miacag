@@ -10,9 +10,19 @@ from trainer import get_device
 from models.BuildModel import ModelBuilder
 
 
+def read_log_file(config):
+    try:
+        f = open(config['logfile'], "r")
+        config['model']['pretrain_model'] = f.read()
+    except TypeError:
+        pass
+    return config
+
+
 def main():
     config = TestOptions().parse()
     config = load_config(config)
+    config = read_log_file(config)
     # torch.distributed.init_process_group(
     #     backend="nccl" if config["cpu"] == "False" else "Gloo")
     device = get_device(config)
@@ -27,8 +37,8 @@ def main():
     # Get loss func
     criterion = get_loss_func(config)
 
-    running_metric_test, config['eval_metric']['name'] = \
-        init_metrics(config['eval_metric']['name'], config)
+    running_metric_test, config['eval_metric_val']['name'] = \
+        init_metrics(config['eval_metric_val']['name'], config)
     running_loss_test, _ = init_metrics(config['loss']['name'],
                                         config,
                                         mode='loss')

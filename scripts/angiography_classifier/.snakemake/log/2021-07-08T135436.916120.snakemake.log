@@ -1,0 +1,43 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job            count    min threads    max threads
+-----------  -------  -------------  -------------
+train_model        1              1              1
+total              1              1              1
+
+
+[Thu Jul  8 13:54:37 2021]
+rule train_model:
+    input: /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/train.csv, /home/gandalf/MIA/data/angio/minc_file_path, /home/gandalf/MIA/data/angio/val.csv
+    output: logfile.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+[Thu Jul  8 13:54:39 2021]
+Error in rule train_model:
+    jobid: 0
+    output: logfile.log
+    shell:
+        
+       python -m torch.distributed.launch \
+       --nproc_per_node 1 \
+       --nnodes 1 \
+       --node_rank 0 \
+       --master_addr 192.168.8.116 \
+       --master_port 1232 \
+       ../../trainer.py \
+       --config /home/gandalf/MIA/configs/classification/_3D/classification_config_train_nifty_angio.yaml \
+       --TraindataRoot /home/gandalf/MIA/data/angio/minc_file_path \
+       --TraindataCSV /home/gandalf/MIA/data/angio/train.csv \
+       --ValdataRoot /home/gandalf/MIA/data/angio/minc_file_path \
+       --ValdataCSV /home/gandalf/MIA/data/angio/val.csv \
+       --cpu False
+       
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /home/gandalf/MIA/scripts/angiography_classifier/.snakemake/log/2021-07-08T135436.916120.snakemake.log

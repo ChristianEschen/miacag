@@ -5,6 +5,7 @@ from dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
+from monai.inferers import SimpleInferer, SaliencyInferer
 from torch import nn
 from metrics.metrics import softmax_transform
 import numpy as np
@@ -20,9 +21,9 @@ def  eval_one_step(model, inputs, labels, device, criterion,
         # forward
         if config['loaders']['val_method']['type'] == 'sliding_window':
             if config['model']['dimension'] in ['2D+T', 3]:
-                input_shape = (config['loaders']['Crop_depth'],
-                               config['loaders']['Crop_height'],
+                input_shape = (config['loaders']['Crop_height'],
                                config['loaders']['Crop_width'],
+                               config['loaders']['Crop_depth'],
                                )
             elif config['model']['dimension'] == 2:
                 input_shape = (config['loaders']['Crop_height'],
@@ -33,11 +34,7 @@ def  eval_one_step(model, inputs, labels, device, criterion,
                             inputs, input_shape,
                             1, model)
             else:
-              #  from monai.inferers import SaliencyInferer
-             #   SaliencyInferer('GradCam', 'encoder.layer4.1.conv2')(inputs, model)
-             import monai
-             monai.networks.nets.TorchVisionFCModel(model_name='video'
-                ).to(device)
+               # inferer = SaliencyInferer(cam_name="GradCAM", target_layers='module.encoder.4.1.conv2')(network=model, inputs=inputs)
                 outputs = sliding_window_inference(
                             inputs, input_shape,
                             1, model)
@@ -59,7 +56,7 @@ def  eval_one_step(model, inputs, labels, device, criterion,
         return outputs, losses, _
     else:
         metrics = get_metrics(outputs, labels,
-                              config['eval_metric']['name'])
+                              config['eval_metric_val']['name'])
     return outputs, losses, metrics
 
 
@@ -154,8 +151,15 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
     if config['task_type'] != "representation_learning":
         logits = []
         for data in validation_loader:
+
             inputs, labels = get_data_from_loader(data, config,
                                                     device)
+            # import matplotlib.pyplot as plt
+            # inp = inputs[0,:,:,:,16].cpu().numpy()
+            # inp =((inp-np.min(inp))/(np.max(inp)-np.min(inp))*255.0).astype(np.uint8)
+            # imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
+            # plt.show()
+
             outputs, loss, metrics = eval_one_step(
                                             model, inputs,
                                             labels, device,
@@ -189,7 +193,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
             running_loss_val = increment_metrics(loss, running_loss_val)
 
     if config['loaders']['mode'] == 'training':
-        return running_metric_val, running_loss_val
+        return running_metric_val, running_loss_val, None
     else:
         logits = torch.cat(logits, dim=0)
         return running_metric_val, running_loss_val, logits
@@ -199,14 +203,17 @@ def val_one_epoch(model, criterion, config,
                   validation_loader, device,
                   running_metric_val=0.0, running_loss_val=0.0,
                   writer=False, epoch=0, saliency_maps=False):
+    samples = config['loaders']['val_method']['samples']
     if config['loaders']['format'] == 'avi':
-        samples = config['loaders']['val_method']['samples']
         frames_sample_list = [
             i*0.1 for i in range(0, samples)]
         for sample in range(0, samples):
             validation_loader = set_uniform_sample_pct(
                 validation_loader, frames_sample_list[sample])
     else:
+        validation_loader.sampler.data_source.data = \
+            validation_loader.sampler.data_source.data * \
+            samples
         eval_outputs = run_val_one_step(
                 model, config, validation_loader, device, criterion,
                 saliency_maps,
@@ -216,8 +223,7 @@ def val_one_epoch(model, criterion, config,
         else:
             running_metric_val, running_loss_val, logits = eval_outputs
             confidences = softmax_transform(logits)
-            confidences, predictions = torch.max(confidences, dim=1)
-        samples = 1
+            #confidences, predictions = torch.max(confidences, dim=1)
 
     # Normalize the metrics from the entire epoch
     if config['task_type'] != "representation_learning":
@@ -240,4 +246,4 @@ def val_one_epoch(model, criterion, config,
     if config['loaders']['mode'] == 'training':
         return running_metric_val
     else:
-        return running_metric_val, confidences, predictions
+        return running_metric_val, confidences#, predictions

@@ -29,7 +29,7 @@ class ClassificationLoader():
             train_loader = DataLoader(
                 train_loader,
                 batch_size=config['loaders']['batchSize'],
-                num_workers=config['loaders']['numWorkers'],
+                num_workers=config['num_workers'],
                 sampler=train_loader.sampler)
 
             val_loader = VideoDataloaderAVITrain(
@@ -41,7 +41,7 @@ class ClassificationLoader():
                 val_loader = DataLoader(
                     val_loader,
                     batch_size=config['loaders']['batchSize'],
-                    num_workers=config['loaders']['numWorkers'],
+                    num_workers=config['num_workers'],
                     shuffle=False)
             return train_loader, val_loader
 
@@ -53,26 +53,32 @@ class ClassificationLoader():
         elif config['loaders']['format'] in ['nifty']:
             from dataloader.Classification._3D.dataloader_monai_classification_3D_nifty import \
                 train_monai_classification_loader
-            from dataloader.Classification._3D.dataloader_monai_classification_3D_nifty import \
-                val_monai_classification_loader
+            
             train_loader = train_monai_classification_loader(
                 config['TraindataRoot'],
                 config['TraindataCSV'],
                 config)
 
             if config['loaders']['val_method']['type'] == 'patches':
-                val_loader = val_monai_classification_loader(
-                    config['ValdataRoot'],
-                    config['ValdataCSV'],
-                    config)
+                from dataloader.Classification._3D.dataloader_monai_classification_3D_nifty import \
+                    val_monai_classification_loader
+
+            elif config['loaders']['val_method']['type'] == 'sliding_window':
+                from dataloader.Classification._3D.dataloader_monai_classification_3D_nifty import \
+                    val_monai_classification_loader_SW as val_monai_classification_loader
+            
             else:
                 raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
+            val_loader = val_monai_classification_loader(
+                    config['ValdataRoot'],
+                    config['ValdataCSV'],
+                    config)
             train_loader = DataLoader(
                 train_loader(),
                 batch_size=config['loaders']['batchSize'],
                 shuffle=True,
-                num_workers=config['loaders']['numWorkers'],
+                num_workers=config['num_workers'],
                 collate_fn=list_data_collate,
                 pin_memory=True if config['cpu'] == "False" else False,)
             with torch.no_grad():
@@ -80,8 +86,8 @@ class ClassificationLoader():
                     val_loader(),
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
-                    num_workers=config['loaders']['numWorkers'],
-                    collate_fn=list_data_collate,
+                    num_workers=config['num_workers'],
+                    collate_fn=pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=True if config['cpu'] == "False" else False,)
             return train_loader, val_loader
         elif config['loaders']['format'] == 'rgb':
@@ -115,7 +121,7 @@ class ClassificationLoader():
                 drop_last=True,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=True,
-                num_workers=config['loaders']['numWorkers'],
+                num_workers=config['num_workers'],
                 collate_fn=list_data_collate,
                 pin_memory=torch.cuda.is_available(),)
 
@@ -124,7 +130,7 @@ class ClassificationLoader():
                 drop_last=True,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=config['loaders']['numWorkers'],
+                num_workers=config['num_workers'],
                 collate_fn=list_data_collate,
                 pin_memory=torch.cuda.is_available(),)
             return train_loader, val_loader
@@ -161,8 +167,7 @@ class ClassificationLoader():
                 test_loader = DataLoader(test_loader,
                                          batch_size=config[
                                              'loaders']['batchSize'],
-                                         num_workers=config[
-                                            'loaders']['numWorkers'],
+                                         num_workers=config['num_workers'],
                                          shuffle=False)
             return test_loader
         elif config['loaders']['format'] == 'nifty':
@@ -191,7 +196,7 @@ class ClassificationLoader():
                     val_loader(),
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
-                    num_workers=config['loaders']['numWorkers'],
+                    num_workers=config['num_workers'],
                     collate_fn=list_data_collate if
                             config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
                     pin_memory=True if config['cpu'] == "False" else False,)
@@ -216,8 +221,7 @@ class ClassificationLoader():
 
             test_loader = DataLoader(test_loader,
                                      batch_size=1,
-                                     num_workers=config[
-                                         'loaders']['numWorkers'],
+                                     num_workers=config['num_workers'],
                                      shuffle=False)
 
             return test_loader
@@ -233,7 +237,7 @@ class ClassificationLoader():
                 test_loader(),
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=config['loaders']['numWorkers'],
+                num_workers=config['num_workers'],
                 collate_fn=list_data_collate,
                 pin_memory=torch.cuda.is_available(),)
 

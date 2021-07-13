@@ -6,6 +6,7 @@ from monai.transforms import (
     AddChanneld,
     Compose,
     LoadImaged,
+    RepeatChanneld,
     MapTransform,
     NormalizeIntensityd,
     RandFlipd,
@@ -19,6 +20,7 @@ from monai.transforms import (
     Identityd,
     SpatialPadd,
     Lambdad,
+    Resized,
     ToTensord,
     ConcatItemsd,
     CropForegroundd,
@@ -99,6 +101,10 @@ class base_monai_loader(DataloaderTrain):
                                 times=1, names='inputs')
         return concat
 
+    def getCopy1to3Channels(self):
+        copy = RepeatChanneld(keys=self.features, repeats=3)
+        return copy
+
     def getMaybeRandCrop(self):
         if self.config['loaders']['val_method']['type'] == "patches":
             randCrop = RandCropByPosNegLabeld(
@@ -125,17 +131,17 @@ class base_monai_loader(DataloaderTrain):
                 raise ValueError('not implemented')
             pad = SpatialPadd(
                 keys=keys_,
-                spatial_size=[self.config['loaders']['Crop_depth'],
-                              self.config['loaders']['Crop_height'],
-                              self.config['loaders']['Crop_width']])
+                spatial_size=[self.config['loaders']['Crop_height'],
+                              self.config['loaders']['Crop_width'],
+                              self.config['loaders']['Crop_depth']])
         elif self.config['loaders']['mode'] == 'testing':
             if self.config['task_type'] == "classification":
                 keys_ = self.features
                 pad = SpatialPadd(
                     keys=keys_,
-                    spatial_size=[self.config['loaders']['Crop_depth'],
-                                  self.config['loaders']['Crop_height'],
-                                  self.config['loaders']['Crop_width']])
+                    spatial_size=[self.config['loaders']['Crop_height'],
+                                  self.config['loaders']['Crop_width'],
+                                  self.config['loaders']['Crop_depth']])
             elif self.config['task_type'] == "segmentation":
                 pad = Identityd(keys=self.features + ["labels"])
             else:
@@ -164,3 +170,34 @@ class base_monai_loader(DataloaderTrain):
         else:
             permute = Identityd(keys=self.features + ["labels"])
         return permute
+
+    def resampleORresize(self):
+        if self.config['task_type'] == "classification":
+            keys_ = self.features
+            mode_ = tuple([
+                         'bilinear' for i in
+                         range(len(self.features))])
+            if len(mode_) == 1:
+                mode_ = mode_[0]
+        elif self.config['task_type'] == "segmentation":
+            keys_ = self.features + ["labels"]
+            mode_ = tuple([
+                         'bilinear' for i in
+                         range(len(self.features))]+['nearest'])
+        else:
+            raise ValueError('not implemented')
+        if self.config['loaders']['spatial_resize'] is True:
+            resample = Spacingd(
+                     keys=keys_,
+                     pixdim=(self.config['loaders']['pixdim_height'],
+                             self.config['loaders']['pixdim_width'],
+                             1/self.config['loaders']['pixdim_depth']),
+                     mode=mode_),
+        else:
+            resample = Resized(
+                    keys=keys_,
+                    spatial_size=(
+                                self.config['loaders']['Resize_height'],
+                                self.config['loaders']['Resize_width'],
+                                self.config['loaders']['Resize_depth']))
+        return resample

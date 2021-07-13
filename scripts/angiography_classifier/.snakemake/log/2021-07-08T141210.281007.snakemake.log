@@ -1,0 +1,5 @@
+Building DAG of jobs...
+WorkflowError:
+Unable to obtain modification time of file /home/gandalf/MIA/data/angio/minc_file_path because of missing read permissions.
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/asyncio/runners.py", line 43, in run
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/asyncio/base_events.py", line 587, in run_until_complete

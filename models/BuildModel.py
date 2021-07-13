@@ -47,11 +47,7 @@ class ModelBuilder():
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
         from models.modules import ClassificationModel as m
-        model = m(in_channels=self.config['model']['in_channels'],
-                  backbone_name=self.config['model']['backbone'],
-                  num_classes=self.config['model']['num_classes'],
-                  depth=self.config['model']['encoder_depth'],
-                  dimension=self.config['model']['dimension'])
+        model = m(self.config)
         if path_encoder != "None":
             model.encoder.load_state_dict(torch.load(path_encoder))
         if path_model != "None":

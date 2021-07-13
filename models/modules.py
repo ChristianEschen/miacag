@@ -1,15 +1,23 @@
 from torch import nn
 from models.mlps import prediction_MLP, projection_MLP
-from segmentation_models_pytorch.encoders import get_encoder
+from models.get_encoder import get_encoder, modelsRequiredPermute
+import torch.nn.functional as F
+
+
+def maybePermuteInput(x, config):
+    model_list = modelsRequiredPermute()
+    if config['model']['backbone'] in model_list:
+        x = x.permute(0, 1, 4, 2, 3)
+        return x
+    else:
+        return x
 
 
 class EncoderModel(nn.Module):
-    def __init__(self, in_channels, backbone_name, depth=5,
-                 ):
+    def __init__(self, config):
         super(EncoderModel, self).__init__()
-        self.encoder = get_encoder(backbone_name,
-                                   in_channels=in_channels,
-                                   depth=depth)
+
+        self.encoder, self.in_features = get_encoder(config)
 
     def forward(self, x):
         z = self.encoder(x)
@@ -17,22 +25,20 @@ class EncoderModel(nn.Module):
 
 
 class ClassificationModel(EncoderModel):
-    def __init__(self, in_channels, backbone_name, num_classes, depth=5,
-                 dimension='2D+T'):
-        super(ClassificationModel, self).__init__(
-            in_channels, backbone_name, depth)
-        self.fc = nn.Linear(self.encoder.out_channels[-1], num_classes)
-        self.dimension = dimension
+    def __init__(self, config):
+        super(ClassificationModel, self).__init__(config)
+        self.config = config
+        self.fc = nn.Linear(self.in_features,
+                            config['model']['num_classes'])
+        self.dimension = config['model']['dimension']
 
     def forward(self, x):
+        x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
-        p = p[-1]
         if self.dimension in ['3D', '2D+T']:
             p = p.mean(dim=(-3, -2, -1))
         else:
             p = p.mean(dim=(-2, -1))
-        p = p.view(-1, self.encoder.out_channels[-1])
-
         p = self.fc(p)
         return p
 

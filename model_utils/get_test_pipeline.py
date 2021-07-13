@@ -41,7 +41,7 @@ class TestPipeline():
 
         if config['loaders']['val_method']['type'] in ['patches',
                                                        'sliding_window']:
-            metrics, confidences, predictions = val_one_epoch(
+            metrics, confidences = val_one_epoch(
                 model, criterion, config,
                 test_loader, device,
                 running_metric_val=running_metric_test,
@@ -100,11 +100,25 @@ class TestPipeline():
                                   sort_keys=True, indent=4,
                                   separators=(',', ': ')))
         df_test = pd.DataFrame(test_loader.dataset.data)
+        # df_pred = pd.DataFrame(
+        #     {'predictions': predictions.numpy(),
+        #      'confidences': confidences.numpy()},
+        #     columns=['predictions', 'confidences'])
         df_pred = pd.DataFrame(
-            {'predictions': predictions.numpy(),
-             'confidences': confidences.numpy()},
-            columns=['predictions', 'confidences'])
+            {'confidences': confidences.numpy().tolist()}, columns=['confidences'])
         df_test = pd.concat([df_test, df_pred], axis=1)
+        df_test['confidences'] = df_test['confidences'].apply(pd.to_numeric)
+        df_test_conf = pd.DataFrame()
+        df_test_conf['confidences'] = df_test.groupby('RecursiveFilePath')['confidences'].apply(np.mean)
+        df_test_conf['predictions'] = df_test_conf['confidences'].apply(np.argmax)
+        #df_test_red.day.apply(max)
+        df_test = df_test.merge(
+            df_test_conf,
+            left_on='RecursiveFilePath',
+            right_on='RecursiveFilePath',
+            how='inner').drop_duplicates('RecursiveFilePath')
+        df_test['confidences'] = df_test['confidences_y']
+        df_test = df_test.drop(columns=['confidences_y', 'confidences_x'])
         df_test = self.reorder_columns(df_test)
         df_test.to_csv(
             os.path.join(config['model']['pretrain_model'], 'results.csv'),

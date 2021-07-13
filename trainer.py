@@ -11,6 +11,16 @@ from model_utils.train_utils import set_random_seeds, train_one_epoch
 from metrics.metrics_utils import init_metrics, flatten, \
     unroll_list_in_dict
 from model_utils.eval_utils import val_one_epoch
+import uuid
+
+
+def write_log_file(config, writer):
+    try:
+        f = open(config['logfile'], "w")
+    except KeyError:
+        config['logfile'] = os.path.join('runs', str(uuid.uuid4())) + '.log'
+    f.write(writer.log_dir)
+    f.close()
 
 
 def get_device(config):
@@ -19,7 +29,6 @@ def get_device(config):
             device = "cuda:{}".format(config['local_rank'])
         else:
             device = "cuda:0"
-        device = "cpu"
     device = torch.device(device)
     return device
 
@@ -104,6 +113,7 @@ def main():
         torch.save(model.module.encoder.state_dict(),
                    model_encoder_file_path)
 
+    write_log_file(config, writer)
     print('Finished Training')
 
 

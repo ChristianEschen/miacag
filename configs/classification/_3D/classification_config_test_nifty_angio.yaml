@@ -11,8 +11,8 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: r3d_18
-  num_classes: 2
-  pretrain_model: '/home/gandalf/MIA/runs/Jul09_10-29-22_gandalf-MS-7845_avi'
+  num_classes: 3
+  pretrain_model: '/home/gandalf/MIA/runs/Jul13_11-00-39_gandalf-MS-7845_avi'
   pretrain_encoder: 'None'
 # Data loader configuration
 task_type: "classification"
@@ -43,11 +43,10 @@ loaders:
   batchSize: 1
 
   mode: testing
-  numWorkers: 3
 
   # validation method 
   val_method:
-    type: "sliding_window" # patches | sliding_window
+    type: "patches" # patches | sliding_window
     samples: 10
 
 # loss function configuration
@@ -55,6 +54,6 @@ loss:
   # loss function to be used during training
   name: ['CE'] #CE_pixel CE_pixel
 # evaluation metric configuration
-eval_metric:
+eval_metric_val:
   name: ['acc_top_1']
 # learning rate scheduler configuration

@@ -4,7 +4,6 @@ import os
 # inputs:
 train_csv_files = "/home/gandalf/MIA/data/angio/pre_train.csv"
 val_csv_files = "/home/gandalf/MIA/data/angio/pre_val.csv"
-input_data_root = "/home/gandalf/MIA/data/angio/"
 
 # outputs 
 output_train_csv = "/home/gandalf/MIA/data/angio/train.csv"
@@ -41,7 +40,6 @@ rule preprocess:
     input:
         train_csv_files = train_csv_files,
         val_csv_files = val_csv_files,
-        input_data_root = input_data_root
     output:
         output_train_csv = output_train_csv,
         output_val_csv = output_val_csv,
@@ -53,7 +51,6 @@ rule preprocess:
         python ../../preprocessing/pre_process.py \\
         --train_csv_files {input.train_csv_files} \\
         --val_csv_files {input.val_csv_files} \\
-        --input_data_root {input.input_data_root} \\
         --output_train_csv {output.output_train_csv} \\
         --output_val_csv {output.output_val_csv} \\
         --output_data_root {output.output_data_root} \\

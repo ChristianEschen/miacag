@@ -19,9 +19,6 @@ parser.add_argument(
     "--val_csv_files", nargs="+",
     help="The paths for val csv files")
 parser.add_argument(
-    "--input_data_root", type=str,
-    help="data root path")
-parser.add_argument(
     '--output_train_csv', type=str,
     help="The out path for train csv file")
 parser.add_argument(
@@ -39,8 +36,7 @@ parser.add_argument(
 
 
 def mkFolder(dir):
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+    os.makedirs(dir, exist_ok=True)
 
 
 def appendDataframes(csv_dcm_files):
@@ -62,11 +58,9 @@ def write_nifty(input_path, output_path):
         sitk_array = sitk.GetArrayFromImage(sitk_image)
         sitk_array = np.transpose(sitk_array, (1, 2, 0))
         sitk_array = np.rot90(sitk_array, k=3, axes=(0, 1))
-        spacing = spacing[::-1]
-        spacing = (spacing[0], spacing[1], spacing[2])
+        spacing = (spacing[0], spacing[1], 1/spacing[2])
         img = nib.Nifti1Image(sitk_array, np.eye(4))
         img = nib.as_closest_canonical(img)
-    # spacing = [spacing[0], spacing[1], 999, spacing[2]]
         img.header['pixdim'][1:4] = spacing
         nib.save(img, output_path)
     except RuntimeError:
@@ -88,7 +82,9 @@ def main():
           '2': "2", '8': "2",
           "3": '3', '9': '3',
           "10": '5', '14': '5',
-          '11': "6", '15': "6"}
+          '11': "6", '15': "6",
+          '17': '3', '18': '3',
+          '19': '3', '20': '3'}
     df_train = df_train.replace({'labels': di})
     df_val = df_val.replace({'labels': di})
     df_val = df_val[df_val['labels'] != 'stop']

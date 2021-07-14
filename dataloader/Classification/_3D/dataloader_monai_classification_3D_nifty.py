@@ -76,12 +76,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
         train_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
-                Resized(
-                    keys=self.features,
-                    spatial_size=(
-                                self.config['loaders']['Resize_height'],
-                                self.config['loaders']['Resize_width'],
-                                self.config['loaders']['Resize_depth'])),
+                self.resampleORresize(),
                 self.getMaybePad(),
                 RandSpatialCropd(keys=self.features,
                                  roi_size=[
@@ -98,17 +93,15 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
-        check_ds = monai.data.Dataset(data=self.data,
-                                     transform=train_transforms)
-        check_loader = DataLoader(
-            check_ds,
-            batch_size=self.config['loaders']['batchSize'],
-            num_workers=self.config['num_workers'],
-            collate_fn=list_data_collate)
-        check_data = monai.utils.misc.first(check_loader)
-        img = check_data['inputs'][0,0,0,:,:].numpy()
-        #import matplotlib
-        #matplotlib.use('Agg')
+        # check_ds = monai.data.Dataset(data=self.data,
+        #                              transform=train_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=self.config['num_workers'],
+        #     collate_fn=list_data_collate)
+        # check_data = monai.utils.misc.first(check_loader)
+        # img = check_data['inputs'][0,0,:,:,16].numpy()
         # import matplotlib.pyplot as plt
         # fig_train = plt.figure()
         # plt.imshow(img, cmap="gray", interpolation="None")
@@ -131,14 +124,14 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
-                # self.getMaybePad(),
-                # RandSpatialCropd(
-                #     keys=self.features,
-                #     roi_size=[
-                #                      self.config['loaders']['Crop_height'],
-                #                      self.config['loaders']['Crop_width'],
-                #                      self.config['loaders']['Crop_depth']],
-                #     random_size=False,),
+                self.getMaybePad(),
+                RandSpatialCropd(
+                    keys=self.features,
+                    roi_size=[
+                                     self.config['loaders']['Crop_height'],
+                                     self.config['loaders']['Crop_width'],
+                                     self.config['loaders']['Crop_depth']],
+                    random_size=False,),
                 self.getCopy1to3Channels(),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 ScaleIntensityd(keys='inputs'),
@@ -148,19 +141,19 @@ class val_monai_classification_loader(base_monai_classification_loader):
 
         val_transforms = Compose(val_transforms)
         # CHECK: for debug ###
-        check_ds = monai.data.Dataset(
-            data=self.data, transform=val_transforms)
-        check_loader = DataLoader(
-            check_ds,
-            batch_size=self.config['loaders']['batchSize'],
-            num_workers=self.config['num_workers'],
-            collate_fn=list_data_collate)
-        check_data = monai.utils.misc.first(check_loader)
-        import matplotlib.pyplot as plt
-        inp = check_data['inputs'][0,:,:,:,16].cpu().numpy()
-        inp =((inp-np.min(inp))/(np.max(inp)-np.min(inp))*255.0).astype(np.uint8)
-        imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
-        plt.show()
+        # check_ds = monai.data.Dataset(
+        #     data=self.data, transform=val_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=self.config['num_workers'],
+        #     collate_fn=list_data_collate)
+        # check_data = monai.utils.misc.first(check_loader)
+        # import matplotlib.pyplot as plt
+        # inp = check_data['inputs'][0,:,:,:,16].cpu().numpy()
+        # inp =((inp-np.min(inp))/(np.max(inp)-np.min(inp))*255.0).astype(np.uint8)
+        # imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
+        # plt.show()
 
         val_loader = monai.data.Dataset(data=self.data,
                                         transform=val_transforms)

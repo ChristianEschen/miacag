@@ -191,8 +191,8 @@ class base_monai_loader(DataloaderTrain):
                      keys=keys_,
                      pixdim=(self.config['loaders']['pixdim_height'],
                              self.config['loaders']['pixdim_width'],
-                             1/self.config['loaders']['pixdim_depth']),
-                     mode=mode_),
+                             self.config['loaders']['pixdim_depth']),
+                     mode=mode_)
         else:
             resample = Resized(
                     keys=keys_,

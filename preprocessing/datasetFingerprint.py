@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from ast import literal_eval
-from nnunet.network_architecture.generic_UNet import Generic_UNet
+#from nnunet.network_architecture.generic_UNet import Generic_UNet
+from utils.generic_unet import Generic_UNet
 from copy import deepcopy
 import argparse
 import os

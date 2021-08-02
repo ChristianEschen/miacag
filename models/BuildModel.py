@@ -106,45 +106,47 @@ class ModelBuilder():
         return model
 
     def __call__(self):
+        if self.config['datasetFingerprintFile'] is not None:
+            self.config = self.unpack_fingerprint(self.config)
         model = self.get_model()
         return model
 
     def unpack_fingerprint(self, config):
         dataset_fingerprint = self.getFingerPrint(
-            config['dataset_fingerprint'])
+            config['datasetFingerprintFile'])
         config['loaders']['pixdim_height'] = \
             dataset_fingerprint['original_spacing'][0]
         config['loaders']['pixdim_width'] = \
             dataset_fingerprint['original_spacing'][1]
         config['loaders']['pixdim_depth'] = \
             dataset_fingerprint['original_spacing'][2]
+        if self.config['task_type'] != 'classification':
+            if config['loaders']['Crop_height'] is None:
+                config['loaders']['Crop_height'] = dataset_fingerprint['patch_size'][0]
+            if config['loaders']['Crop_width'] is None:
+                config['loaders']['Crop_width'] = dataset_fingerprint['patch_size'][1]
+            if config['loaders']['Crop_depth'] is None:
+                config['loaders']['Crop_depth'] = dataset_fingerprint['patch_size'][2]
+            config['loaders']['batchSize'] = dataset_fingerprint['batch_size']
 
-        if config['loaders']['height'] is None:
-            config['loaders']['height'] = dataset_fingerprint['patch_size'][0]
-        if config['loaders']['width'] is None:
-            config['loaders']['width'] = dataset_fingerprint['patch_size'][1]
-        if config['loaders']['depth'] is None:
-            config['loaders']['depth'] = dataset_fingerprint['patch_size'][2]
-        config['loaders']['batchSize'] = dataset_fingerprint['batch_size']
+            configuration = config['model'].copy()
+            configuration['spatial_dims'] = configuration['dimension']
+            configuration['out_channels'] = configuration['classes']
+            configuration['kernel_size'] = dataset_fingerprint['conv_kernel_sizes']
+            configuration['strides_temp'] = dataset_fingerprint['pool_op_kernel_sizes']
+            configuration['strides'] = []
+            for i in range(0, len(configuration['strides_temp'])):
+                if i == 0:
+                    configuration['strides'].append([1, 1, 1])
+                    configuration['strides'].append(configuration['strides_temp'][i])
+                else:
+                    configuration['strides'].append(configuration['strides_temp'][i])
+            configuration['upsample_kernel_size'] = configuration['strides'][1:]
+            configuration['norm_name'] = "instance"
+            configuration['deep_supr_num'] = 2
+            configuration['res_block'] = False
+            del configuration['dimension']
+            del configuration['classes']
+            del configuration['strides_temp']
 
-        configuration = config['model'].copy()
-        configuration['spatial_dims'] = configuration['dimension']
-        configuration['out_channels'] = configuration['classes']
-        configuration['kernel_size'] = dataset_fingerprint['conv_kernel_sizes']
-        configuration['strides_temp'] = dataset_fingerprint['pool_op_kernel_sizes']
-        configuration['strides'] = []
-        for i in range(0, len(configuration['strides_temp'])):
-            if i == 0:
-                configuration['strides'].append([1, 1, 1])
-                configuration['strides'].append(configuration['strides_temp'][i])
-            else:
-                configuration['strides'].append(configuration['strides_temp'][i])
-        configuration['upsample_kernel_size'] = configuration['strides'][1:]
-        configuration['norm_name'] = "instance"
-        configuration['deep_supr_num'] = 2
-        configuration['res_block'] = False
-        del configuration['dimension']
-        del configuration['classes']
-        del configuration['strides_temp']
-
-        return configuration
+            return configuration

@@ -33,6 +33,9 @@ parser.add_argument(
 parser.add_argument(
     "--output_data_root", type=str,
     help="output data root path")
+parser.add_argument(
+    '--unlabeled_folder', type=str,
+    help="The out path for train csv file")
 
 
 def mkFolder(dir):
@@ -69,11 +72,24 @@ def write_nifty(input_path, output_path):
     return spacing, size
 
 
+def maybeConcatDf(df_train, df_folder):
+    if df_folder is not None:
+        df_files = [os.path.join(df_folder, i) for i in os.listdir(df_folder)]
+        df_unlabel = appendDataframes(df_files)
+        df_train = pd.concat([df_train, df_unlabel], axis=0, ignore_index=True)
+        print('hgej')
+        # df_train = pd.concat([df_train df_unlabel], axis=1)
+
+    return df_train
+
+
 def main():
     args = parser.parse_args()
     op = args.output_data_root
     df_train = appendDataframes(args.train_csv_files)
     df_val = appendDataframes(args.val_csv_files)
+    maybeConcatDf(df_train, args.unlabeled_folder)
+
     df_train['labels'] = df_train['label']
     df_val['labels'] = df_val['label']
     di = {'4': "4", "5": "4", '16': "4", "12": "4", '13': "4",

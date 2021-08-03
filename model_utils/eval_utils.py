@@ -211,9 +211,6 @@ def val_one_epoch(model, criterion, config,
             validation_loader = set_uniform_sample_pct(
                 validation_loader, frames_sample_list[sample])
     else:
-        validation_loader.sampler.data_source.data = \
-            validation_loader.sampler.data_source.data * \
-            samples
         eval_outputs = run_val_one_step(
                 model, config, validation_loader, device, criterion,
                 saliency_maps,

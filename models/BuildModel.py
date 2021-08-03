@@ -150,3 +150,5 @@ class ModelBuilder():
             del configuration['strides_temp']
 
             return configuration
+        else:
+            return config

@@ -155,7 +155,7 @@ class val_monai_classification_loader(base_monai_classification_loader):
         # imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
         # plt.show()
 
-        val_loader = monai.data.Dataset(data=self.data,
+        val_loader = monai.data.CacheDataset(data=self.data,
                                         transform=val_transforms)
 
         return val_loader
@@ -187,14 +187,14 @@ class val_monai_classification_loader_SW(
                 ToTensord(keys='inputs')]
         val_transforms = Compose(val_transforms)
         # CHECK: for debug ###
-        check_ds = monai.data.Dataset(data=self.data,
-                                     transform=val_transforms)
-        check_loader = DataLoader(
-            check_ds,
-            batch_size=self.config['loaders']['batchSize'],
-            num_workers=self.config['loaders']['num_workers'],
-            collate_fn=pad_list_data_collate)
-        check_data = monai.utils.misc.first(check_loader)
+        # check_ds = monai.data.Dataset(data=self.data,
+        #                              transform=val_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=self.config['loaders']['num_workers'],
+        #     collate_fn=pad_list_data_collate)
+        # check_data = monai.utils.misc.first(check_loader)
         val_loader = monai.data.Dataset(data=self.data,
                                         transform=val_transforms)
 

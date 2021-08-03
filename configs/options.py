@@ -31,6 +31,9 @@ class TestOptions():
         self.parser.add_argument(
             '--num_workers', type=int,
             help='number of workers (cpus) for prefetching')
+        self.parser.add_argument(
+            '--datasetFingerprintFile', type=str,
+            help='Path to dataset fingerprint yaml file')
 
     def parse(self):
         """ Parse Arguments.
@@ -60,6 +63,7 @@ class TrainOptions(TestOptions):
                                  help="Local rank: torch.distributed.launch.")
         self.parser.add_argument("--tensorboard_comment", type=str,
                                  default='avi', help="Tensorboard comment"),
+
 
     def parse(self):
         """ Parse Arguments.

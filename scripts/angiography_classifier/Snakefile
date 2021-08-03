@@ -107,7 +107,7 @@ rule test_model:
         """
         python ../../tester.py \\
         --config {params.config} \\
-        --num_workers {params.num_workers}
+        --num_workers {params.num_workers} \\
         --ValdataRoot {input.ValdataRoot} \\
         --ValdataCSV {input.ValdataCSV} \\
         --logfile {input.logfile} \\

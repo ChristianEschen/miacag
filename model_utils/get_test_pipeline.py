@@ -119,6 +119,7 @@ class TestPipeline():
             how='inner').drop_duplicates('RecursiveFilePath')
         df_test['confidences'] = df_test['confidences_y']
         df_test = df_test.drop(columns=['confidences_y', 'confidences_x'])
+        df_test = df_test.drop(columns=['labels'])
         df_test = self.reorder_columns(df_test)
         df_test.to_csv(
             os.path.join(config['model']['pretrain_model'], 'results.csv'),
@@ -140,8 +141,12 @@ class TestPipeline():
 
     def reorder_columns(self, df):
         cols = df.columns[0:5].to_list()
-        cols_end = df.columns[5:].to_list()
-        start_cols = cols + ['predictions', 'confidences']
+       # cols_end = df.columns[5:].to_list()
+        if 'label' in cols:
+            cols.remove('label')
+        # if 'labels' in cols_end:
+        #     cols_end.remove('labels')
+        start_cols = cols + ['label', 'predictions', 'confidences']
         not_matches = self.returnNotMatches(start_cols, df.columns.to_list())
         new_cols = start_cols + not_matches[1]
         df = df[new_cols]

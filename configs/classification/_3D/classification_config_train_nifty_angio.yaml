@@ -28,7 +28,7 @@ loaders:
   CropForeGround: False
   isCT: False
 
-  spatial_resize: True
+  spatial_resize: False
   pixdim_height: 2 # 0.213828125
   pixdim_width: 2 # 0.213828125
   pixdim_depth: 0.33 # 0.33 # 1/66.673
@@ -54,7 +54,7 @@ loaders:
 # trainer configuration
 trainer:
   # how many iterations between validations
-  validate_frequency: 10
+  validate_frequency: 1
   # max number of epochs
   epochs: 2
 

@@ -72,12 +72,32 @@ def write_nifty(input_path, output_path):
     return spacing, size
 
 
+def remove_leakage(df1, df2, patient_col):
+    """
+    Return True if there any patients are in both df1 and df2.
+
+    Args:
+        df1 (dataframe): dataframe describing first dataset
+        df2 (dataframe): dataframe describing second dataset
+        patient_col (str): string name of column with patient IDs
+    Returns:
+        leakage (bool): True if there is leakage, otherwise False
+    """
+
+    df1_patients_unique = set(df1[patient_col].values)
+    df2_patients_unique = set(df2[patient_col].values)
+    patients_in_both_groups = df1_patients_unique.intersection(
+        df2_patients_unique)
+
+    df1 = df1[~df1[patient_col].isin(list(patients_in_both_groups))]     
+    return df1
+
+
 def maybeConcatDf(df_train, df_folder):
     if df_folder is not None:
         df_files = [os.path.join(df_folder, i) for i in os.listdir(df_folder)]
         df_unlabel = appendDataframes(df_files)
         df_train = pd.concat([df_train, df_unlabel], axis=0, ignore_index=True)
-        print('hgej')
         # df_train = pd.concat([df_train df_unlabel], axis=1)
 
     return df_train
@@ -88,7 +108,8 @@ def main():
     op = args.output_data_root
     df_train = appendDataframes(args.train_csv_files)
     df_val = appendDataframes(args.val_csv_files)
-    maybeConcatDf(df_train, args.unlabeled_folder)
+    df_train = maybeConcatDf(df_train, args.unlabeled_folder)
+    df_train = remove_leakage(df_train, df_val, 'bth_pid')
 
     df_train['labels'] = df_train['label']
     df_val['labels'] = df_val['label']
@@ -170,7 +191,7 @@ def main():
         "print zero performance val:",
         accuracy_score(labels_val, preds_val))
     print('done preparing data')
-    # os.system('chmod -R -o-rwx {}'.format(op))
+    # os.system('chmod -R o-rwx {}'.format(op))
     # print('done changing permission')
 
 

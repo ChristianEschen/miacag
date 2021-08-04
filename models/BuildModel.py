@@ -32,13 +32,7 @@ class ModelBuilder():
     def get_representation_learning_model(self):
         path = self.config['model']['pretrain_model']
         from models.modules import SimSiam as m
-        model = m(in_channels=self.config['model']['in_channels'],
-                  backbone_name=self.config['model']['backbone'],
-                  feat_dim=self.config['model']['feat_dim'],
-                  num_proj_layers=self.config['model']['num_proj_layers'],
-                  depth=self.config['model']['encoder_depth'],
-                  dimension=self.config['model']['dimension'],
-                  )
+        model = m(self.config)
         if path != "None":
             model.load_state_dict(torch.load(path))
         return model
@@ -120,7 +114,7 @@ class ModelBuilder():
             dataset_fingerprint['original_spacing'][1]
         config['loaders']['pixdim_depth'] = \
             dataset_fingerprint['original_spacing'][2]
-        if self.config['task_type'] != 'classification':
+        if self.config['task_type'] == 'segmentation':
             if config['loaders']['Crop_height'] is None:
                 config['loaders']['Crop_height'] = dataset_fingerprint['patch_size'][0]
             if config['loaders']['Crop_width'] is None:

@@ -86,7 +86,7 @@ class RepresentationLoader():
             drop_last=True,
             batch_size=config['loaders']['batchSize'],
             shuffle=True,
-            num_workers=config['loaders']['numWorkers'],
+            num_workers=config['num_workers'],
             collate_fn=list_data_collate,
             pin_memory=torch.cuda.is_available(),)
 
@@ -95,7 +95,7 @@ class RepresentationLoader():
             drop_last=True,
             batch_size=config['loaders']['batchSize'],
             shuffle=False,
-            num_workers=config['loaders']['numWorkers'],
+            num_workers=config['num_workers'],
             collate_fn=list_data_collate,
             pin_memory=torch.cuda.is_available(),)
 
@@ -104,7 +104,7 @@ class RepresentationLoader():
             drop_last=True,
             batch_size=config['loaders']['batchSize'],
             shuffle=False,
-            num_workers=config['loaders']['numWorkers'],
+            num_workers=config['num_workers'],
             collate_fn=list_data_collate,
             pin_memory=torch.cuda.is_available(),)
         val_phase_val_loader_metric = DataLoader(
@@ -112,7 +112,7 @@ class RepresentationLoader():
             drop_last=True,
             batch_size=config['loaders']['batchSize'],
             shuffle=False,
-            num_workers=config['loaders']['numWorkers'],
+            num_workers=config['num_workers'],
             collate_fn=list_data_collate,
             pin_memory=torch.cuda.is_available(),)
 

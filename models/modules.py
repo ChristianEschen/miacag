@@ -20,6 +20,7 @@ class EncoderModel(nn.Module):
         self.encoder, self.in_features = get_encoder(config)
 
     def forward(self, x):
+        x = maybePermuteInput(x, self.config)
         z = self.encoder(x)
         return z
 
@@ -33,7 +34,7 @@ class ClassificationModel(EncoderModel):
         self.dimension = config['model']['dimension']
 
     def forward(self, x):
-        x = maybePermuteInput(x, self.config)
+        #x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
             p = p.mean(dim=(-3, -2, -1))
@@ -44,25 +45,27 @@ class ClassificationModel(EncoderModel):
 
 
 class SimSiam(EncoderModel):
-    def __init__(self, in_channels, backbone_name, feat_dim,
-                 num_proj_layers, depth=5, dimension='2D+T'):
+    def __init__(self, config):
         super(SimSiam, self).__init__(
-            in_channels, backbone_name, depth=depth)
-        self.projector = projection_MLP(self.encoder.out_channels[-1],
-                                        feat_dim,
-                                        num_proj_layers,
-                                        dimension)
+            config)
+        self.projector = projection_MLP(self.in_features,
+                                        config['model']['feat_dim'],
+                                        config['model']['num_proj_layers'],
+                                        config['model']['dimension'])
 
         self.encoder_projector = nn.Sequential(
             self.encoder,
             self.projector
         )
 
-        self.predictor = prediction_MLP(feat_dim)
+        self.predictor = prediction_MLP(config['model']['feat_dim'])
 
     def forward(self, x):
+        
         im_aug1 = x[:, 0]
         im_aug2 = x[:, 1]
+       # im_aug1 = maybePermuteInput(im_aug1, self.config)
+      #  im_aug2 = maybePermuteInput(im_aug2, self.config)
         z1 = self.encoder_projector(im_aug1)
         z2 = self.encoder_projector(im_aug2)
 

@@ -104,24 +104,32 @@ def get_dataloader_train(config):
         CL = ClassificationLoader()
         train_loader, val_loader = CL.get_classification_loader_train(config)
 
+        val_loader.sampler.data_source.data = \
+            val_loader.sampler.data_source.data * \
+            config['loaders']['val_method']['samples']
     elif config['task_type'] == 'segmentation':
         from dataloader.Segmentation.get_dataloader_segmentation import \
             SegmentationLoader
         SL = SegmentationLoader()
         train_loader, val_loader = SL.get_segmentation_loader_train(config)
 
+        val_loader.sampler.data_source.data = \
+            val_loader.sampler.data_source.data * \
+            config['loaders']['val_method']['samples']
     elif config['task_type'] == "representation_learning":
         from dataloader.Representation.get_dataloader_representation import \
             RepresentationLoader
         RL = RepresentationLoader()
         train_loader, val_loader = RL.get_representation_loader_train(config)
+        #increase size of validation loaders
+        for val_l_idx in range(0, len(val_loader)):
+            val_loader[val_l_idx].sampler.data_source.data = \
+                val_loader[val_l_idx].sampler.data_source.data * \
+                config['loaders']['val_method']['samples']
     else:
         raise ValueError(
                 "Data type is not implemented")
 
-    val_loader.sampler.data_source.data = \
-        val_loader.sampler.data_source.data * \
-        config['loaders']['val_method']['samples']
     return train_loader, val_loader
 
 

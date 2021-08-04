@@ -27,7 +27,7 @@ class projection_MLP(nn.Module):
         )
 
     def forward(self, x):
-        x = x[-1]
+        #x = x[-1]
         if self.dimension in ['3D', '2D+T']:
             x = x.mean(dim=(-3, -2, -1))
         #else:

@@ -107,7 +107,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
         # plt.imshow(img, cmap="gray", interpolation="None")
         # plt.show()
         # create a training data loader
-        train_loader = monai.data.CacheDataset(data=self.data,
+        train_loader = monai.data.Dataset(data=self.data,
                                                transform=train_transforms)
 
         return train_loader

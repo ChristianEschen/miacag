@@ -226,10 +226,12 @@ def val_one_epoch(model, criterion, config,
     if config['task_type'] != "representation_learning":
         running_metric_val = normalize_metrics(
             running_metric_val,
+            config,
             len(validation_loader)*samples)
 
     running_loss_val = normalize_metrics(
         running_loss_val,
+        config,
         len(validation_loader)*samples)
     if writer is not False:
         write_tensorboard(running_loss_val,

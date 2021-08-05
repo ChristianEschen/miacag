@@ -11,7 +11,7 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: r3d_18
-  num_classes: 3
+  num_classes: 2
   pretrained: True
   pretrain_model: 'None'
   pretrain_encoder: 'None'
@@ -32,16 +32,16 @@ loaders:
   pixdim_height: 2 # 0.213828125
   pixdim_width: 2 # 0.213828125
   pixdim_depth: 0.33 # 0.33 # 1/66.673
-  Resize_height: 224
-  Resize_width: 224
+  Resize_height: 112 # 224
+  Resize_width: 112 # 224
   Resize_depth: -1
 
 
-  Crop_height: 224
-  Crop_width: 224
+  Crop_height: 112 # 224
+  Crop_width: 112 # 224
   Crop_depth: 32
 
-  batchSize: 1
+  batchSize: 2
 
   mode: training
 
@@ -49,14 +49,14 @@ loaders:
   # validation method 
   val_method:
     type: "patches" # patches | sliding_window
-    samples: 1
+    samples: 10
 
 # trainer configuration
 trainer:
   # how many iterations between validations
   validate_frequency: 1
   # max number of epochs
-  epochs: 2
+  epochs: 1
 
 # optimizer configuration
 optimizer:

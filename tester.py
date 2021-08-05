@@ -11,10 +11,11 @@ from models.BuildModel import ModelBuilder
 
 
 def read_log_file(config):
-    try:
+    if config['logfile'] != None:
         f = open(config['logfile'], "r")
         config['model']['pretrain_model'] = f.read()
-    except TypeError:
+        print('je')
+    else:
         pass
     return config
 

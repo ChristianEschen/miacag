@@ -68,8 +68,10 @@ def train_one_epoch(model, criterion,
     if lr_scheduler is not False:
         lr_scheduler.step()
     running_metric_train = normalize_metrics(running_metric_train,
+                                             config,
                                              len(train_loader))
     running_loss_train = normalize_metrics(running_loss_train,
+                                           config,
                                            len(train_loader))
 
     write_tensorboard(running_loss_train,

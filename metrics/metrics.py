@@ -8,8 +8,8 @@ def softmax_transform(outputs):
     return soft(outputs)
 
 
-def accuracy_top(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions
+def corrects_top(output, target, topk=(1,)):
+    """Computes the number of corrects over the k top predictions
     for the specified values of k"""
     output = softmax_transform(output)
     with torch.no_grad():
@@ -25,9 +25,9 @@ def accuracy_top(output, target, topk=(1,)):
         return res
 
 
-def accuracy_top_batch(output, target, topk=(1,)):
-    result = accuracy_top(output, target, topk)
-    result = [torch.mean(res) for res in result]
+def corrects_top_batch(output, target, topk=(1,)):
+    result = corrects_top(output, target, topk)
+    result = [torch.sum(res) for res in result]
     return result
 
 

@@ -11,8 +11,8 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: r3d_18
-  num_classes: 3
-  pretrain_model: '/home/gandalf/MIA/scripts/angiography_classifier/runs/Aug02_14-53-47_gandalf-MS-7845_avi'
+  num_classes: 2
+  pretrain_model: '/home/sauroman/mia/runs/Aug05_16-46-30_sauromanPC_avi'
   pretrain_encoder: 'None'
 # Data loader configuration
 task_type: "classification"
@@ -31,16 +31,16 @@ loaders:
   pixdim_height: 2 # 0.213828125
   pixdim_width: 2 # 0.213828125
   pixdim_depth: 0.33 # 0.33 # 1/66.673
-  Resize_height: 224
-  Resize_width: 224
+  Resize_height: 112
+  Resize_width: 112
   Resize_depth: -1
 
 
-  Crop_height: 224
-  Crop_width: 224
+  Crop_height: 112
+  Crop_width: 112
   Crop_depth: 32
 
-  batchSize: 1
+  batchSize: 2
 
   mode: testing
 

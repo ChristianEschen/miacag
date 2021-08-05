@@ -1,5 +1,5 @@
 import os
-from metrics.metrics import accuracy_top_batch, MeanIoU, softmax_transform
+from metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
 import collections
 from monai.metrics import DiceMetric
 from monai.transforms import (
@@ -70,10 +70,10 @@ def get_metrics(outputs, labels, metrics):
         c = 0
         if metric == 'acc_top_1':
             dicts[metric] = \
-                accuracy_top_batch(outputs, labels, topk=(1, 1))[0].item()
+                corrects_top_batch(outputs, labels, topk=(1, ))[0].item()
         elif metric == 'acc_top_5':
             dicts[metric] = \
-                accuracy_top_batch(outputs, labels, topk=(1, 5))[1].item()
+                corrects_top_batch(outputs, labels, topk=(1, 5))[1].item()
         elif metric == 'MeanIoU':  # does not work properly i think
             criterion = MeanIoU()
             dicts[metric] = criterion(softmax_transform(outputs), labels)
@@ -109,10 +109,10 @@ def get_metrics(outputs, labels, metrics):
     return dicts
 
 
-def normalize_metrics(running_metrics, data_len):
+def normalize_metrics(running_metrics, config, data_len):
     for running_metric in running_metrics:
         running_metrics[running_metric] = running_metrics[running_metric] \
-            / data_len
+            / (data_len * config['loaders']['batchSize'])
     return running_metrics
 
 

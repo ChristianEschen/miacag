@@ -15,12 +15,11 @@ import uuid
 
 
 def write_log_file(config, writer):
-    try:
+    if config['logfile'] != None:
         f = open(config['logfile'], "w")
-    except KeyError:
-        config['logfile'] = os.path.join('runs', str(uuid.uuid4())) + '.log'
-    f.write(writer.log_dir)
-    f.close()
+        f.write(writer.log_dir)
+        f.close()
+
 
 
 def get_device(config):
@@ -29,8 +28,27 @@ def get_device(config):
             device = "cuda:{}".format(config['local_rank'])
         else:
             device = "cuda:0"
+    else:
+        device = 'cpu'
     device = torch.device(device)
     return device
+
+
+def save_model(model, writer, config):
+    model_file_path = os.path.join(writer.log_dir, 'model.pt')
+    model_encoder_file_path = os.path.join(
+            writer.log_dir, 'model_encoder.pt')
+
+    if config["cpu"] == "False":
+        torch.save(model.module.state_dict(), model_file_path)
+    else:
+        torch.save(model.state_dict(), model_file_path)
+
+    if config["task_type"] in ["representation_learning"]:
+        if config["cpu"] == "False":
+            torch.save(model.module.encoder.state_dict(), model_encoder_file_path)
+        else:
+            torch.save(model.encoder.state_dict(), model_encoder_file_path)
 
 
 def main():
@@ -83,6 +101,13 @@ def main():
             init_metrics(config['eval_metric_val']['name'],
                          config)
 
+        # train one epoch
+        train_one_epoch(model, criterion,
+                        train_loader, device, epoch,
+                        optimizer, lr_scheduler,
+                        running_metric_train, running_loss_train,
+                        writer, config, scaler)
+    
         #  validation one epoch (but not necessarily each)
         if epoch % config['trainer']['validate_frequency'] == 0:
             metric_dict_val = val_one_epoch(model, criterion, config,
@@ -90,12 +115,7 @@ def main():
                                             running_metric_val,
                                             running_loss_val, writer, epoch)
 
-        # train one epoch
-        train_one_epoch(model, criterion,
-                        train_loader, device, epoch,
-                        optimizer, lr_scheduler,
-                        running_metric_train, running_loss_train,
-                        writer, config, scaler)
+
 
     config = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
@@ -104,14 +124,8 @@ def main():
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
-    model_file_path = os.path.join(writer.log_dir, 'model.pt')
-    torch.save(model.module.state_dict(), model_file_path)
+    save_model(model, writer, config)
 
-    if config["task_type"] in ["representation_learning"]:
-        model_encoder_file_path = os.path.join(
-            writer.log_dir, 'model_encoder.pt')
-        torch.save(model.module.encoder.state_dict(),
-                   model_encoder_file_path)
 
     write_log_file(config, writer)
     print('Finished Training')

@@ -57,9 +57,8 @@ class base_monai_classification_loader(base_monai_loader):
         self.csv = self.set_feature_path(self.csv,
                                          self.features,
                                          self.image_path)
-        if config['loaders']['mode'] == 'training':
-            self.csv = self.csv[self.features + ['labels']]
-        self.data = self.csv.to_dict('records')
+        self.data = self.csv[self.features + ['labels']]
+        self.data = self.data.to_dict('records')
 
 
 class train_monai_classification_loader(base_monai_classification_loader):
@@ -155,7 +154,7 @@ class val_monai_classification_loader(base_monai_classification_loader):
         # imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
         # plt.show()
 
-        val_loader = monai.data.CacheDataset(data=self.data,
+        val_loader = monai.data.Dataset(data=self.data,
                                         transform=val_transforms)
 
         return val_loader

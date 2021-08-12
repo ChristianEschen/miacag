@@ -21,7 +21,7 @@ loaders:
   format: 'nifty'
   store_memory: False
 
-  use_amp: False
+  use_amp: True
   
 
   CropForeGround: False

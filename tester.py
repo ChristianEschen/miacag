@@ -14,7 +14,6 @@ def read_log_file(config):
     if config['logfile'] != None:
         f = open(config['logfile'], "r")
         config['model']['pretrain_model'] = f.read()
-        print('je')
     else:
         pass
     return config

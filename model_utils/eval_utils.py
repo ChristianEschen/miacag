@@ -219,7 +219,7 @@ def val_one_epoch(model, criterion, config,
             running_metric_val, running_loss_val, _ = eval_outputs
         else:
             running_metric_val, running_loss_val, logits = eval_outputs
-            confidences = softmax_transform(logits)
+            confidences = softmax_transform(logits.float())
             #confidences, predictions = torch.max(confidences, dim=1)
 
     # Normalize the metrics from the entire epoch
@@ -227,19 +227,17 @@ def val_one_epoch(model, criterion, config,
         running_metric_val = normalize_metrics(
             running_metric_val,
             config,
-            len(validation_loader)*samples)
+            len(validation_loader.dataset.data))
 
     running_loss_val = normalize_metrics(
         running_loss_val,
         config,
-        len(validation_loader)*samples)
+        len(validation_loader.dataset.data))
     if writer is not False:
         write_tensorboard(running_loss_val,
                           running_metric_val,
                           writer, epoch, 'val')
-    else:
-        print('metrics', running_metric_val)
-        print('loss', running_loss_val)
+        
     running_metric_val.update(running_loss_val)
 
     if config['loaders']['mode'] == 'training':

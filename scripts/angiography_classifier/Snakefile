@@ -2,13 +2,13 @@ import uuid
 import os
 
 # inputs:
-train_csv_files = "/home/gandalf/MIA/data/angio/pre_train.csv"
-val_csv_files = "/home/gandalf/MIA/data/angio/pre_val.csv"
+train_csv_files = "/home/gandalf/mia/data/angio/pre_train.csv"
+val_csv_files = "/home/gandalf/mia/data/angio/pre_val.csv"
 
 # outputs 
-output_train_csv = "/home/gandalf/MIA/data/angio/train.csv"
-output_val_csv = "/home/gandalf/MIA/data/angio/val.csv"
-output_data_root = "/home/gandalf/MIA/data/angio/minc_file_path/"
+output_train_csv = "/home/gandalf/mia/data/angio/train.csv"
+output_val_csv = "/home/gandalf/mia/data/angio/val.csv"
+output_data_root = "/home/gandalf/mia/data/angio/minc_file_path/"
 # temp outputs
 logfile = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
@@ -22,8 +22,8 @@ node_rank = 0
 master_addr = "192.168.8.116"
 master_port = 1234
 cpu = "False"
-config_train = "/home/gandalf/MIA/configs/classification/_3D/classification_config_train_nifty_angio.yaml"
-config_test = "/home/gandalf/MIA/configs/classification/_3D/classification_config_test_nifty_angio.yaml"
+config_train = "/home/gandalf/mia/configs/classification/_3D/classification_config_train_nifty_angio.yaml"
+config_test = "/home/gandalf/mia/configs/classification/_3D/classification_config_test_nifty_angio.yaml"
 
 
 rule all:

@@ -43,13 +43,11 @@ loaders:
 
   batchSize: 2
 
-  mode: training
-
 
   # validation method 
   val_method:
     type: "patches" # patches | sliding_window
-    samples: 10
+    samples: 1
 
 # trainer configuration
 trainer:
@@ -57,6 +55,8 @@ trainer:
   validate_frequency: 1
   # max number of epochs
   epochs: 1
+  # number of epochs before use early stopping
+  early_stop_begin_ep: 5
 
 # optimizer configuration
 optimizer:

@@ -1,52 +1,17 @@
 from dataloader.get_dataloader import get_dataloader_train
 import torch
 from models.BuildModel import ModelBuilder
-from configs.config import load_config, save_config
+from configs.config import load_config
 from torch.utils.tensorboard import SummaryWriter
 from model_utils.get_optimizer import get_optimizer
 from model_utils.get_loss_func import get_loss_func
 from configs.options import TrainOptions
 import os
-from model_utils.train_utils import set_random_seeds, train_one_epoch
-from metrics.metrics_utils import init_metrics, flatten, \
-    unroll_list_in_dict
+from model_utils.train_utils import set_random_seeds, train_one_epoch, early_stopping, \
+    get_device, saver
+from metrics.metrics_utils import init_metrics
 from model_utils.eval_utils import val_one_epoch
 import uuid
-
-
-def write_log_file(config, writer):
-    f = open(config['logfile'], "w")
-    f.write(writer.log_dir)
-    f.close()
-
-
-def get_device(config):
-    if config["cpu"] == "False":
-        if config['loaders']['mode'] == 'training':
-            device = "cuda:{}".format(config['local_rank'])
-        else:
-            device = "cuda:0"
-    else:
-        device = 'cpu'
-    device = torch.device(device)
-    return device
-
-
-def save_model(model, writer, config):
-    model_file_path = os.path.join(writer.log_dir, 'model.pt')
-    model_encoder_file_path = os.path.join(
-            writer.log_dir, 'model_encoder.pt')
-
-    if config["cpu"] == "False":
-        torch.save(model.module.state_dict(), model_file_path)
-    else:
-        torch.save(model.state_dict(), model_file_path)
-
-    if config["task_type"] in ["representation_learning"]:
-        if config["cpu"] == "False":
-            torch.save(model.module.encoder.state_dict(), model_encoder_file_path)
-        else:
-            torch.save(model.encoder.state_dict(), model_encoder_file_path)
 
 
 
@@ -85,7 +50,11 @@ def main():
     # Use AMP for speedup:
     scaler = torch.cuda.amp.GradScaler() \
         if config['loaders']['use_amp'] else None
-#  ---- Start training loop ----#
+
+    max_stagnation = 5 # number of epochs without improvement to tolerate
+    best_val_loss, best_val_epoch = None, None
+    
+    #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
         running_loss_train, _ = init_metrics(config['loss']['name'],
@@ -107,27 +76,24 @@ def main():
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
-    
+        
         #  validation one epoch (but not necessarily each)
         if epoch % config['trainer']['validate_frequency'] == 0:
             metric_dict_val = val_one_epoch(model, criterion, config,
                                             val_loader, device,
                                             running_metric_val,
                                             running_loss_val, writer, epoch)
+            # early stopping
+            early_stop, best_val_loss, best_val_epoch = early_stopping(best_val_loss, metric_dict_val['CE'],
+                                                       epoch, max_stagnation)
+            # save model
+            if best_val_epoch == epoch:
+                saver(model, metric_dict_val, writer, config)
+            if early_stop is True:
+                break
 
-
-    save_config(writer, config)
-    config = unroll_list_in_dict(flatten(config))
-    metric_dict_val = {str(key)+'/val': val
-                       for key, val in metric_dict_val.items()}
-
-    writer.add_hparams(config, metric_dict=metric_dict_val)
-    writer.flush()
-    writer.close()
-    save_model(model, writer, config)
-
-
-    write_log_file(config, writer)
+    if early_stop is False:
+        saver(model, metric_dict_val, writer, config)
     print('Finished Training')
 
 

@@ -4,6 +4,7 @@ import os
 import json
 import pandas as pd
 import numpy as np
+from sklearn.metrics import accuracy_score
 
 
 class TestPipeline():
@@ -94,16 +95,12 @@ class TestPipeline():
             raise ValueError(
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
-        with open(os.path.join(config['model']['pretrain_model'],
-                               'test_log.txt'), 'w') as file:
-            file.write(json.dumps({**metrics, **config},
-                                  sort_keys=True, indent=4,
-                                  separators=(',', ': ')))
-        df_test = pd.DataFrame(test_loader.dataset.data)
-        # df_pred = pd.DataFrame(
-        #     {'predictions': predictions.numpy(),
-        #      'confidences': confidences.numpy()},
-        #     columns=['predictions', 'confidences'])
+        
+        df_test = pd.read_csv(config['ValdataCSV'])
+        df_test = df_test[df_test['labels'].notna()]
+        df_test = pd.concat([df_test]*config['loaders']['val_method']['samples'], ignore_index=True)
+
+
         df_pred = pd.DataFrame(
             {'confidences': confidences.numpy().tolist()}, columns=['confidences'])
         df_test = pd.concat([df_test, df_pred], axis=1)
@@ -124,7 +121,17 @@ class TestPipeline():
         df_test.to_csv(
             os.path.join(config['model']['pretrain_model'], 'results.csv'),
             index=False)
+        acc = {'accuracy correct': accuracy_score(df_test['label'].astype('int'), df_test['predictions'])}
 
+        print('accuracy_correct', acc)
+        print('metrics (mean of all preds)', metrics)
+        metrics.update(acc)
+        with open(os.path.join(config['model']['pretrain_model'],
+                               'test_log.txt'), 'w') as file:
+            file.write(json.dumps({**metrics, **config},
+                                  sort_keys=True, indent=4,
+                                  separators=(',', ': ')))
+        
     def get_test_segmentation_pipeline(self, model, criterion,
                                        config, test_loader,
                                        device, init_metrics, increment_metrics,

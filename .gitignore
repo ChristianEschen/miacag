@@ -1,5 +1,8 @@
 data
 runs
-configs/segmentation
+scripts
+configs/segmentation/**
+configs/classification/**
+configs/representation_learning/**
 .vscode
 *.pyc

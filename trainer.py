@@ -1,7 +1,7 @@
 from dataloader.get_dataloader import get_dataloader_train
 import torch
 from models.BuildModel import ModelBuilder
-from configs.config import load_config
+from configs.config import load_config, save_config
 from torch.utils.tensorboard import SummaryWriter
 from model_utils.get_optimizer import get_optimizer
 from model_utils.get_loss_func import get_loss_func
@@ -15,11 +15,9 @@ import uuid
 
 
 def write_log_file(config, writer):
-    if config['logfile'] != None:
-        f = open(config['logfile'], "w")
-        f.write(writer.log_dir)
-        f.close()
-
+    f = open(config['logfile'], "w")
+    f.write(writer.log_dir)
+    f.close()
 
 
 def get_device(config):
@@ -51,9 +49,11 @@ def save_model(model, writer, config):
             torch.save(model.encoder.state_dict(), model_encoder_file_path)
 
 
+
 def main():
-    config = TrainOptions().parse()
-    config = load_config(config)
+    config = vars(TrainOptions().parse())
+    config = load_config(config['config'], config)
+    config['loaders']['mode'] = 'training'
     writer = SummaryWriter(comment="_" + config['tensorboard_comment'])
 
     set_random_seeds(random_seed=config['manual_seed'])
@@ -116,7 +116,7 @@ def main():
                                             running_loss_val, writer, epoch)
 
 
-
+    save_config(writer, config)
     config = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
                        for key, val in metric_dict_val.items()}

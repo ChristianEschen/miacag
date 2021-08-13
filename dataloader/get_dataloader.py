@@ -139,6 +139,9 @@ def get_dataloader_test(config):
             ClassificationLoader
         CL = ClassificationLoader()
         test_loader = CL.get_classificationloader_patch_lvl_test(config)
+        test_loader.sampler.data_source.data = \
+            test_loader.sampler.data_source.data * \
+            config['loaders']['val_method']['samples']
         return test_loader
     elif config['task_type'] == 'image2image':
         from dataloader.get_dataloader_segmentation import \

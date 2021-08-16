@@ -8,7 +8,7 @@ from model_utils.get_loss_func import get_loss_func
 from configs.options import TrainOptions
 import os
 from model_utils.train_utils import set_random_seeds, train_one_epoch, early_stopping, \
-    get_device, saver
+    get_device, saver, save_model
 from metrics.metrics_utils import init_metrics
 from model_utils.eval_utils import val_one_epoch
 import uuid
@@ -84,16 +84,20 @@ def main():
                                             running_metric_val,
                                             running_loss_val, writer, epoch)
             # early stopping
-            early_stop, best_val_loss, best_val_epoch = early_stopping(best_val_loss, metric_dict_val['CE'],
-                                                       epoch, max_stagnation)
+            early_stop, best_val_loss, best_val_epoch = early_stopping(
+                best_val_loss, best_val_epoch,
+                metric_dict_val['CE'],
+                epoch, max_stagnation)
+            config['best_val_epoch'] = best_val_epoch
             # save model
             if best_val_epoch == epoch:
-                saver(model, metric_dict_val, writer, config)
+                save_model(model, writer, config)
             if early_stop is True:
                 break
 
     if early_stop is False:
-        saver(model, metric_dict_val, writer, config)
+        save_model(model, writer, config)
+    saver(metric_dict_val, writer, config)
     print('Finished Training')
 
 

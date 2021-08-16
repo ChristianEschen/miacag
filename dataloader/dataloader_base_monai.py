@@ -123,7 +123,8 @@ class base_monai_loader(DataloaderTrain):
 
     def getMaybePad(self):
         if self.config['loaders']['mode'] == 'training':
-            if self.config['task_type'] == "classification":
+            if self.config['task_type'] in ['representation_learning',
+                                            "classification"]:
                 keys_ = self.features
             elif self.config['task_type'] == "segmentation":
                 keys_ = self.features + ["labels"]
@@ -172,7 +173,8 @@ class base_monai_loader(DataloaderTrain):
         return permute
 
     def resampleORresize(self):
-        if self.config['task_type'] == "classification":
+        if self.config['task_type'] in [
+            'representation_learning', "classification"]:
             keys_ = self.features
             mode_ = tuple([
                          'bilinear' for i in

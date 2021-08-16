@@ -4,5 +4,6 @@ scripts
 configs/segmentation/**
 configs/classification/**
 configs/representation_learning/**
+configs/classification/_3D/classification_config_train_nifty_angio.yaml
 .vscode
 *.pyc

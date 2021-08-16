@@ -51,7 +51,6 @@ def main():
     scaler = torch.cuda.amp.GradScaler() \
         if config['loaders']['use_amp'] else None
 
-    max_stagnation = 5 # number of epochs without improvement to tolerate
     best_val_loss, best_val_epoch = None, None
     
     #  ---- Start training loop ----#
@@ -87,7 +86,7 @@ def main():
             early_stop, best_val_loss, best_val_epoch = early_stopping(
                 best_val_loss, best_val_epoch,
                 metric_dict_val['CE'],
-                epoch, max_stagnation)
+                epoch, config['trainer']['max_stagnation'])
             config['best_val_epoch'] = best_val_epoch
             # save model
             if best_val_epoch == epoch:

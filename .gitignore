@@ -1,5 +1,7 @@
 data
 runs
-scripts
+scripts/**
 .vscode
 *.pyc
+scripts
+configs/**

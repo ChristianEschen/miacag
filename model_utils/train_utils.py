@@ -82,21 +82,27 @@ def train_one_epoch(model, criterion,
                       running_metric_train,
                       writer, epoch, 'train')
 
-def test_best_loss(best_val_loss, val_loss, epoch):
-    if best_val_loss is None or best_val_loss < val_loss:
+
+def test_best_loss(best_val_loss, best_val_epoch, val_loss, epoch):
+    if best_val_loss is None or best_val_loss > val_loss:
         best_val_loss, best_val_epoch = val_loss, epoch
     return best_val_loss, best_val_epoch
 
-def early_stopping(best_val_loss, val_loss, epoch, max_stagnation):
+
+def early_stopping(best_val_loss, best_val_epoch,
+                   val_loss, epoch, max_stagnation):
     early_stop = False
 
-    best_val_loss, best_val_epoch = test_best_loss(best_val_loss, val_loss, epoch)
+    best_val_loss, best_val_epoch = test_best_loss(best_val_loss,
+                                                   best_val_epoch,
+                                                   val_loss,
+                                                   epoch)
+
     if best_val_epoch < epoch - max_stagnation:
         # nothing is improving for a while
         early_stop = True
-         
+
     return early_stop, best_val_loss, best_val_epoch
-    
 
 
 def write_log_file(config, writer):
@@ -134,8 +140,7 @@ def save_model(model, writer, config):
             torch.save(model.encoder.state_dict(), model_encoder_file_path)
 
 
-
-def saver(model, metric_dict_val, writer, config):
+def saver(metric_dict_val, writer, config):
     save_config(writer, config)
     config = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
@@ -144,7 +149,4 @@ def saver(model, metric_dict_val, writer, config):
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
-    save_model(model, writer, config)
-
-
     write_log_file(config, writer)

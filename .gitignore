@@ -4,4 +4,4 @@ scripts/**
 .vscode
 *.pyc
 scripts
-configs/**
+**/configs

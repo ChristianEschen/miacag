@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score
+from preprocessing.pre_process import appendDataframes
 
 
 class TestPipeline():
@@ -96,28 +97,11 @@ class TestPipeline():
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
         
-        df_test = pd.read_csv(config['ValdataCSV'])
-        df_test = df_test[df_test['labels'].notna()]
-        df_test = pd.concat([df_test]*config['loaders']['val_method']['samples'], ignore_index=True)
+        df_test = self.read_validationCSV(config)
+        df_test =self.buildCsvResults(df_test, confidences)
 
+        self.save_pre_val_csv(config['PreValCSV'], df_test)
 
-        df_pred = pd.DataFrame(
-            {'confidences': confidences.numpy().tolist()}, columns=['confidences'])
-        df_test = pd.concat([df_test, df_pred], axis=1)
-        df_test['confidences'] = df_test['confidences'].apply(pd.to_numeric)
-        df_test_conf = pd.DataFrame()
-        df_test_conf['confidences'] = df_test.groupby('RecursiveFilePath')['confidences'].apply(np.mean)
-        df_test_conf['predictions'] = df_test_conf['confidences'].apply(np.argmax)
-        #df_test_red.day.apply(max)
-        df_test = df_test.merge(
-            df_test_conf,
-            left_on='RecursiveFilePath',
-            right_on='RecursiveFilePath',
-            how='inner').drop_duplicates('RecursiveFilePath')
-        df_test['confidences'] = df_test['confidences_y']
-        df_test = df_test.drop(columns=['confidences_y', 'confidences_x'])
-        df_test = df_test.drop(columns=['labels'])
-        df_test = self.reorder_columns(df_test)
         df_test.to_csv(
             os.path.join(config['model']['pretrain_model'], 'results.csv'),
             index=False)
@@ -158,6 +142,53 @@ class TestPipeline():
         new_cols = start_cols + not_matches[1]
         df = df[new_cols]
         return df
+
+    def read_validationCSV(self, config):
+        df_test = pd.read_csv(config['ValdataCSV'])
+        df_test = df_test[df_test['labels'].notna()]
+        df_test = pd.concat([df_test]*config['loaders']['val_method']['samples'], ignore_index=True)
+        return df_test
+
+    def buildCsvResults(self, df_test, confidences):
+        df_pred = pd.DataFrame(
+            {'confidences': confidences.numpy().tolist()}, columns=['confidences'])
+        df_test = pd.concat([df_test, df_pred], axis=1)
+        df_test['confidences'] = df_test['confidences'].apply(pd.to_numeric)
+        df_test_conf = pd.DataFrame()
+        df_test_conf['confidences'] = df_test.groupby('RecursiveFilePath')['confidences'].apply(np.mean)
+        df_test_conf['predictions'] = df_test_conf['confidences'].apply(np.argmax)
+        df_test = df_test.merge(
+            df_test_conf,
+            left_on='RecursiveFilePath',
+            right_on='RecursiveFilePath',
+            how='inner').drop_duplicates('RecursiveFilePath')
+        df_test['confidences'] = df_test['confidences_y']
+        df_test = df_test.drop(columns=['confidences_y', 'confidences_x'])
+        df_test = df_test.drop(columns=['labels'])
+        df_test = self.reorder_columns(df_test)
+        return df_test
+
+
+    def save_pre_val_csv(self, list_pre_val_csv, df_test):
+        list_pre_val = self.load_csv_files(list_pre_val_csv)
+        for df in list_pre_val:
+            df = df_test.merge(df,
+                            left_on=['bth_pid', 'TimeStamp'],
+                            right_on=['bth_pid', 'TimeStamp'])
+            print('g')
+            
+
+        return None
+
+
+    def load_csv_files(self, list_pre_val_list):
+        li = []
+        for filename in list_pre_val_list:
+            df = pd.read_csv(
+                filename, index_col=None,
+                header=0, dtype=str)
+            li.append(df)
+        return li
 
     def returnNotMatches(self, a, b):
         return [[x for x in a if x not in b], [x for x in b if x not in a]]

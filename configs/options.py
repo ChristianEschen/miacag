@@ -30,6 +30,10 @@ class TestOptions():
         self.parser.add_argument(
             '--datasetFingerprintFile', type=str,
             help='Path to dataset fingerprint yaml file')
+        self.parser.add_argument(
+            '--PreValCSV', '--names-list', nargs="+",
+            help='Path to raw val csv files',
+            required=False)
         # self.parser.add_argument(
         #     '--tensorboard_path', type=str,
         #     help='Path to model tensorboard path')

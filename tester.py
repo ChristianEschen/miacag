@@ -13,14 +13,24 @@ import os
 
 def read_log_file(config):
     path = open(config['logfile'], "r").read()
-    config = load_config(os.path.join(path, 'config.yaml'))
-    config['model']['pretrain_model'] = path
-    return config
+    config_upd = load_config(os.path.join(path, 'config.yaml'))
+    config_upd['model']['pretrain_model'] = path
+    config_upd.update(config)
+    return config_upd
 
+def convert_string_to_tuple(field):
+    res = []
+    temp = []
+    for token in field.split(", "):
+        num = int(token.replace("(", "").replace(")", ""))
+        temp.append(num)
+        if ")" in token:
+            res.append(tuple(temp))
+            temp = []
+    return res[0]
 
 def main():
     config = vars(TestOptions().parse())
-   # config = load_config(config)
     config = read_log_file(config)
     config['loaders']['mode'] = 'testing'
     # torch.distributed.init_process_group(

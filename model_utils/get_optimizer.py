@@ -4,6 +4,8 @@ from model_utils.scheduler import WarmupMultiStepLR
 
 
 def get_optimizer(config, model, len_train):
+    if config['use_DDP'] == 'False':
+        os.environ['WORLD_SIZE'] = '1'
     if config['optimizer']['type'] == 'adam':
         optimizer = torch.optim.Adam(
                                      model.parameters(),

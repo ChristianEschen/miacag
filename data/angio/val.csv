@@ -1,0 +1,5 @@
+RecursiveFilePath,label,bth_pid,labels,image1,spacings,sizes,TimeStamp
+/home/sauroman/mia/data/angio/patient/studie/2/0002.DCM,1,2,1,patient/studie/2/0002.nii.gz,"(1.0, 1.0, 0.030303030303030304)","(512, 512, 96)",2011-06-22 10:29:22
+/home/sauroman/mia/data/angio/patient/studie/3/0003.DCM,0,3,0,patient/studie/3/0003.nii.gz,"(1.0, 1.0, 0.015151515151515152)","(512, 512, 17)",2011-06-22 10:29:22
+/home/sauroman/mia/data/angio/patient/studie/4/0002.DCM,0,44,0,patient/studie/4/0002.nii.gz,"(1.0, 1.0, 0.030303030303030304)","(512, 512, 96)",2011-06-22 10:29:22
+/home/sauroman/mia/data/angio/patient/studie/5/0002.DCM,0,12431,0,patient/studie/5/0002.nii.gz,"(1.0, 1.0, 0.030303030303030304)","(512, 512, 96)",2011-06-22 10:29:22

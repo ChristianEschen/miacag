@@ -22,8 +22,9 @@ def main():
     writer = SummaryWriter(comment="_" + config['tensorboard_comment'])
 
     set_random_seeds(random_seed=config['manual_seed'])
-    torch.distributed.init_process_group(
-        backend="nccl" if config["cpu"] == "False" else "Gloo")
+    if config['use_DDP'] == 'True':
+        torch.distributed.init_process_group(
+            backend="nccl" if config["cpu"] == "False" else "Gloo")
     device = get_device(config)
 
     BuildModel = ModelBuilder(config)

@@ -111,17 +111,28 @@ def main():
     df_train = maybeConcatDf(df_train, args.unlabeled_folder)
     df_train = remove_leakage(df_train, df_val, 'bth_pid')
 
-    df_train['labels'] = df_train['label']
-    df_val['labels'] = df_val['label']
-    di = {'4': "4", "5": "4", '16': "4", "12": "4", '13': "4",
-          '0': '0', '6': '0',
-          '1': '1', '7': '1',
-          '2': "2", '8': "2",
-          "3": '3', '9': '3',
-          "10": '5', '14': '5',
-          '11': "6", '15': "6",
-          '17': '3', '18': '3',
-          '19': '3', '20': '3'}
+    df_train['labels_ori'] = df_train['labels']
+    df_val['labels_ori'] = df_val['labels']
+    di = {'0': '0',
+          '1': '1',
+          '2': '2',
+          '3': '4',
+          '4': '5',
+          '6': '6',
+          '7': '6',
+          '8': '6',
+          '9': '6',
+          '10': '6',
+          '11': '6',
+          '12': '6',
+          '13': '6',
+          '14': '6',
+          '15': '6',
+          '16': '6',
+          '17': '6',
+          '18': '6',
+          '19': '6',
+          '20': '6'}
     df_train = df_train.replace({'labels': di})
     df_val = df_val.replace({'labels': di})
     df_val = df_val[df_val['labels'] != 'stop']

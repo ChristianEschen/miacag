@@ -9,10 +9,10 @@ try:
     from unittest.mock import patch
 except ImportError:
     from mock import patch
-# def test_pipeline():
-#     os.chdir(r"tests/test_classification")
-#     os.system("snakemake --cores 2")
-#     return None
+def test_pipeline():
+    os.chdir(r"tests/test_classification/3d_angio")
+    os.system("snakemake --cores 2")
+    return None
 
 
 def test_classification_angio_3d():

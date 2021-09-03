@@ -98,7 +98,7 @@ class TestPipeline():
                     config['loaders']['val_method']['type']))
         
         df_test = self.read_validationCSV(config)
-        df_test =self.buildCsvResults(df_test, confidences)
+        df_test = self.buildCsvResults(df_test, confidences)
         df_test = df_test.astype('str')
 
         self.save_pre_val_csv(config['PreValCSV'], df_test)
@@ -108,7 +108,7 @@ class TestPipeline():
             os.path.join(config['model']['pretrain_model'], 'results.csv'),
             index=False)
         
-        acc = {'accuracy correct': accuracy_score(df_test['labels'].astype('int'), df_test['predictions'].astype('int'))}
+        acc = {'accuracy correct': accuracy_score(df_test['labels'].astype('float').astype('int'), df_test['predictions'].astype('float').astype('int'))}
 
         print('accuracy_correct', acc)
         print('metrics (mean of all preds)', metrics)
@@ -148,6 +148,10 @@ class TestPipeline():
 
     def read_validationCSV(self, config):
         df_test = pd.read_csv(config['ValdataCSV'])
+        if 'predictions' in df_test.columns:
+            df_test = df_test.drop(columns=['predictions'])
+        if 'confidences' in df_test.columns:
+            df_test = df_test.drop(columns=['confidences'])
         df_test = df_test[df_test['labels'].notna()]
         df_test = pd.concat([df_test]*config['loaders']['val_method']['samples'], ignore_index=True)
         return df_test
@@ -155,6 +159,7 @@ class TestPipeline():
     def buildCsvResults(self, df_test, confidences):
         df_pred = pd.DataFrame(
             {'confidences': confidences.numpy().tolist()}, columns=['confidences'])
+
         df_test = pd.concat([df_test, df_pred], axis=1)
         df_test['confidences'] = df_test['confidences'].apply(pd.to_numeric)
         df_test_conf = pd.DataFrame()

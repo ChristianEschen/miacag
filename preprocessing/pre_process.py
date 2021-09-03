@@ -108,7 +108,7 @@ def main():
     op = args.output_data_root
     df_train = appendDataframes(args.train_csv_files)
     df_val = appendDataframes(args.val_csv_files)
-    df_train = maybeConcatDf(df_train, args.unlabeled_folder)
+    #df_train = maybeConcatDf(df_train, args.unlabeled_folder)
     df_train = remove_leakage(df_train, df_val, 'bth_pid')
 
     df_train['labels_ori'] = df_train['labels']
@@ -185,6 +185,11 @@ def main():
     df_val = pd.concat([
         df_val,
         pd.DataFrame(space_size, columns=['spacings', 'sizes'])], axis=1)
+    
+    if 'predictions' in df_val.columns:
+        df_val = df_val.drop(columns=['predictions'])
+    if 'confidences' in df_val.columns:
+        df_val = df_val.drop(columns=['confidences'])
     df_val.to_csv(
         args.output_val_csv, index=False)
 

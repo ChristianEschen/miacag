@@ -99,13 +99,16 @@ class TestPipeline():
         
         df_test = self.read_validationCSV(config)
         df_test =self.buildCsvResults(df_test, confidences)
+        df_test = df_test.astype('str')
 
         self.save_pre_val_csv(config['PreValCSV'], df_test)
 
+        df_test = df_test.loc[:, ~df_test.columns.duplicated()]
         df_test.to_csv(
             os.path.join(config['model']['pretrain_model'], 'results.csv'),
             index=False)
-        acc = {'accuracy correct': accuracy_score(df_test['label'].astype('int'), df_test['predictions'])}
+        
+        acc = {'accuracy correct': accuracy_score(df_test['labels'].astype('int'), df_test['predictions'].astype('int'))}
 
         print('accuracy_correct', acc)
         print('metrics (mean of all preds)', metrics)
@@ -133,11 +136,11 @@ class TestPipeline():
     def reorder_columns(self, df):
         cols = df.columns[0:5].to_list()
        # cols_end = df.columns[5:].to_list()
-        if 'label' in cols:
-            cols.remove('label')
+        # if 'label' in cols:
+        #     cols.remove('label')
         # if 'labels' in cols_end:
         #     cols_end.remove('labels')
-        start_cols = cols + ['label', 'predictions', 'confidences']
+        start_cols = cols + ['labels_ori', 'labels', 'predictions', 'confidences']
         not_matches = self.returnNotMatches(start_cols, df.columns.to_list())
         new_cols = start_cols + not_matches[1]
         df = df[new_cols]
@@ -164,19 +167,29 @@ class TestPipeline():
             how='inner').drop_duplicates('RecursiveFilePath')
         df_test['confidences'] = df_test['confidences_y']
         df_test = df_test.drop(columns=['confidences_y', 'confidences_x'])
-        df_test = df_test.drop(columns=['labels'])
         df_test = self.reorder_columns(df_test)
         return df_test
 
 
     def save_pre_val_csv(self, list_pre_val_csv, df_test):
         list_pre_val = self.load_csv_files(list_pre_val_csv)
+        idx = 0
+        df_test = df_test[['predictions', 'confidences', 'bth_pid', 'TimeStamp']]
         for df in list_pre_val:
-            df = df_test.merge(df,
-                            left_on=['bth_pid', 'TimeStamp'],
-                            right_on=['bth_pid', 'TimeStamp'])
-            print('g')
-            
+            if 'predictions' in df.columns:
+                df = df.drop(columns=['predictions'])
+            if 'confidences' in df.columns:
+                df = df.drop(columns=['confidences'])
+            col_order = list(df.columns)
+            idx_col = list(df.columns).index('labels_ori')
+            col_order[idx_col+1:1] = ['predictions', 'confidences']
+            df = df_test.merge(
+                df, left_on=['bth_pid', 'TimeStamp'],
+                right_on=['bth_pid', 'TimeStamp'],
+                how='inner')
+            df = df[col_order]
+            df.to_csv(list_pre_val_csv[idx], index=False)
+            idx += 1
 
         return None
 

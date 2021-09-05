@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score
 from preprocessing.pre_process import appendDataframes
+import os
 
 
 class TestPipeline():
@@ -101,7 +102,7 @@ class TestPipeline():
         df_test = self.buildCsvResults(df_test, confidences)
         df_test = df_test.astype('str')
 
-        self.save_pre_val_csv(config['PreValCSV'], df_test)
+        self.save_pre_val_csv(config, df_test)
 
         df_test = df_test.loc[:, ~df_test.columns.duplicated()]
         df_test.to_csv(
@@ -176,8 +177,14 @@ class TestPipeline():
         return df_test
 
 
-    def save_pre_val_csv(self, list_pre_val_csv, df_test):
-        list_pre_val = self.load_csv_files(list_pre_val_csv)
+    def save_pre_val_csv(self, config, df_test):
+        inputs_pre_val_csv = config['PreValCSV']
+        list_pre_val = self.load_csv_files(inputs_pre_val_csv)
+        # outputs
+        outputs_pre_val_csv = [
+            os.path.join(config['model']['pretrain_model'],
+                         os.path.basename(i))
+            for i in inputs_pre_val_csv]
         idx = 0
         df_test = df_test[['predictions', 'confidences', 'bth_pid', 'TimeStamp']]
         for df in list_pre_val:
@@ -193,7 +200,7 @@ class TestPipeline():
                 right_on=['bth_pid', 'TimeStamp'],
                 how='inner')
             df = df[col_order]
-            df.to_csv(list_pre_val_csv[idx], index=False)
+            df.to_csv(outputs_pre_val_csv[idx], index=False)
             idx += 1
 
         return None

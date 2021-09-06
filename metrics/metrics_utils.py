@@ -112,7 +112,7 @@ def get_metrics(outputs, labels, metrics):
 def normalize_metrics(running_metrics, config, data_len):
     for running_metric in running_metrics:
         running_metrics[running_metric] = running_metrics[running_metric] \
-            / (data_len * config['loaders']['batchSize'])
+            / (data_len)
     return running_metrics
 
 

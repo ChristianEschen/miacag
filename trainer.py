@@ -53,7 +53,7 @@ def main():
         if config['loaders']['use_amp'] else None
 
     best_val_loss, best_val_epoch = None, None
-    
+    early_stop = False
     #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
@@ -76,7 +76,7 @@ def main():
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
-        
+
         #  validation one epoch (but not necessarily each)
         if epoch % config['trainer']['validate_frequency'] == 0:
             metric_dict_val = val_one_epoch(model, criterion, config,

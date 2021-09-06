@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from preprocessing.pre_process import appendDataframes
 import os
+from preprocessing.pre_process import mkFolder
 
 
 class TestPipeline():
@@ -183,8 +184,11 @@ class TestPipeline():
         # outputs
         outputs_pre_val_csv = [
             os.path.join(config['model']['pretrain_model'],
+                         os.path.basename(os.path.dirname(i)),
                          os.path.basename(i))
             for i in inputs_pre_val_csv]
+        # create outputs folder
+        [mkFolder(os.path.dirname(f)) for f in outputs_pre_val_csv]
         idx = 0
         df_test = df_test[['predictions', 'confidences', 'bth_pid', 'TimeStamp']]
         for df in list_pre_val:

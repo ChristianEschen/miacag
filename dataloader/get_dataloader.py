@@ -101,7 +101,7 @@ def get_dataloader_train(config):
     if config['task_type'] in ['classification']:
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
-        CL = ClassificationLoader()
+        CL = ClassificationLoader(config['DataBasePath'], config['DataSetPath'], config['query'], config['labels_dict'])
         train_loader, val_loader = CL.get_classification_loader_train(config)
 
         val_loader.sampler.data_source.data = \

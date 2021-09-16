@@ -37,7 +37,7 @@ class ClassificationLoader():
         df_train = self.df.iloc[train_ix]
         df_val = self.df.iloc[val_ix]
         return df_train, df_val
-        
+
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] == 'avi':
             from dataloader.dataloader_base_video import \

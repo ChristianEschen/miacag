@@ -13,6 +13,7 @@ from monai.transforms import (
     RepeatChanneld,
     AddChanneld,
     EnsureChannelFirstD,
+    DeleteItemsd,
     AsDiscrete,
     CenterSpatialCropd,
     ScaleIntensityd,
@@ -79,18 +80,21 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 ScaleIntensityd(keys='inputs'),
                 NormalizeIntensityd(keys='inputs',
                                     channel_wise=True),
-                ToTensord(keys='inputs')
+                ToTensord(keys='inputs'),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),
                 ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
-        # check_ds = monai.data.Dataset(data=self.data,
-        #                              transform=train_transforms)
-        # check_loader = DataLoader(
-        #     check_ds,
-        #     batch_size=self.config['loaders']['batchSize'],
-        #     num_workers=self.config['num_workers'],
-        #     collate_fn=list_data_collate)
-        # check_data = monai.utils.misc.first(check_loader)
+        check_ds = monai.data.Dataset(data=self.data,
+                                     transform=train_transforms)
+        check_loader = DataLoader(
+            check_ds,
+            batch_size=self.config['loaders']['batchSize'],
+            num_workers=self.config['num_workers'],
+            collate_fn=list_data_collate)
+        check_data = monai.utils.misc.first(check_loader)
         # img = check_data['inputs'][0,0,:,:,16].numpy()
         # import matplotlib.pyplot as plt
         # fig_train = plt.figure()
@@ -126,7 +130,10 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 ScaleIntensityd(keys='inputs'),
                 NormalizeIntensityd(keys='inputs',
                                     channel_wise=True),
-                ToTensord(keys='inputs')]
+                ToTensord(keys='inputs'),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),]
 
         val_transforms = Compose(val_transforms)
         # CHECK: for debug ###

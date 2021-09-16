@@ -29,13 +29,12 @@ from monai.transforms import (
     RandGaussianSmoothd,
     RandScaleIntensityd)
 
+
 class base_monai_loader(DataloaderTrain):
-    def __init__(self, image_path, csv_path_file,
-                 config, use_complete_data):
-        super(base_monai_loader, self).__init__(image_path,
-                                                csv_path_file,
-                                                config,
-                                                use_complete_data)
+    def __init__(self, df,
+                 config):
+        super(base_monai_loader, self).__init__(df,
+                                                config)
 
     def get_input_flow(self, csv):
         features = [col for col in
@@ -51,15 +50,14 @@ class base_monai_loader(DataloaderTrain):
 
     def get_input_features(self, csv):
         features = [col for col in
-                    csv.columns.tolist() if col.startswith('image')]
+                    csv.columns.tolist() if col.startswith('DcmPathFlatten')]
         return features
 
-    def set_feature_path(self, csv, features, image_path):
-        feature_paths = features
-        for feature in feature_paths:
-            csv[feature] = csv[feature].apply(
-                    lambda x: os.path.join(image_path, x))
-        return csv
+    # def set_feature_path(self, csv, features, image_path):
+    #     for feature in features:
+    #         csv[feature] = csv[feature].apply(
+    #                 lambda x: os.path.join(image_path, x))
+    #     return csv
 
     def getMaybeForegroundCropper(self):
         if self.config['loaders']['CropForeGround'] is False:

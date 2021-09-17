@@ -28,11 +28,12 @@ class ClassificationLoader():
                     lambda x: os.path.join(self.DataSetPath, x))
         return df
 
+
     def groupEntriesPrPatient(self):
         '''Grouping entries pr patients'''
         X = self.df.drop('labels', 1)
         y = self.df['labels']
-        gs = GroupShuffleSplit(n_splits=2, test_size=.5, random_state=0)
+        gs = GroupShuffleSplit(n_splits=2, test_size=.2, random_state=0)
         train_ix, val_ix = next(gs.split(X, y, groups=self.df['PatientID']))
         df_train = self.df.iloc[train_ix]
         df_val = self.df.iloc[val_ix]
@@ -145,7 +146,7 @@ class ClassificationLoader():
                                         transform=val_loader().transform)
             train_loader = DataLoader(
                 train_loader() if config['loaders']['store_memory'] is False else train_loader,
-                drop_last=True,
+                drop_last=False,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=True,
                 num_workers=config['num_workers'],
@@ -154,7 +155,7 @@ class ClassificationLoader():
 
             val_loader = DataLoader(
                 val_loader() if config['loaders']['store_memory'] is False else val_loader,
-                drop_last=True,
+                drop_last=False,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
                 num_workers=config['num_workers'],
@@ -177,57 +178,30 @@ class ClassificationLoader():
                     config['loaders']['type']))
 
     def get_classificationloader_patch_lvl_test(self, config):
-        if config['loaders']['format'] == 'avi':
-            from dataloader.dataloader_base_video import \
-                getVideoTestTransforms
-            from dataloader.dataloader_avi_video import \
-                VideoDataloaderAVITrain
-            transforms_test = getVideoTestTransforms(
-                nr_frames=config['loaders']['Crop_depth'],
-                crop_size=(config['loaders']['Crop_height'],
-                           config['loaders']['Crop_width']))
-            test_loader = VideoDataloaderAVITrain(
-                config['loaders']['TestdataRoot'],
-                config['loaders']['TestdataCSV'],
-                transforms_test)
-            with torch.no_grad():
-                test_loader = DataLoader(test_loader,
-                                         batch_size=config[
-                                             'loaders']['batchSize'],
-                                         num_workers=config['num_workers'],
-                                         shuffle=False)
-            return test_loader
-        elif config['loaders']['format'] == 'nifty':
+        if config['loaders']['format'] == 'dicom':
             if config['loaders']['val_method']['type'] == 'patches':
                 from dataloader.Classification._3D. \
-                    dataloader_monai_classification_3D_nifty import \
+                    dataloader_monai_classification_3D import \
                     val_monai_classification_loader
-                val_loader = val_monai_classification_loader(
-                    config['ValdataRoot'],
-                    config['ValdataCSV'],
-                    config)
-            elif config['loaders']['val_method']['type'] == 'sliding_window':
-                from dataloader.Classification._3D. \
-                    dataloader_monai_classification_3D_nifty import \
-                    val_monai_classification_loader_SW
-                val_loader = val_monai_classification_loader_SW(
-                    config['ValdataRoot'],
-                    config['ValdataCSV'],
+                self.val_loader = val_monai_classification_loader(
+                    self.val_df,
                     config)
             else:
 
                 raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
             with torch.no_grad():
-                val_loader = DataLoader(
-                    val_loader(),
+                self.val_loader = DataLoader(
+                    self.val_loader(),
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
                     num_workers=config['num_workers'],
                     collate_fn=list_data_collate if
                             config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
                     pin_memory=True if config['cpu'] == "False" else False,)
-            return val_loader
+        else:
+            raise ValueError("Invalid data format %s" % repr(
+                    config['loaders']['format']))
 
 
     def get_classificationloader_image_lvl_test(self, config):

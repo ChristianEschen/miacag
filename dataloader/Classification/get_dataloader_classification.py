@@ -28,7 +28,6 @@ class ClassificationLoader():
                     lambda x: os.path.join(self.DataSetPath, x))
         return df
 
-
     def groupEntriesPrPatient(self):
         '''Grouping entries pr patients'''
         X = self.df.drop('labels', 1)

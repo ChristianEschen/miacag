@@ -58,9 +58,10 @@ class TestPipeline():
 
         test_loader.val_df = self.buildPandasResults(test_loader.val_df,
                                                      confidences)
+        self.resetDataPaths(test_loader, config)
         self.insert_data_to_db(test_loader)
 
-        acc = {'accuracy correct': accuracy_score(
+        acc = {'accuracy ensemble': accuracy_score(
             test_loader.val_df['labels'].astype('float').astype('int'),
             test_loader.val_df['predictions'].astype('float').astype('int'))}
 
@@ -90,7 +91,8 @@ class TestPipeline():
     def buildPandasResults(self, val_df, confidences):
         df_pred = pd.DataFrame(
             {'confidences': confidences.numpy().tolist()},
-            columns=['confidences'])
+            columns=['confidences'],
+            index=val_df.index)
 
         if 'predictions' in val_df.columns:
             val_df = val_df.drop(columns=['predictions'])
@@ -114,15 +116,38 @@ class TestPipeline():
             columns=['confidences_y', 'confidences_x'])
         return val_df
 
-
     def insert_data_to_db(self, test_loader):
-        test_loader.connection.execute(
+        paths = test_loader.val_df['DcmPathFlatten'].to_list()
+        preds = test_loader.val_df['predictions'].to_list()
+        confidences = test_loader.val_df['confidences'].to_list()
+
+        confidences = self.array_to_tuple(confidences)
+        test_loader.connection.executemany(
             'UPDATE DICOM_TABLE SET predictions=? WHERE DcmPathFlatten=?',
-            [test_loader.val_df['predictions'].to_list(),
-             test_loader.val_df['DcmPathFlatten'].to_list()])
+            zip(preds, paths))
         test_loader.connection.commit()
-        test_loader.connection.execute(
+        test_loader.connection.executemany(
             'UPDATE DICOM_TABLE SET confidences=? WHERE DcmPathFlatten=?',
-            [test_loader.val_df['confidences'],
-             test_loader.val_df['DcmPathFlatten']])
+            zip(confidences, paths))
         test_loader.connection.commit()
+
+    def resetDataPaths(self, test_loader, config):
+        test_loader.val_df['DcmPathFlatten'] = \
+            test_loader.val_df['DcmPathFlatten'].apply(
+                lambda x:  "".join(
+                    x.rsplit(config['DataSetPath'])).strip(os.sep))
+        return test_loader
+
+    def array_to_tuple(self, confidences):
+        conf_list_tuple = []
+        for conf in confidences:
+            li = [np.format_float_positional(i, precision=4)
+                  for i in tuple(conf)]
+            li = [str(i) + ":" + li[i] for i in range(len(li))]
+            li = tuple(li)
+            li = self.tuple2key(li)
+            conf_list_tuple.append(li)
+        return conf_list_tuple
+
+    def tuple2key(self, t, delimiter=u';'):
+        return delimiter.join(t)

@@ -11,12 +11,13 @@ from models.BuildModel import ModelBuilder
 import os
 
 
-def read_log_file(config):
-    path = open(config['logfile'], "r").read()
-    config_upd = load_config(os.path.join(path, 'config.yaml'))
-    config_upd['model']['pretrain_model'] = path
-    config_upd.update(config)
-    return config_upd
+def read_log_file(config_input):
+    path = open(config_input['logfile'], "r").read()
+    config_train_out = load_config(os.path.join(path, 'config.yaml'))
+    config = load_config(config_train_out['config'])
+    config.update(config_input)
+    config['model']['pretrain_model'] = path
+    return config
 
 def convert_string_to_tuple(field):
     res = []
@@ -30,8 +31,8 @@ def convert_string_to_tuple(field):
     return res[0]
 
 def main():
-    config = vars(TestOptions().parse())
-    config = read_log_file(config)
+    config_input = vars(TestOptions().parse())
+    config = read_log_file(config_input)
     config['loaders']['mode'] = 'testing'
     # torch.distributed.init_process_group(
     #     backend="nccl" if config["cpu"] == "False" else "Gloo")

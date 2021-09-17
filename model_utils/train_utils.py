@@ -141,11 +141,14 @@ def save_model(model, writer, config):
 
 
 def saver(metric_dict_val, writer, config):
-    save_config(writer, config)
+    # prepare dicts by flattening
     config = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
                        for key, val in metric_dict_val.items()}
-
+    # save config
+    config.update(metric_dict_val)
+    save_config(writer, config)
+    # save tensorboard
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()

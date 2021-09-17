@@ -101,7 +101,7 @@ def get_dataloader_train(config):
     if config['task_type'] in ['classification']:
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
-        CL = ClassificationLoader()
+        CL = ClassificationLoader(config['DataBasePath'], config['DataSetPath'], config['query'], config['labels_dict'])
         train_loader, val_loader = CL.get_classification_loader_train(config)
 
         val_loader.sampler.data_source.data = \
@@ -137,12 +137,12 @@ def get_dataloader_test(config):
     if config['task_type'] in ["classification"]:
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
-        CL = ClassificationLoader()
-        test_loader = CL.get_classificationloader_patch_lvl_test(config)
-        test_loader.sampler.data_source.data = \
-            test_loader.sampler.data_source.data * \
-            config['loaders']['val_method']['samples']
-        return test_loader
+        CL = ClassificationLoader(
+            config['DataBasePath'], config['DataSetPath'],
+            config['query'], config['labels_dict'])
+        CL.get_classificationloader_patch_lvl_test(config)
+        return CL
+
     elif config['task_type'] == 'image2image':
         from dataloader.get_dataloader_segmentation import \
             SegmentationLoader

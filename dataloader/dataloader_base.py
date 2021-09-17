@@ -10,22 +10,14 @@ import os
 
 
 class DataloaderBase(data.Dataset):
-    def __init__(self, image_path, csv_path_file,
+    def __init__(self, df,
                  config,
-                 use_complete_data, transform=None):
+                 transform=None):
         super(DataloaderBase, self).__init__()
         self.config = config
-        self.use_complete_data = use_complete_data
-        self.image_path = image_path
-        self.csv = pd.read_csv(csv_path_file)
-        if self.use_complete_data is True:
-            self.csv = self.csv[self.csv['labels'].notna()]
-            self.labels = self.csv['labels']
-            self.csv['labels'] = self.csv['labels'].astype(int)
-            self.labels = self.map_labels(self.labels)
-        self.num_samples = len(self.csv)
         self.transform = transform
-        self.image_path = image_path
+        self.df = df
+        self.num_samples = len(self.df)
 
     def __len__(self):
         return self.num_samples
@@ -39,8 +31,7 @@ class DataloaderBase(data.Dataset):
 
     def map_labels(self, labels):
         mapping = self.replace_labels(self.labels.drop_duplicates())
-        labels = pd.Series([mapping[k]
-                                   for k in self.labels.to_list()])
+        labels = pd.Series([mapping[k] for k in self.df['labels'].to_list()])
         return labels
 
     def load_video(self, path):
@@ -58,10 +49,8 @@ class DataloaderBase(data.Dataset):
 
 
 class DataloaderTest(DataloaderBase):
-    def __init__(self, image_path, csv_path, transform=None):
-        super(DataloaderTest, self).__init__(image_path,
-                                                  csv_path,
-                                                  transform)
+    def __init__(self, df, transform=None):
+        super(DataloaderTest, self).__init__(df, transform)
 
     @staticmethod
     def pad_volume(x, pad_size):
@@ -94,19 +83,17 @@ class DataloaderTest(DataloaderBase):
 
 
 class DataloaderTrain(DataloaderBase):
-    def __init__(self, image_path, csv_path, config,
-                 use_complete_data, transform=None):
-        super(DataloaderTrain, self).__init__(image_path,
-                                              csv_path,
+    def __init__(self, df, config, transform=None):
+        super(DataloaderTrain, self).__init__(df,
                                               config,
-                                              use_complete_data,
                                               transform)
-        if use_complete_data is True:
-            self.class_counts = self.labels.value_counts().to_list()
+        if config['task_type'] in ['classification']:
+            self.class_counts = self.df['labels'].value_counts().to_list()
             self.class_weights = [self.num_samples/self.class_counts[i] for
                                   i in range(len(self.class_counts))]  # [::-1]
-            self.weights = [self.class_weights[self.labels[i]]
+            self.weights = [self.class_weights[self.df['labels'].to_list()[i]]
                             for i in range(int(self.num_samples))]
+
             self.sampler = WeightedRandomSampler(
                 torch.DoubleTensor(self.weights), int(self.num_samples))
 

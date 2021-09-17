@@ -154,12 +154,6 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
 
             inputs, labels = get_data_from_loader(data, config,
                                                     device)
-            # import matplotlib.pyplot as plt
-            # inp = inputs[0,:,:,:,16].cpu().numpy()
-            # inp =((inp-np.min(inp))/(np.max(inp)-np.min(inp))*255.0).astype(np.uint8)
-            # imgplot = plt.imshow(np.transpose(inp, (1, 2, 0)))
-            # plt.show()
-
             outputs, loss, metrics = eval_one_step(
                                             model, inputs,
                                             labels, device,
@@ -203,24 +197,16 @@ def val_one_epoch(model, criterion, config,
                   validation_loader, device,
                   running_metric_val=0.0, running_loss_val=0.0,
                   writer=False, epoch=0, saliency_maps=False):
-    samples = config['loaders']['val_method']['samples']
-    if config['loaders']['format'] == 'avi':
-        frames_sample_list = [
-            i*0.1 for i in range(0, samples)]
-        for sample in range(0, samples):
-            validation_loader = set_uniform_sample_pct(
-                validation_loader, frames_sample_list[sample])
+
+    eval_outputs = run_val_one_step(
+            model, config, validation_loader, device, criterion,
+            saliency_maps,
+            running_metric_val, running_loss_val)
+    if config['loaders']['mode'] == 'training':
+        running_metric_val, running_loss_val, _ = eval_outputs
     else:
-        eval_outputs = run_val_one_step(
-                model, config, validation_loader, device, criterion,
-                saliency_maps,
-                running_metric_val, running_loss_val)
-        if config['loaders']['mode'] == 'training':
-            running_metric_val, running_loss_val, _ = eval_outputs
-        else:
-            running_metric_val, running_loss_val, logits = eval_outputs
-            confidences = softmax_transform(logits.float())
-            #confidences, predictions = torch.max(confidences, dim=1)
+        running_metric_val, running_loss_val, logits = eval_outputs
+        confidences = softmax_transform(logits.float())
 
     # Normalize the metrics from the entire epoch
     if config['task_type'] != "representation_learning":

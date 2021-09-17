@@ -73,10 +73,10 @@ def train_one_epoch(model, criterion,
         lr_scheduler.step()
     running_metric_train = normalize_metrics(running_metric_train,
                                              config,
-                                             len(train_loader))
+                                             len(train_loader.dataset.data))
     running_loss_train = normalize_metrics(running_loss_train,
                                            config,
-                                           len(train_loader))
+                                           len(train_loader.dataset.data))
 
     write_tensorboard(running_loss_train,
                       running_metric_train,
@@ -141,11 +141,14 @@ def save_model(model, writer, config):
 
 
 def saver(metric_dict_val, writer, config):
-    save_config(writer, config)
+    # prepare dicts by flattening
     config = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
                        for key, val in metric_dict_val.items()}
-
+    # save config
+    config.update(metric_dict_val)
+    save_config(writer, config)
+    # save tensorboard
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()

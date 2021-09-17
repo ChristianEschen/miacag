@@ -8,9 +8,21 @@ from monai.transforms import (
     Compose,
 )
 
+
+def convert_dict_to_str(labels_dict_val):
+    items = []
+    for k, v in labels_dict_val.items():
+        k = str(k)
+        v = str(v)
+        items.append((k, v))
+    return dict(items)
+
+
 def flatten(d, parent_key='', sep='_'):
     items = []
     for k, v in d.items():
+        if k == 'labels_dict':
+            v = convert_dict_to_str(v)
         new_key = parent_key + sep + k if parent_key else k
         if isinstance(v, collections.MutableMapping):
             items.extend(flatten(v, new_key, sep=sep).items())
@@ -112,7 +124,7 @@ def get_metrics(outputs, labels, metrics):
 def normalize_metrics(running_metrics, config, data_len):
     for running_metric in running_metrics:
         running_metrics[running_metric] = running_metrics[running_metric] \
-            / (data_len * config['loaders']['batchSize'])
+            / (data_len)
     return running_metrics
 
 

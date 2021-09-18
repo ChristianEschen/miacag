@@ -14,19 +14,37 @@ class ClassificationLoader():
         self.DataSetPath = DataSetPath
         self.query = query
         self.labels_dict = labels_dict
-        self.df = self.getDataFromDatabase()
+        self.getDataFromDatabase()
         self.df = self.df[self.df['labels'].notna()]
         self.df = self.df.replace({'labels': labels_dict})
         self.train_df, self.val_df = self.groupEntriesPrPatient()
 
+    def test_column_exist(self, col):
+        cur = self.connection.cursor()
+        columns = [i[1] for i in cur.execute('PRAGMA table_info(DICOM_TABLE)')]
+        return True if col not in columns else False
+
+    def writeLabelsTrainDB(self):
+        if self.test_column_exist('labels_train') is True:
+            self.connection.execute(
+                "alter table DICOM_TABLE add column '%s' 'int'"
+                % 'labels_train')
+        paths = self.df['DcmPathFlatten'].to_list()
+        labels = self.df['labels'].to_list()
+        self.connection.executemany(
+            'UPDATE DICOM_TABLE SET labels_train=? WHERE DcmPathFlatten=?',
+            zip(labels, paths))
+        self.connection.commit()
+
     def getDataFromDatabase(self):
         self.connection = sqlite3.connect(self.DataBasePath)
-        df = pd.read_sql_query(self.query, self.connection)
-        if len(df) == 0:
+        self.df = pd.read_sql_query(self.query, self.connection)
+        if len(self.df) == 0:
             print('The requested query does not have any data!')
-        df['DcmPathFlatten'] = df['DcmPathFlatten'].apply(
+
+        self.writeLabelsTrainDB()
+        self.df['DcmPathFlatten'] = self.df['DcmPathFlatten'].apply(
                     lambda x: os.path.join(self.DataSetPath, x))
-        return df
 
     def groupEntriesPrPatient(self):
         '''Grouping entries pr patients'''

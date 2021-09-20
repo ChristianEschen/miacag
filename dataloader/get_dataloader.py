@@ -142,6 +142,9 @@ def get_dataloader_test(config):
             config['query'], config['labels_dict'],
             config['TestSize'])
         CL.get_classificationloader_patch_lvl_test(config)
+        CL.val_loader.sampler.data_source.data = \
+            CL.val_loader.sampler.data_source.data * \
+            config['loaders']['val_method']['samples']
         return CL
 
     elif config['task_type'] == 'image2image':

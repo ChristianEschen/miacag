@@ -56,8 +56,11 @@ class TestPipeline():
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
 
-        test_loader.val_df = self.buildPandasResults(test_loader.val_df,
-                                                     confidences)
+        test_loader.val_df = self.buildPandasResults(
+            test_loader.val_df,
+            config['loaders']['val_method']['samples'],
+            confidences)
+
         self.resetDataPaths(test_loader, config)
         self.insert_data_to_db(test_loader)
 
@@ -89,7 +92,10 @@ class TestPipeline():
                                        saliency_maps=False)
         testModule()
 
-    def buildPandasResults(self, val_df, confidences):
+    def buildPandasResults(self, val_df, samples, confidences):
+        val_df = val_df.append(
+            [val_df] * (samples - 1),
+            ignore_index=True)
         df_pred = pd.DataFrame(
             {'confidences': confidences.numpy().tolist()},
             columns=['confidences'],

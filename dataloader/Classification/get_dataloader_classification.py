@@ -9,10 +9,12 @@ from sklearn.model_selection import GroupShuffleSplit
 
 
 class ClassificationLoader():
-    def __init__(self, DataBasePath, DataSetPath, query, labels_dict) -> None:
+    def __init__(self, DataBasePath, DataSetPath,
+                 query, labels_dict, TestSize) -> None:
         self.DataBasePath = DataBasePath
         self.DataSetPath = DataSetPath
         self.query = query
+        self.TestSize = TestSize
         self.labels_dict = labels_dict
         self.df = self.getDataFromDatabase()
         self.df = self.df[self.df['labels'].notna()]
@@ -32,11 +34,18 @@ class ClassificationLoader():
         '''Grouping entries pr patients'''
         X = self.df.drop('labels', 1)
         y = self.df['labels']
-        gs = GroupShuffleSplit(n_splits=2, test_size=.2, random_state=0)
-        train_ix, val_ix = next(gs.split(X, y, groups=self.df['PatientID']))
-        df_train = self.df.iloc[train_ix]
-        df_val = self.df.iloc[val_ix]
-        return df_train, df_val
+        if self.TestSize == 1:
+            return None, self.df
+        else:
+            gs = GroupShuffleSplit(
+                n_splits=2,
+                test_size=self.TestSize,
+                random_state=0)
+            train_ix, val_ix = next(
+                gs.split(X, y, groups=self.df['PatientID']))
+            df_train = self.df.iloc[train_ix]
+            df_val = self.df.iloc[val_ix]
+            return df_train, df_val
 
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] == 'avi':

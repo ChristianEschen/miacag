@@ -23,12 +23,16 @@ class TestOptions():
             '--query', type=str,
             help='query for retrieving data',
             required=True)
+        self.parser.add_argument(
+            '--output_directory', type=str,
+            help='output directory for experiment (preds and tensorboard)',
+            required=True)
+        self.parser.add_argument(
+            '--create_tensorboard_timestamp', type=bool,
+            help='optional to create tensorboard timestamp for debug',
+            default=False)
         self.parser.add_argument("--cpu", type=str,
                                  default="False", help="Use cpu? ")
-        self.parser.add_argument(
-            '--logfile', type=str, required=True,
-            default='logfile.log',
-            help='logfile test')
         self.parser.add_argument(
             '--num_workers', type=int,
             default=2,
@@ -37,8 +41,9 @@ class TestOptions():
             '--datasetFingerprintFile', type=str,
             help='Path to dataset fingerprint yaml file')
         self.parser.add_argument(
-            '--tensorboard_path', type=str,
-            help='Path to model tensorboard path')
+            '--TestSize', type=float,
+            default=0.2,
+            help='Proportion of dataset used for testing')
 
     def parse(self):
         """ Parse Arguments.
@@ -57,8 +62,6 @@ class TrainOptions(TestOptions):
         super(TrainOptions, self).__init__()
         self.parser.add_argument("--local_rank", type=int,
                                  help="Local rank: torch.distributed.launch.")
-        self.parser.add_argument("--tensorboard_comment", type=str,
-                                 default='avi', help="Tensorboard comment"),
         self.parser.add_argument(
             '--config', type=str,
             help='Path to the YAML config file',

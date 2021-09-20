@@ -68,8 +68,9 @@ class TestPipeline():
         print('accuracy_correct', acc)
         print('metrics (mean of all preds)', metrics)
         metrics.update(acc)
+        log_name = os.path.basename(config["DataBasePath"]) + '_log.txt'
         with open(os.path.join(config['model']['pretrain_model'],
-                               'test_log.txt'), 'w') as file:
+                               log_name), 'w') as file:
             file.write(json.dumps({**metrics, **config},
                                   sort_keys=True, indent=4,
                                   separators=(',', ': ')))

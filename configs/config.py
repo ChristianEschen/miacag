@@ -1,5 +1,16 @@
 import yaml
 import os
+from datetime import datetime
+import socket
+
+
+def maybe_create_tensorboard_logdir(config):
+    if config['create_tensorboard_timestamp']:
+        config['output_directory'] = os.path.join(
+            config['output_directory'],
+            datetime.now().strftime('%b%d_%H-%M-%S') +
+            '_' + socket.gethostname())
+    return config
 
 
 def load_config(config_path, configs={}):

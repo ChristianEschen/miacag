@@ -56,8 +56,11 @@ class TestPipeline():
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
 
-        test_loader.val_df = self.buildPandasResults(test_loader.val_df,
-                                                     confidences)
+        test_loader.val_df = self.buildPandasResults(
+            test_loader.val_df,
+            config['loaders']['val_method']['samples'],
+            confidences)
+
         self.resetDataPaths(test_loader, config)
         self.insert_data_to_db(test_loader)
 
@@ -68,8 +71,9 @@ class TestPipeline():
         print('accuracy_correct', acc)
         print('metrics (mean of all preds)', metrics)
         metrics.update(acc)
+        log_name = os.path.basename(config["DataBasePath"]) + '_log.txt'
         with open(os.path.join(config['model']['pretrain_model'],
-                               'test_log.txt'), 'w') as file:
+                               log_name), 'w') as file:
             file.write(json.dumps({**metrics, **config},
                                   sort_keys=True, indent=4,
                                   separators=(',', ': ')))
@@ -88,7 +92,10 @@ class TestPipeline():
                                        saliency_maps=False)
         testModule()
 
-    def buildPandasResults(self, val_df, confidences):
+    def buildPandasResults(self, val_df, samples, confidences):
+        val_df = val_df.append(
+            [val_df] * (samples - 1),
+            ignore_index=True)
         df_pred = pd.DataFrame(
             {'confidences': confidences.numpy().tolist()},
             columns=['confidences'],

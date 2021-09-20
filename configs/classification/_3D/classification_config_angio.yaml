@@ -67,7 +67,7 @@ loaders:
   # validation method 
   val_method:
     type: "patches" # patches | sliding_window
-    samples: 1
+    samples: 10
 
 # trainer configuration
 trainer:

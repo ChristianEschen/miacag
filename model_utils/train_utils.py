@@ -105,11 +105,6 @@ def early_stopping(best_val_loss, best_val_epoch,
     return early_stop, best_val_loss, best_val_epoch
 
 
-def write_log_file(config, writer):
-    f = open(config['logfile'], "w")
-    f.write(writer.log_dir)
-    f.close()
-
 
 def get_device(config):
     if config["cpu"] == "False":
@@ -152,4 +147,3 @@ def saver(metric_dict_val, writer, config):
     writer.add_hparams(config, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
-    write_log_file(config, writer)

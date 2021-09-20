@@ -12,12 +12,13 @@ import os
 
 
 def read_log_file(config_input):
-    path = open(config_input['logfile'], "r").read()
-    config_train_out = load_config(os.path.join(path, 'config.yaml'))
+    config_train_out = load_config(
+        os.path.join(config_input['output_directory'], 'config.yaml'))
     config = load_config(config_train_out['config'])
     config.update(config_input)
-    config['model']['pretrain_model'] = path
+    config['model']['pretrain_model'] = config['output_directory']
     return config
+
 
 def convert_string_to_tuple(field):
     res = []
@@ -31,8 +32,8 @@ def convert_string_to_tuple(field):
     return res[0]
 
 def main():
-    config_input = vars(TestOptions().parse())
-    config = read_log_file(config_input)
+    config = vars(TestOptions().parse())
+    config = read_log_file(config)
     config['loaders']['mode'] = 'testing'
     # torch.distributed.init_process_group(
     #     backend="nccl" if config["cpu"] == "False" else "Gloo")
@@ -58,6 +59,7 @@ def main():
                                device, init_metrics, increment_metrics,
                                normalize_metrics,
                                running_metric_test, running_loss_test)
+
 
 if __name__ == '__main__':
     main()

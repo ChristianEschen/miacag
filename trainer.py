@@ -1,25 +1,23 @@
 from dataloader.get_dataloader import get_dataloader_train
 import torch
 from models.BuildModel import ModelBuilder
-from configs.config import load_config
+from configs.config import load_config, maybe_create_tensorboard_logdir
 from torch.utils.tensorboard import SummaryWriter
 from model_utils.get_optimizer import get_optimizer
 from model_utils.get_loss_func import get_loss_func
 from configs.options import TrainOptions
-import os
 from model_utils.train_utils import set_random_seeds, train_one_epoch, early_stopping, \
     get_device, saver, save_model
 from metrics.metrics_utils import init_metrics
 from model_utils.eval_utils import val_one_epoch
-import uuid
-
 
 
 def main():
     config = vars(TrainOptions().parse())
     config = load_config(config['config'], config)
     config['loaders']['mode'] = 'training'
-    writer = SummaryWriter(comment="_" + config['tensorboard_comment'])
+    config = maybe_create_tensorboard_logdir(config)
+    writer = SummaryWriter(config['output_directory'])
 
     set_random_seeds(random_seed=config['manual_seed'])
     if config['use_DDP'] == 'True':

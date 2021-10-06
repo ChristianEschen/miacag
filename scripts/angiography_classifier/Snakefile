@@ -3,24 +3,35 @@ import os
 import socket
 from datetime import datetime
 
+
+def mkFolder(dir):
+    os.makedirs(dir, exist_ok=True)
+
 # inputs:
-DataBasePath = "/home/gandalf/MIA/data/angio/databaseAngio.db"
-DataSetPath = "/home/gandalf/MIA/data/angio"
-query = 'SELECT * FROM DICOM_TABLE'
-print('q', query)
+DataSetPath = "/home/sauroman/DicomAnnotation/"
+query = "SELECT * FROM ?table_name"
+table_name_val = "dicom_table"
+table_name_test = "dicom_table_test"
+
 # outputs
-output = "/home/gandalf/angiography_data/runs"
+output = "/home/sauroman/mia/scripts/angiography_classifier/runs"
 tensorboard_comment = 'test'
+experiment_name = datetime.now().strftime('%b%d_%H-%M-%S') + \
+            '_' + socket.gethostname() + tensorboard_comment
 output_directory = os.path.join(
             output,
-            datetime.now().strftime('%b%d_%H-%M-%S') +
-            '_' + socket.gethostname() + tensorboard_comment)
-DataBasePath_copy = os.path.join(output_directory, 'DBInput.db')
-DataBasePath_val = os.path.join(output_directory, 'DBInput_val.db')
-DataBasePath_test = os.path.join(output_directory, 'DBInput_test.db')
+            experiment_name)
+mkFolder(output_directory)
 output_model = os.path.join(output_directory, "model.pt")
 
+output_table_name_val = table_name_val + "_" + experiment_name
+output_table_name_test = table_name_test + "_" + experiment_name
+
+
 # temp outputs
+tempfile_table_copy_inp = os.path.join('runs', str(uuid.uuid4())) + '.log'
+tempfile_table_copy_out = os.path.join('runs', str(uuid.uuid4())) + '.log'
+
 logfile_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
@@ -38,31 +49,54 @@ master_port = 1231
 cpu = "True"
 config_train = "../../configs/classification/_3D/classification_config_angio.yaml"
 
+# postgres configs
+username = 'sauroman'
+password = '123qweasd'
+database = 'mydb'
+host = "localhost"
+
 
 rule all:
     input:
-        DataBasePath_copy,
-        DataBasePath_val,
-        DataBasePath_test,
+        tempfile_table_copy_out,
         config_file_temp,
         output_model,
         logfile_val,
         logfile_test
 
-rule copy_db:
+rule copy_table:
     input:
-        DataBasePath = DataBasePath
+        output_directory = output_directory
     output:
-        output_directory = directory(output_directory),
-        DataBasePath_copy = DataBasePath_copy,
-        DataBasePath_val = DataBasePath_val,
-        DataBasePath_test = DataBasePath_test
+        tempfile_table_copy_out = temp(tempfile_table_copy_out)
+    params:
+        username = username,
+        password = password,
+        database = database,
+        host = host,
+        table_name_val = table_name_val,
+        table_name_test = table_name_test,
+        output_table_name_val = output_table_name_val,
+        output_table_name_test = output_table_name_test
+
     shell:
         """
-        mkdir -p {output.output_directory} \\
-        ; cp {input.DataBasePath} {output.DataBasePath_copy} \\
-        ; cp {input.DataBasePath} {output.DataBasePath_val} \\
-        ; cp {input.DataBasePath} {output.DataBasePath_test}
+        mkdir -p {input.output_directory} \\
+        ; python ../copy_table.py \\
+            --database {params.database} \\
+            --username {params.username} \\
+            --password {params.password} \\
+            --host {params.host} \\
+            --table_name_input {params.table_name_val} \\
+            --table_name_output {params.output_table_name_val} \\
+        ; python ../copy_table.py \\
+            --database {params.database} \\
+            --username {params.username} \\
+            --password {params.password} \\
+            --host {params.host} \\
+            --table_name_input {params.table_name_test} \\
+            --table_name_output {params.output_table_name_test} \\
+        ; touch {output.tempfile_table_copy_out}
         """
 
 rule copy_config:
@@ -78,10 +112,9 @@ rule copy_config:
 
 rule train_model:
     input:
-        DataBasePath_copy = DataBasePath_copy,
         DataSetPath = DataSetPath,
-        config = temp(config_file_temp),
-        output_directory = output_directory
+        config = config_file_temp,
+        output_directory = directory(output_directory)
     output:
         output_model = output_model
     params:
@@ -93,6 +126,11 @@ rule train_model:
         master_addr = master_addr,
         master_port = master_port,
         cpu = cpu,
+        username = username,
+        password = password,
+        database = database,
+        host = host,
+        output_table_name_val = output_table_name_val
     shell:
        """
        python -m torch.distributed.launch \\
@@ -103,9 +141,13 @@ rule train_model:
        --master_port {params.master_port} \\
        ../../trainer.py \\
        --config {input.config} \\
-       --DataBasePath {input.DataBasePath_copy} \\
        --DataSetPath {input.DataSetPath} \\
        --output_directory {input.output_directory} \\
+       --database {params.database} \\
+       --username {params.username} \\
+       --password {params.password} \\
+       --host {params.host} \\
+       --table_name {params.output_table_name_val} \\
        --query "{params.query}" \\
        --cpu {params.cpu} \\
        --num_workers {params.num_workers} \\
@@ -114,7 +156,6 @@ rule train_model:
 
 rule eval_model_val_set:
     input:
-        DataBasePath_val = DataBasePath_val,
         DataSetPath = DataSetPath,
         output_directory = output_directory,
         out = rules.train_model.output.output_model
@@ -123,14 +164,23 @@ rule eval_model_val_set:
     params:
         num_workers = num_workers,
         cpu = cpu,
-        query = query
+        query = query,
+        username = username,
+        password = password,
+        database = database,
+        host = host,
+        output_table_name_val = output_table_name_val
     shell:
         """
         python ../../tester.py \\
         --num_workers {params.num_workers} \\
-        --DataBasePath {input.DataBasePath_val} \\
         --DataSetPath {input.DataSetPath} \\
         --output_directory {input.output_directory} \\
+        --database {params.database} \\
+        --username {params.username} \\
+        --password {params.password} \\
+        --host {params.host} \\
+        --table_name {params.output_table_name_val} \\
         --query "{params.query}" \\
         --cpu {params.cpu} \\
         ; touch {output.logfile_val} \\
@@ -138,7 +188,6 @@ rule eval_model_val_set:
 
 rule eval_model_test_set:
     input:
-        DataBasePath_test = DataBasePath_test,
         DataSetPath = DataSetPath,
         output_directory = output_directory,
         out = rules.train_model.output.output_model
@@ -148,14 +197,23 @@ rule eval_model_test_set:
         num_workers = num_workers,
         cpu = cpu,
         query = query,
-        test_size = 1
+        test_size = 1,
+        username = username,
+        password = password,
+        database = database,
+        host = host,
+        output_table_name_test = output_table_name_test
     shell:
         """
         python ../../tester.py \\
         --num_workers {params.num_workers} \\
-        --DataBasePath {input.DataBasePath_test} \\
         --DataSetPath {input.DataSetPath} \\
         --output_directory {input.output_directory} \\
+        --database {params.database} \\
+        --username {params.username} \\
+        --password {params.password} \\
+        --host {params.host} \\
+        --table_name {params.output_table_name_test} \\
         --query "{params.query}" \\
         --cpu {params.cpu} \\
         --TestSize {params.test_size} \\

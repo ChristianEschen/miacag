@@ -30,7 +30,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
             else:
                 inputs = torch.cat(
                     (torch.unsqueeze(data[0][0].to(device), 1),
-                    torch.unsqueeze(data[0][1].to(device), 1)),
+                     torch.unsqueeze(data[0][1].to(device), 1)),
                     dim=1)
             labels = None
         else:
@@ -57,51 +57,12 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
                         torch.unsqueeze(data[0][1].to(device), 1)),
                         dim=1)
 
-# def get_data_from_loader(data, config, device, val_phase=False):
-#     if config['task_type'] in ['classification', 'segmentation']:
-#         inputs = data['inputs'].to(device)
-#         labels = data['labels'].long().to(device)
-#     elif config['task_type'] == "representation_learning":
-#         if val_phase is False:
-#             if config['loaders']['store_memory'] is False:
-#                 inputs = data['inputs'].to(device)
-#                 if config['model']['dimension'] == '2D':
-#                     inputs = torch.cat(
-#                         (torch.unsqueeze(inputs[::2, :, :, :], dim=1),
-#                             torch.unsqueeze(inputs[1::2, :, :, :], dim=1)),
-#                         dim=1)
-#                 elif config['model']['dimension'] in ['3D', '2D+T']:
-#                     inputs = torch.cat(
-#                         (torch.unsqueeze(inputs[::2, :, :, :, :], dim=1),
-#                             torch.unsqueeze(inputs[1::2, :, :, :, :], dim=1)),
-#                         dim=1)
-#                 else:
-#                     raise ValueError(
-#                             "model dimension not implemented")
-#             else:
-#                 inputs = torch.cat(
-#                     (torch.unsqueeze(data[0][0].to(device), 1),
-#                     torch.unsqueeze(data[0][1].to(device), 1)),
-#                     dim=1)
-#             labels = None
-#         else:
-#             if config['loaders']['store_memory'] is False:
-#                 inputs = data['inputs'].to(device)
-#                 labels = data['labels'].long().to(device)
-#             else:
-#                 inputs = data[0].to(device)
-#                 labels = data[1].long().to(device)
-#     else:
-#         raise ValueError(
-#                 "Data type is not implemented")
-#     return inputs, labels
-
 
 def get_dataloader_train(config):
     if config['task_type'] in ['classification']:
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
-        CL = ClassificationLoader(config['DataBasePath'], config['DataSetPath'], config['query'], config['labels_dict'], config['TestSize'])
+        CL = ClassificationLoader(config)
         train_loader, val_loader = CL.get_classification_loader_train(config)
 
         val_loader.sampler.data_source.data = \
@@ -137,10 +98,7 @@ def get_dataloader_test(config):
     if config['task_type'] in ["classification"]:
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
-        CL = ClassificationLoader(
-            config['DataBasePath'], config['DataSetPath'],
-            config['query'], config['labels_dict'],
-            config['TestSize'])
+        CL = ClassificationLoader(config)
         CL.get_classificationloader_patch_lvl_test(config)
         CL.val_loader.sampler.data_source.data = \
             CL.val_loader.sampler.data_source.data * \

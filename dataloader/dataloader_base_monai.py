@@ -50,7 +50,7 @@ class base_monai_loader(DataloaderTrain):
 
     def get_input_features(self, csv):
         features = [col for col in
-                    csv.columns.tolist() if col.startswith('DcmPathFlatten')]
+                    csv.columns.tolist() if col.startswith('image_path')]
         return features
 
     # def set_feature_path(self, csv, features, image_path):

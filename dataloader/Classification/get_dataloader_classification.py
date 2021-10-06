@@ -2,62 +2,86 @@ from torch.utils.data import DataLoader
 import torch
 from monai.data import list_data_collate, pad_list_data_collate
 from torchvision import datasets
-import sqlite3
+import psycopg2
 import pandas as pd
 import os
 from sklearn.model_selection import GroupShuffleSplit
+from typing import Iterator, Dict, Any, Optional
+from stringio import StringIteratorIO
 
 
 class ClassificationLoader():
-    def __init__(self, DataBasePath, DataSetPath,
-                 query, labels_dict, TestSize) -> None:
-        self.DataBasePath = DataBasePath
-        self.DataSetPath = DataSetPath
-        self.query = query
-        self.TestSize = TestSize
-        self.labels_dict = labels_dict
+    def __init__(self, config) -> None:
+        self.config = config
         self.getDataFromDatabase()
         self.df = self.df[self.df['labels'].notna()]
-        self.df = self.df.replace({'labels': labels_dict})
+        self.df = self.df.replace({'labels': self.config['labels_dict']})
         self.train_df, self.val_df = self.groupEntriesPrPatient()
 
-    def test_column_exist(self, col):
-        cur = self.connection.cursor()
-        columns = [i[1] for i in cur.execute('PRAGMA table_info(DICOM_TABLE)')]
-        return True if col not in columns else False
+    def add_col(self, col):
+        self.cur = self.connection.cursor()
+        sql = """ALTER TABLE {}
+                 ADD COLUMN IF NOT EXISTS {} int8
+                 """.format(self.config['table_name'], col)
+        self.cur.execute(sql)
+        self.connection.commit()
+        self.cur.close()
+        return None
 
     def writeLabelsTrainDB(self):
-        if self.test_column_exist('labels_train') is True:
-            self.connection.execute(
-                "alter table DICOM_TABLE add column '%s' 'int'"
-                % 'labels_train')
-        paths = self.df['DcmPathFlatten'].to_list()
-        labels = self.df['labels'].to_list()
-        self.connection.executemany(
-            'UPDATE DICOM_TABLE SET labels_train=? WHERE DcmPathFlatten=?',
-            zip(labels, paths))
-        self.connection.commit()
+        self.df['labels_train'] = self.df['labels']
+        records = self.df.to_dict('records')
+        generator = (y for y in records)
+        self.copy_string_iterator(generator, col='labels_train')
+
+    def clean_csv_value(self, value: Optional[Any]) -> str:
+        if value is None:
+            return r'\N'
+        return str(value).replace('\n', '\\n')
+
+    def copy_string_iterator(self,
+                             gene_dcm: Iterator[Dict[str, Any]],
+                             size: int = 8192,
+                             col: str = 'col') -> None:
+        with self.connection.cursor() as cursor:
+            gene_dcm_string_iterator = StringIteratorIO((
+                '|'.join(map(self.clean_csv_value,
+                         (dcm[col],)
+                )) + '\n'
+                for dcm in gene_dcm
+            ))
+            cursor.copy_from(gene_dcm_string_iterator,
+                             self.config['table_name'],
+                             sep='|',
+                             null='nan',
+                             size=size)
 
     def getDataFromDatabase(self):
-        self.connection = sqlite3.connect(self.DataBasePath)
-        self.df = pd.read_sql_query(self.query, self.connection)
+        self.connection = psycopg2.connect(
+            host=self.config['host'],
+            database=self.config['database'],
+            user=self.config['username'],
+            password=self.config['password'])
+        sql = self.config['query'].replace("?table_name",
+                                           "\"" + self.config['table_name'] + "\"")
+        self.df = pd.read_sql_query(sql, self.connection)
         if len(self.df) == 0:
             print('The requested query does not have any data!')
 
-        self.writeLabelsTrainDB()
-        self.df['DcmPathFlatten'] = self.df['DcmPathFlatten'].apply(
-                    lambda x: os.path.join(self.DataSetPath, x))
+        #self.writeLabelsTrainDB()
+        self.df['image_path1'] = self.df['DcmPathFlatten'].apply(
+                    lambda x: os.path.join(self.config['DataSetPath'], x))
 
     def groupEntriesPrPatient(self):
         '''Grouping entries pr patients'''
         X = self.df.drop('labels', 1)
         y = self.df['labels']
-        if self.TestSize == 1:
+        if self.config['TestSize'] == 1:
             return None, self.df
         else:
             gs = GroupShuffleSplit(
                 n_splits=2,
-                test_size=self.TestSize,
+                test_size=self.config['TestSize'],
                 random_state=0)
             train_ix, val_ix = next(
                 gs.split(X, y, groups=self.df['PatientID']))

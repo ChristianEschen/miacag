@@ -8,6 +8,9 @@ from sklearn.metrics import accuracy_score
 from preprocessing.pre_process import appendDataframes
 import os
 from preprocessing.pre_process import mkFolder
+import psycopg2
+from psycopg2.extras import execute_batch
+
 
 
 class TestPipeline():
@@ -62,7 +65,7 @@ class TestPipeline():
             confidences)
 
         self.resetDataPaths(test_loader, config)
-        self.insert_data_to_db(test_loader)
+        self.insert_data_to_db(test_loader, config)
 
         acc = {'accuracy ensemble': accuracy_score(
             test_loader.val_df['labels'].astype('float').astype('int'),
@@ -71,7 +74,7 @@ class TestPipeline():
         print('accuracy_correct', acc)
         print('metrics (mean of all preds)', metrics)
         metrics.update(acc)
-        log_name = os.path.basename(config["DataBasePath"]) + '_log.txt'
+        log_name = config["table_name"] + '_log.txt'
         with open(os.path.join(config['model']['pretrain_model'],
                                log_name), 'w') as file:
             file.write(json.dumps({**metrics, **config},
@@ -123,20 +126,26 @@ class TestPipeline():
             columns=['confidences_y', 'confidences_x'])
         return val_df
 
-    def insert_data_to_db(self, test_loader):
-        paths = test_loader.val_df['DcmPathFlatten'].to_list()
-        preds = test_loader.val_df['predictions'].to_list()
-        confidences = test_loader.val_df['confidences'].to_list()
+    def update(self, con, records, column, config, page_size=2):
+        cur = con.cursor()
+        cur.execute("""PREPARE updateStmt AS
+            UPDATE {} SET {}=$1 WHERE rowid=$2
+            """.format("\"" + config['table_name'] + "\"", column))
+        psycopg2.extras.execute_batch(
+            cur,
+            "EXECUTE updateStmt (%(" + column + ")s, %(rowid)s)",
+            records,
+            page_size=page_size)
+        cur.execute("DEALLOCATE updateStmt")
+        con.commit()
 
-        confidences = self.array_to_tuple(confidences)
-        test_loader.connection.executemany(
-            'UPDATE DICOM_TABLE SET predictions=? WHERE DcmPathFlatten=?',
-            zip(preds, paths))
-        test_loader.connection.commit()
-        test_loader.connection.executemany(
-            'UPDATE DICOM_TABLE SET confidences=? WHERE DcmPathFlatten=?',
-            zip(confidences, paths))
-        test_loader.connection.commit()
+    def insert_data_to_db(self, test_loader, config):
+        confidences = self.array_to_tuple(
+            test_loader.val_df['confidences'].to_list())
+        test_loader.val_df['confidences'] = confidences
+        records = test_loader.val_df.to_dict('records')
+        self.update(test_loader.connection, records, 'predictions', config)
+        self.update(test_loader.connection, records, 'confidences', config)
 
     def resetDataPaths(self, test_loader, config):
         test_loader.val_df['DcmPathFlatten'] = \
@@ -153,7 +162,7 @@ class TestPipeline():
             li = [str(i) + ":" + li[i] for i in range(len(li))]
             li = tuple(li)
             li = self.tuple2key(li)
-            conf_list_tuple.append(li)
+            conf_list_tuple.append([li])
         return conf_list_tuple
 
     def tuple2key(self, t, delimiter=u';'):

@@ -12,9 +12,20 @@ class TestOptions():
         self.parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         self.parser.add_argument(
-            '--DataBasePath', type=str,
-            help='Path to database',
-            required=True)
+            '--database', type=str,
+            help="database name")
+        self.parser.add_argument(
+            '--username', type=str,
+            help="username for database")
+        self.parser.add_argument(
+            '--password', type=str,
+            help="password for database")
+        self.parser.add_argument(
+            '--host', type=str,
+            help="host for database")
+        self.parser.add_argument(
+            '--port', type=str,
+            help="port for database")
         self.parser.add_argument(
             '--DataSetPath', type=str,
             help='Path to data set (outer path)',
@@ -23,6 +34,9 @@ class TestOptions():
             '--query', type=str,
             help='query for retrieving data',
             required=True)
+        self.parser.add_argument(
+            '--table_name', type=str,
+            help="table_name in database")
         self.parser.add_argument(
             '--output_directory', type=str,
             help='output directory for experiment (preds and tensorboard)',

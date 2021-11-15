@@ -77,6 +77,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),
+                #DeleteItemsd(keys=self.features[0]+"_meta_dict.\\[0-9]|[0-9]", use_re=True),
                 ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
@@ -126,7 +127,9 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 ToTensord(keys='inputs'),
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),]
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),
+                #DeleteItemsd(keys=self.features[0]+"_meta_dict.\\[0-9]|[0-9]", use_re=True)
+                ]
 
         val_transforms = Compose(val_transforms)
         val_loader = monai.data.Dataset(data=self.data,

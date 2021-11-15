@@ -5,7 +5,7 @@ from torchvision import transforms
 import numpy as np
 from dataloader.transforms import _transforms_video as T
 from torch.utils.data import WeightedRandomSampler
-import av
+#import av
 import os
 
 
@@ -34,18 +34,18 @@ class DataloaderBase(data.Dataset):
         labels = pd.Series([mapping[k] for k in self.df['labels'].to_list()])
         return labels
 
-    def load_video(self, path):
-        # use av backend
-        container = av.open(path)
-        array_3d = np.zeros((
-                        container.streams.video[0].height,
-                        container.streams.video[0].width,
-                        container.streams.video[0].frames, 3), dtype=np.uint8)
-        i = 0
-        for frame in container.decode(video=0):
-            array_3d[:, :, i, :] = np.array(frame.to_image())
-            i += 1
-        return array_3d
+    # def load_video(self, path):
+    #     # use av backend
+    #     container = av.open(path)
+    #     array_3d = np.zeros((
+    #                     container.streams.video[0].height,
+    #                     container.streams.video[0].width,
+    #                     container.streams.video[0].frames, 3), dtype=np.uint8)
+    #     i = 0
+    #     for frame in container.decode(video=0):
+    #         array_3d[:, :, i, :] = np.array(frame.to_image())
+    #         i += 1
+    #     return array_3d
 
 
 class DataloaderTest(DataloaderBase):

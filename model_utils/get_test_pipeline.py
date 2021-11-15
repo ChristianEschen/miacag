@@ -126,26 +126,15 @@ class TestPipeline():
             columns=['confidences_y', 'confidences_x'])
         return val_df
 
-    def update(self, con, records, column, config, page_size=2):
-        cur = con.cursor()
-        cur.execute("""PREPARE updateStmt AS
-            UPDATE {} SET {}=$1 WHERE rowid=$2
-            """.format("\"" + config['table_name'] + "\"", column))
-        psycopg2.extras.execute_batch(
-            cur,
-            "EXECUTE updateStmt (%(" + column + ")s, %(rowid)s)",
-            records,
-            page_size=page_size)
-        cur.execute("DEALLOCATE updateStmt")
-        con.commit()
-
     def insert_data_to_db(self, test_loader, config):
         confidences = self.array_to_tuple(
             test_loader.val_df['confidences'].to_list())
         test_loader.val_df['confidences'] = confidences
         records = test_loader.val_df.to_dict('records')
-        self.update(test_loader.connection, records, 'predictions', config)
-        self.update(test_loader.connection, records, 'confidences', config)
+        test_loader.update(test_loader.connection,
+                           records, 'predictions', config)
+        test_loader.update(test_loader.connection,
+                           records, 'confidences', config)
 
     def resetDataPaths(self, test_loader, config):
         test_loader.val_df['DcmPathFlatten'] = \

@@ -9,9 +9,9 @@ def mkFolder(dir):
 
 # inputs:
 DataSetPath = "/home/sauroman/DicomAnnotation/"
-query = "SELECT * FROM ?table_name"
-table_name_val = "dicom_table"
-table_name_test = "dicom_table_test"
+query = "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
+query_test = "SELECT * FROM ?table_name"
+table_name = "dicom_table"
 
 # outputs
 output = "/home/sauroman/mia/scripts/angiography_classifier/runs"
@@ -24,9 +24,19 @@ output_directory = os.path.join(
 mkFolder(output_directory)
 output_model = os.path.join(output_directory, "model.pt")
 
-output_table_name_val = table_name_val + "_" + experiment_name
-output_table_name_test = table_name_test + "_" + experiment_name
+output_table_name = table_name + "_" + experiment_name
 
+output_plots = os.path.join(output_directory, 'plots')
+mkFolder(output_plots)
+output_plots_train = os.path.join(output_plots, 'train')
+output_plots_val = os.path.join(output_plots, 'val')
+output_plots_test = os.path.join(output_plots, 'test')
+query_train_plot = query_test + " WHERE phase = 'train';"
+query_val_plot = query_test + " WHERE phase = 'val';"
+query_test_plot = query_test + " WHERE phase = 'test';"
+mkFolder(output_plots_train)
+mkFolder(output_plots_test)
+mkFolder(output_plots_val)
 
 # temp outputs
 tempfile_table_copy_inp = os.path.join('runs', str(uuid.uuid4())) + '.log'
@@ -37,6 +47,10 @@ logfile_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
 config_file_temp = os.path.join('runs', str(uuid.uuid4())) + '.yaml'
 
+logfile_plot_train = os.path.join('runs', str(uuid.uuid4())) + '.log'
+logfile_plot_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
+logfile_plot_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
+
 
 
 # params
@@ -45,7 +59,7 @@ nproc_per_node = 1
 nnodes = 1
 node_rank = 0
 master_addr = socket.gethostbyname(socket.gethostname())
-master_port = 1231
+master_port = 1232
 cpu = "True"
 config_train = "../../configs/classification/_3D/classification_config_angio.yaml"
 
@@ -62,7 +76,10 @@ rule all:
         config_file_temp,
         output_model,
         logfile_val,
-        logfile_test
+        logfile_plot_train,
+        logfile_plot_val,
+        logfile_plot_test
+
 
 rule copy_table:
     input:
@@ -74,10 +91,8 @@ rule copy_table:
         password = password,
         database = database,
         host = host,
-        table_name_val = table_name_val,
-        table_name_test = table_name_test,
-        output_table_name_val = output_table_name_val,
-        output_table_name_test = output_table_name_test
+        table_name = table_name,
+        output_table_name = output_table_name
 
     shell:
         """
@@ -87,15 +102,8 @@ rule copy_table:
             --username {params.username} \\
             --password {params.password} \\
             --host {params.host} \\
-            --table_name_input {params.table_name_val} \\
-            --table_name_output {params.output_table_name_val} \\
-        ; python ../copy_table.py \\
-            --database {params.database} \\
-            --username {params.username} \\
-            --password {params.password} \\
-            --host {params.host} \\
-            --table_name_input {params.table_name_test} \\
-            --table_name_output {params.output_table_name_test} \\
+            --table_name_input {params.table_name} \\
+            --table_name_output {params.output_table_name} \\
         ; touch {output.tempfile_table_copy_out}
         """
 
@@ -114,7 +122,7 @@ rule train_model:
     input:
         DataSetPath = DataSetPath,
         config = config_file_temp,
-        output_directory = directory(output_directory)
+        output_directory = output_directory
     output:
         output_model = output_model
     params:
@@ -130,7 +138,7 @@ rule train_model:
         password = password,
         database = database,
         host = host,
-        output_table_name_val = output_table_name_val
+        output_table_name = output_table_name
     shell:
        """
        python -m torch.distributed.launch \\
@@ -147,7 +155,7 @@ rule train_model:
        --username {params.username} \\
        --password {params.password} \\
        --host {params.host} \\
-       --table_name {params.output_table_name_val} \\
+       --table_name {params.output_table_name} \\
        --query "{params.query}" \\
        --cpu {params.cpu} \\
        --num_workers {params.num_workers} \\
@@ -164,45 +172,13 @@ rule eval_model_val_set:
     params:
         num_workers = num_workers,
         cpu = cpu,
-        query = query,
-        username = username,
-        password = password,
-        database = database,
-        host = host,
-        output_table_name_val = output_table_name_val
-    shell:
-        """
-        python ../../tester.py \\
-        --num_workers {params.num_workers} \\
-        --DataSetPath {input.DataSetPath} \\
-        --output_directory {input.output_directory} \\
-        --database {params.database} \\
-        --username {params.username} \\
-        --password {params.password} \\
-        --host {params.host} \\
-        --table_name {params.output_table_name_val} \\
-        --query "{params.query}" \\
-        --cpu {params.cpu} \\
-        ; touch {output.logfile_val} \\
-        """
-
-rule eval_model_test_set:
-    input:
-        DataSetPath = DataSetPath,
-        output_directory = output_directory,
-        out = rules.train_model.output.output_model
-    output:
-        logfile_test = temp(logfile_test)
-    params:
-        num_workers = num_workers,
-        cpu = cpu,
-        query = query,
+        query_test = query_test,
         test_size = 1,
         username = username,
         password = password,
         database = database,
         host = host,
-        output_table_name_test = output_table_name_test
+        output_table_name = output_table_name
     shell:
         """
         python ../../tester.py \\
@@ -213,9 +189,66 @@ rule eval_model_test_set:
         --username {params.username} \\
         --password {params.password} \\
         --host {params.host} \\
-        --table_name {params.output_table_name_test} \\
-        --query "{params.query}" \\
+        --table_name {params.output_table_name} \\
+        --query "{params.query_test}" \\
         --cpu {params.cpu} \\
         --TestSize {params.test_size} \\
-        ; touch {output.logfile_test} \\
+        ; touch {output.logfile_val} \\
+        """
+
+rule plot_results_train:
+    input:
+        out = rules.eval_model_val_set.output.logfile_val,
+        output_plots_train = output_plots_train
+    output:
+        logfile_plot_train = temp(logfile_plot_train)
+    params:
+        output_table_name = output_table_name,
+        query = query_train_plot
+    shell:
+        """
+        mkdir -p {input.output_plots_train} \\
+        ; Rscript ../../plots/plotter.r \\
+        {input.output_plots_train} \\
+        {params.output_table_name} \\
+        "{params.query}" \\
+        ; touch {output.logfile_plot_train} \\
+        """
+
+rule plot_results_val:
+    input:
+        out = rules.eval_model_val_set.output.logfile_val,
+        output_plots_val = output_plots_val
+    output:
+        logfile_plot_val = temp(logfile_plot_val)
+    params:
+        output_table_name = output_table_name,
+        query = query_val_plot
+    shell:
+        """
+        mkdir -p {input.output_plots_val} \\
+        ; Rscript ../../plots/plotter.r \\
+        {input.output_plots_val} \\
+        {params.output_table_name} \\
+        "{params.query}" \\
+        ; touch {output.logfile_plot_val} \\
+        """
+
+rule plot_results_test:
+    input:
+        out = rules.eval_model_val_set.output.logfile_val,
+        output_plots_test = output_plots_test
+    output:
+        logfile_plot_test = temp(logfile_plot_test)
+    params:
+        output_table_name = output_table_name,
+        query = query_test_plot
+    shell:
+        """
+        mkdir -p {input.output_plots_test} \\
+        ; Rscript ../../plots/plotter.r \\
+        {input.output_plots_test} \\
+        {params.output_table_name} \\
+        "{params.query}" \\
+        ; touch {output.logfile_plot_test} \\
         """

@@ -12,6 +12,7 @@ DataSetPath = "/home/sauroman/DicomAnnotation/"
 query = "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test = "SELECT * FROM ?table_name"
 table_name = "dicom_table"
+TestSize = 0.2
 
 # outputs
 output = "/home/sauroman/mia/scripts/angiography_classifier/runs"
@@ -42,6 +43,8 @@ mkFolder(output_plots_val)
 tempfile_table_copy_inp = os.path.join('runs', str(uuid.uuid4())) + '.log'
 tempfile_table_copy_out = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
+tempfile_split_train_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
+
 logfile_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
@@ -50,6 +53,7 @@ config_file_temp = os.path.join('runs', str(uuid.uuid4())) + '.yaml'
 logfile_plot_train = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_plot_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_plot_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
+
 
 
 
@@ -118,11 +122,42 @@ rule copy_config:
         cp {input.config_train} {output.config_file_temp}
         """
 
+rule split_train_val:
+    input:
+        config = config_file_temp,
+        output_directory = output_directory,
+        tempfile_table_copy_out = tempfile_table_copy_out
+    output:
+        tempfile_split_train_val = tempfile_split_train_val
+    params:
+        query = query,
+        username = username,
+        password = password,
+        database = database,
+        TestSize = TestSize,
+        host = host,
+        output_table_name = output_table_name
+    shell:
+       """
+       python ../../split_train_val.py \\
+       --config {input.config} \\
+       --database {params.database} \\
+       --username {params.username} \\
+       --password {params.password} \\
+       --host {params.host} \\
+       --table_name {params.output_table_name} \\
+       --query "{params.query}" \\
+       --TestSize {params.TestSize}
+       ; touch {output.tempfile_split_train_val}
+       """
+
+
 rule train_model:
     input:
         DataSetPath = DataSetPath,
         config = config_file_temp,
-        output_directory = output_directory
+        output_directory = output_directory,
+        tempfile_table_copy_out = tempfile_table_copy_out
     output:
         output_model = output_model
     params:

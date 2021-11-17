@@ -46,8 +46,8 @@ class splitter():
         self.getDataFromDatabase()
 
         self.df = self.df[self.df['labels'].notna()]
-        # WARNING
-        self.df = self.df.replace({'labels': labels_config})
+        self.df['labels_transformed'] = self.df['labels']
+        self.df = self.df.replace({'labels_transforned': labels_config})
 
 
     def groupEntriesPrPatient(self):
@@ -73,8 +73,7 @@ class splitter():
         val_df['phase'] = "val"
         val_df = val_df[['phase', 'rowid']]
         train_df = train_df[['phase', 'rowid']]
-        import time
-        start = time.time()
+
         self.update(self.connection,
                     val_df.to_dict('records'),
                     'phase',
@@ -83,8 +82,6 @@ class splitter():
                     train_df.to_dict('records'),
                     'phase',
                     self.sql_config)
-        end = time.time()
-        print('time elap (s)', end-start)
 
     def update(self, con, records, column, sql_config, page_size=2):
         cur = con.cursor()

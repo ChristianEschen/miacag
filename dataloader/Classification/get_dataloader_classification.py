@@ -9,6 +9,7 @@ import os
 from sklearn.model_selection import GroupShuffleSplit
 from typing import Iterator, Dict, Any, Optional
 from stringio import StringIteratorIO
+from io import StringIO
 
 
 class ClassificationLoader():
@@ -16,46 +17,8 @@ class ClassificationLoader():
         self.config = config
         self.getDataFromDatabase()
         self.df = self.df[self.df['labels'].notna()]
-        self.df = self.df.replace({'labels': self.config['labels_dict']})
-        self.train_df, self.val_df = self.groupEntriesPrPatient()
-        
-    def add_col(self, col):
-        self.cur = self.connection.cursor()
-        sql = """ALTER TABLE {}
-                 ADD COLUMN IF NOT EXISTS {} int8
-                 """.format(self.config['table_name'], col)
-        self.cur.execute(sql)
-        self.connection.commit()
-        self.cur.close()
-        return None
-
-    def writeLabelsTrainDB(self):
-        self.df['labels_transformed'] = self.df['labels']
-        records = self.df.to_dict('records')
-        generator = (y for y in records)
-        self.copy_string_iterator(generator, col='labels_transformed')
-
-    def clean_csv_value(self, value: Optional[Any]) -> str:
-        if value is None:
-            return r'\N'
-        return str(value).replace('\n', '\\n')
-
-    def copy_string_iterator(self,
-                             gene_dcm: Iterator[Dict[str, Any]],
-                             size: int = 8192,
-                             col: str = 'col') -> None:
-        with self.connection.cursor() as cursor:
-            gene_dcm_string_iterator = StringIteratorIO((
-                '|'.join(map(self.clean_csv_value,
-                         (dcm[col],)
-                )) + '\n'
-                for dcm in gene_dcm
-            ))
-            cursor.copy_from(gene_dcm_string_iterator,
-                             self.config['table_name'],
-                             sep='|',
-                             null='nan',
-                             size=size)
+        self.train_df = self.df[self.df['phase'] == 'train']
+        self.val_df = self.df[self.df['phase'] == 'val']
 
     def getDataFromDatabase(self):
         self.connection = psycopg2.connect(
@@ -73,48 +36,6 @@ class ClassificationLoader():
         self.df['image_path1'] = self.df['DcmPathFlatten'].apply(
                     lambda x: os.path.join(self.config['DataSetPath'], x))
 
-    def update(self, con, records, column, config, page_size=2):
-        cur = con.cursor()
-        cur.execute("""PREPARE updateStmt AS
-            UPDATE {} SET {}=$1 WHERE rowid=$2
-            """.format("\"" + config['table_name'] + "\"", column))
-        psycopg2.extras.execute_batch(
-            cur,
-            "EXECUTE updateStmt (%(" + column + ")s, %(rowid)s)",
-            records,
-            page_size=page_size)
-        cur.execute("DEALLOCATE updateStmt")
-        con.commit()
-
-    def addPhase(self, train_df, val_df):
-        train_df['phase'] = "train"
-        val_df['phase'] = "val"
-        self.update(self.connection,
-                    val_df.to_dict('records'),
-                    'phase',
-                    self.config)
-        self.update(self.connection,
-                    train_df.to_dict('records'),
-                    'phase',
-                    self.config)
-
-    def groupEntriesPrPatient(self):
-        '''Grouping entries pr patients'''
-        X = self.df.drop('labels', 1)
-        y = self.df['labels']
-        if self.config['TestSize'] == 1:
-            return None, self.df
-        else:
-            gs = GroupShuffleSplit(
-                n_splits=2,
-                test_size=self.config['TestSize'],
-                random_state=0)
-            train_ix, val_ix = next(
-                gs.split(X, y, groups=self.df['PatientID']))
-            df_train = self.df.iloc[train_ix]
-            df_val = self.df.iloc[val_ix]
-            self.addPhase(df_train, df_val)
-            return df_train, df_val
 
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] == 'avi':

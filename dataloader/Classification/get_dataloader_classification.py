@@ -1,6 +1,8 @@
 from torch.utils.data import DataLoader
 import torch
-from monai.data import list_data_collate, pad_list_data_collate
+from monai.data import (
+    list_data_collate, pad_list_data_collate,
+    ThreadDataLoader)
 from torchvision import datasets
 import psycopg2
 from psycopg2.extras import execute_batch
@@ -10,6 +12,7 @@ from sklearn.model_selection import GroupShuffleSplit
 from typing import Iterator, Dict, Any, Optional
 from stringio import StringIteratorIO
 from io import StringIO
+from monai.data import DistributedWeightedRandomSampler
 
 
 class ClassificationLoader():
@@ -82,10 +85,17 @@ class ClassificationLoader():
             from dataloader.Classification._3D.dataloader_monai_classification_3D import \
                 val_monai_classification_loader
 
-            train_loader = train_monai_classification_loader(
+            train_ds = train_monai_classification_loader(
                 self.train_df,
                 config)
 
+            weights = train_ds.weights
+            train_ds = train_ds()
+            sampler = DistributedWeightedRandomSampler(
+                dataset=train_ds,
+                weights=weights,
+                even_divisible=True,
+                shuffle=True)
             if config['loaders']['val_method']['type'] == 'patches':
                 from dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader
@@ -100,21 +110,22 @@ class ClassificationLoader():
             val_loader = val_monai_classification_loader(
                     self.val_df,
                     config)
-            train_loader = DataLoader(
-                train_loader(),
+            train_loader = ThreadDataLoader(
+                train_ds,
+                sampler=sampler,
                 batch_size=config['loaders']['batchSize'],
-                shuffle=True,
-                num_workers=config['num_workers'],
-                collate_fn=list_data_collate,
-                pin_memory=True if config['cpu'] == "False" else False,)
+                shuffle=False,
+                num_workers=0, #config['num_workers'],
+                collate_fn=pad_list_data_collate,
+                pin_memory=False,) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
-                val_loader = DataLoader(
+                val_loader = ThreadDataLoader(
                     val_loader(),
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
                     num_workers=config['num_workers'],
-                    collate_fn=pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-                    pin_memory=True if config['cpu'] == "False" else False,)
+                    collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    pin_memory=False,)
             return train_loader, val_loader
         elif config['loaders']['format'] == 'rgb':
             from dataloader.Representation._2D. \

@@ -13,9 +13,11 @@ from monai.transforms import (
     RandTorchVisiond,
     Compose,
     SqueezeDimd,
+    ToDeviced,
     RandLambdad,
     CopyItemsd,
     LoadImaged,
+    EnsureTyped,
     LoadImage,
     MapTransform,
     NormalizeIntensityd,
@@ -62,41 +64,52 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
                 self.getMaybePad(),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                self.getCopy1to3Channels(),
+                ScaleIntensityd(keys=self.features),
+                NormalizeIntensityd(keys=self.features,
+                                    channel_wise=True),
+                EnsureTyped(keys=self.features, data_type='tensor'),
+                ToDeviced(keys=self.features, device="cuda:0"),
                 RandSpatialCropd(keys=self.features,
                                  roi_size=[
                                      self.config['loaders']['Crop_height'],
                                      self.config['loaders']['Crop_width'],
                                      self.config['loaders']['Crop_depth']],
                                  random_size=False),
-                self.getCopy1to3Channels(),
+               # CopyItemsd(keys=self.features, times=1, names='inputs'),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                ScaleIntensityd(keys='inputs'),
-                NormalizeIntensityd(keys='inputs',
-                                    channel_wise=True),
-                ToTensord(keys='inputs'),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),
-                #DeleteItemsd(keys=self.features[0]+"_meta_dict.\\[0-9]|[0-9]", use_re=True),
+                DeleteItemsd(keys=self.features),
                 ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
-        check_ds = monai.data.Dataset(data=self.data,
-                                     transform=train_transforms)
-        check_loader = DataLoader(
-            check_ds,
-            batch_size=self.config['loaders']['batchSize'],
-            num_workers=self.config['num_workers'],
-            collate_fn=list_data_collate)
-        check_data = monai.utils.misc.first(check_loader)
+        # check_ds = monai.data.CacheDataset(data=self.data,
+        #                              transform=train_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=self.config['num_workers'],
+        #     collate_fn=list_data_collate)
+        # check_data = monai.utils.misc.first(check_loader)
         # img = check_data['inputs'][0,0,:,:,16].numpy()
         # import matplotlib.pyplot as plt
         # fig_train = plt.figure()
         # plt.imshow(img, cmap="gray", interpolation="None")
         # plt.show()
         # create a training data loader
-        train_loader = monai.data.Dataset(data=self.data,
-                                               transform=train_transforms)
+        # train_loader = monai.data.CacheDataset(
+        #     data=self.data,
+        #     transform=train_transforms,
+        #     copy_cache=True,
+        #     #replace_rate=0.25,
+        #     num_workers=self.config['num_workers'])
+        train_loader = monai.data.SmartCacheDataset(
+            data=self.data,
+            transform=train_transforms,
+            copy_cache=True,
+            replace_rate=0.25,
+            num_init_workers=2,
+            num_replace_workers=2)
 
         return train_loader
 
@@ -112,27 +125,30 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
                 self.getMaybePad(),
-                RandSpatialCropd(
-                    keys=self.features,
-                    roi_size=[
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                self.getCopy1to3Channels(),
+                ScaleIntensityd(keys=self.features),
+                NormalizeIntensityd(keys=self.features,
+                                    channel_wise=True),
+                EnsureTyped(keys=self.features, data_type='tensor'),
+                # ToDeviced(keys=self.features, device="cuda:0"),
+                RandSpatialCropd(keys=self.features,
+                                 roi_size=[
                                      self.config['loaders']['Crop_height'],
                                      self.config['loaders']['Crop_width'],
                                      self.config['loaders']['Crop_depth']],
-                    random_size=False,),
-                self.getCopy1to3Channels(),
+                                 random_size=False),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                ScaleIntensityd(keys='inputs'),
-                NormalizeIntensityd(keys='inputs',
-                                    channel_wise=True),
-                ToTensord(keys='inputs'),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0020\\|[0-9]", use_re=True),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.0028\\|[0-9]", use_re=True),
-                #DeleteItemsd(keys=self.features[0]+"_meta_dict.\\[0-9]|[0-9]", use_re=True)
+                DeleteItemsd(keys=self.features),
                 ]
-
         val_transforms = Compose(val_transforms)
-        val_loader = monai.data.Dataset(data=self.data,
-                                        transform=val_transforms)
-
+        # val_loader = monai.data.CacheDataset(
+        #     data=self.data,
+        #     transform=val_transforms,
+        #     copy_cache=False,
+        #     #  replace_rate=0.25,
+        #     num_workers=self.config['num_workers'])
+        val_loader = monai.data.Dataset(
+            data=self.data,
+            transform=val_transforms)
         return val_loader

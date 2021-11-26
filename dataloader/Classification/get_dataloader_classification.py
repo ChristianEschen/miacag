@@ -20,8 +20,11 @@ class ClassificationLoader():
         self.config = config
         self.getDataFromDatabase()
         self.df = self.df[self.df['labels'].notna()]
-        self.train_df = self.df[self.df['phase'] == 'train']
-        self.val_df = self.df[self.df['phase'] == 'val']
+        if self.config['loaders']['mode'] == 'testing':
+            self.val_df = self.df
+        else:
+            self.train_df = self.df[self.df['phase'] == 'train']
+            self.val_df = self.df[self.df['phase'] == 'val']
 
     def getDataFromDatabase(self):
         self.connection = psycopg2.connect(
@@ -39,6 +42,28 @@ class ClassificationLoader():
         self.df['image_path1'] = self.df['DcmPathFlatten'].apply(
                     lambda x: os.path.join(self.config['DataSetPath'], x))
 
+    def update(self, records, page_size=2):
+        cur = self.connection.cursor()
+        values = []
+        for record in records:
+            value = (record['predictions'],
+                     record['confidences'],
+                     record['rowid'])
+            values.append(value)
+        values = tuple(values)
+        update_query = """
+        UPDATE "{}" AS t
+        SET predictions = e.predictions,
+            confidences = e.confidences
+        FROM (VALUES %s) AS e(predictions, confidences, rowid)
+        WHERE e.rowid = t.rowid;""".format(self.config['table_name'])
+
+        psycopg2.extras.execute_values(
+            cur, update_query, values, template=None, page_size=100
+        )
+        self.connection.commit()
+        cur.close()
+        self.connection.close()
 
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] == 'avi':

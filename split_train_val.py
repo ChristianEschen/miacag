@@ -41,13 +41,13 @@ parser.add_argument(
 
 
 class splitter():
-    def __init__(self, sql_config, config):
+    def __init__(self, sql_config, labels_config):
         self.sql_config = sql_config
         self.getDataFromDatabase()
 
         self.df = self.df[self.df['labels'].notna()]
         self.df['labels_transformed'] = self.df['labels']
-        self.df = self.df.replace({'labels_transforned': labels_config})
+        self.df = self.df.replace({'labels_transformed': labels_config})
 
 
     def groupEntriesPrPatient(self):
@@ -83,7 +83,7 @@ class splitter():
                     'phase',
                     self.sql_config)
 
-    def update(self, con, records, column, sql_config, page_size=2):
+    def update(self, con, records, column, page_size=2):
         cur = con.cursor()
         values = []
         for record in records:

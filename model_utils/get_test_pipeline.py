@@ -131,10 +131,8 @@ class TestPipeline():
             test_loader.val_df['confidences'].to_list())
         test_loader.val_df['confidences'] = confidences
         records = test_loader.val_df.to_dict('records')
-        test_loader.update(test_loader.connection,
-                           records, 'predictions', config)
-        test_loader.update(test_loader.connection,
-                           records, 'confidences', config)
+        test_loader.update(records)
+
 
     def resetDataPaths(self, test_loader, config):
         test_loader.val_df['DcmPathFlatten'] = \

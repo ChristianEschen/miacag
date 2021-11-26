@@ -10,6 +10,8 @@ from model_utils.train_utils import set_random_seeds, train_one_epoch, early_sto
     get_device, saver, save_model
 from metrics.metrics_utils import init_metrics
 from model_utils.eval_utils import val_one_epoch
+import time
+import torch.distributed as dist
 
 
 def main():
@@ -24,6 +26,10 @@ def main():
         torch.distributed.init_process_group(
             backend="nccl" if config["cpu"] == "False" else "Gloo")
     device = get_device(config)
+    
+    if config["cpu"] == "False":
+        torch.cuda.set_device(device)
+        torch.backends.cudnn.benchmark = True
 
     BuildModel = ModelBuilder(config)
     model = BuildModel()
@@ -52,6 +58,7 @@ def main():
 
     best_val_loss, best_val_epoch = None, None
     early_stop = False
+    starter = time.time()
     #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
@@ -67,14 +74,14 @@ def main():
         running_metric_val, config['eval_metric_val']['name'] = \
             init_metrics(config['eval_metric_val']['name'],
                          config)
-
+        start = time.time()
         # train one epoch
         train_one_epoch(model, criterion,
                         train_loader, device, epoch,
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
-
+        print('time for training the epoch is (s)', time.time()-start)
         #  validation one epoch (but not necessarily each)
         if epoch % config['trainer']['validate_frequency'] == 0:
             metric_dict_val = val_one_epoch(model, criterion, config,
@@ -92,12 +99,12 @@ def main():
                 save_model(model, writer, config)
             if early_stop is True:
                 break
-
+        
     if early_stop is False:
         save_model(model, writer, config)
     saver(metric_dict_val, writer, config)
     print('Finished Training')
-
+    print('training loop (s)', time.time()-starter)
 
 if __name__ == '__main__':
     main()

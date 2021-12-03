@@ -71,12 +71,16 @@ def train_one_epoch(model, criterion,
         running_loss_train = increment_metrics(running_loss_train, loss)
     if lr_scheduler is not False:
         lr_scheduler.step()
-    running_metric_train = normalize_metrics(running_metric_train,
-                                             config,
-                                             len(train_loader.dataset.data))
-    running_loss_train = normalize_metrics(running_loss_train,
-                                           config,
-                                           len(train_loader.dataset.data))
+    running_metric_train = normalize_metrics(
+        running_metric_train,
+        config,
+        len(train_loader.dataset.data)
+        if config['cache_num'] == 'None' else config['cache_num'])
+    running_loss_train = normalize_metrics(
+        running_loss_train,
+        config,
+        len(train_loader.dataset.data)
+        if config['cache_num'] == 'None' else config['cache_num'])
 
     write_tensorboard(running_loss_train,
                       running_metric_train,

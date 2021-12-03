@@ -15,6 +15,11 @@ def get_encoder(config):
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
         # model.fc = nn.Identity()
+    elif config['model']['backbone'] == 'r2plus1d_18':
+        model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
+            pretrained=pretrained)
+        in_features = model.fc.in_features
+        model = nn.Sequential(*list(model.children())[:-2])
     else:
         raise ValueError('not implemented')
     return model, in_features

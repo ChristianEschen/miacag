@@ -70,8 +70,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 NormalizeIntensityd(keys=self.features,
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
-                #ToDeviced(keys=self.features, device="cuda:0"),
-                #self.maybeToGpu(),
+                self.maybeToGpu(),
                 RandSpatialCropd(keys=self.features,
                                  roi_size=[
                                      self.config['loaders']['Crop_height'],

@@ -70,7 +70,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 NormalizeIntensityd(keys=self.features,
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
-                ToDeviced(keys=self.features, device="cuda:0"),
+                self.maybeToGpu(),
                 RandSpatialCropd(keys=self.features,
                                  roi_size=[
                                      self.config['loaders']['Crop_height'],
@@ -97,19 +97,21 @@ class train_monai_classification_loader(base_monai_classification_loader):
         # plt.imshow(img, cmap="gray", interpolation="None")
         # plt.show()
         # create a training data loader
-        # train_loader = monai.data.CacheDataset(
-        #     data=self.data,
-        #     transform=train_transforms,
-        #     copy_cache=True,
-        #     #replace_rate=0.25,
-        #     num_workers=self.config['num_workers'])
-        train_loader = monai.data.SmartCacheDataset(
-            data=self.data,
-            transform=train_transforms,
-            copy_cache=True,
-            replace_rate=0.25,
-            num_init_workers=2,
-            num_replace_workers=2)
+        if self.config['cache_num'] != 'None':
+            train_loader = monai.data.SmartCacheDataset(
+                data=self.data,
+                transform=train_transforms,
+                copy_cache=True,
+                cache_num=self.config['cache_num'],
+                num_init_workers=int(self.config['num_workers']/2),
+                replace_rate=0.25,
+                num_replace_workers=int(self.config['num_workers']/2))
+        else:
+            train_loader = monai.data.CacheDataset(
+                data=self.data,
+                transform=train_transforms,
+                copy_cache=True,
+                num_workers=self.config['num_workers'])
 
         return train_loader
 

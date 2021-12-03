@@ -27,7 +27,8 @@ from monai.transforms import (
     CastToTyped,
     RandGaussianNoised,
     RandGaussianSmoothd,
-    RandScaleIntensityd)
+    RandScaleIntensityd,
+    ToDeviced)
 
 
 class base_monai_loader(DataloaderTrain):
@@ -201,3 +202,15 @@ class base_monai_loader(DataloaderTrain):
                                 self.config['loaders']['Resize_width'],
                                 self.config['loaders']['Resize_depth']))
         return resample
+
+    def maybeToGpu(self):
+        if self.config['cpu'] == 'True':
+            if self.config['task_type'] in ['representation_learning',
+                                            "classification"]:
+                device = ToDeviced(keys=self.features, device="cpu")
+            else:
+                device = ToDeviced(
+                    keys=self.features + ["labels"], device="cpu")
+        else:
+            device = ToDeviced(keys=self.features, device="cuda:0")
+        return device

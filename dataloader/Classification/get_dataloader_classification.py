@@ -132,9 +132,10 @@ class ClassificationLoader():
             else:
                 raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
-            val_loader = val_monai_classification_loader(
+            val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)
+            val_ds = val_ds()
             train_loader = ThreadDataLoader(
                 train_ds,
                 sampler=sampler,
@@ -145,13 +146,13 @@ class ClassificationLoader():
                 pin_memory=False,) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
                 val_loader = ThreadDataLoader(
-                    val_loader(),
+                    val_ds,
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
                     num_workers=config['num_workers'],
                     collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,)
-            return train_loader, val_loader
+            return train_loader, val_loader, train_ds, val_ds
         elif config['loaders']['format'] == 'rgb':
             from dataloader.Representation._2D. \
                 dataloader_monai_representation_2D_RGB \

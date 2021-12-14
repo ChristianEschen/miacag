@@ -34,7 +34,7 @@ class ClassificationModel(EncoderModel):
         self.dimension = config['model']['dimension']
 
     def forward(self, x):
-        #x = maybePermuteInput(x, self.config)
+        x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
             p = p.mean(dim=(-3, -2, -1))

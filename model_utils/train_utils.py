@@ -112,10 +112,10 @@ def early_stopping(best_val_loss, best_val_epoch,
 
 def get_device(config):
     if config["cpu"] == "False":
-        if config['loaders']['mode'] == 'training':
-            device = "cuda:{}".format(config['local_rank'])
-        else:
-            device = "cuda:0"
+        #if config['loaders']['mode'] == 'training':
+        device = "cuda:{}".format(config['local_rank'])
+       # else:
+       #     device = "cuda:0"
     else:
         device = 'cpu'
     device = torch.device(device)

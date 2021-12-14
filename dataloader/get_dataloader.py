@@ -63,7 +63,8 @@ def get_dataloader_train(config):
         from dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
-        train_loader, val_loader = CL.get_classification_loader_train(config)
+        train_loader, val_loader, train_ds, val_ds = \
+            CL.get_classification_loader_train(config)
 
         val_loader.sampler.data_source.data = \
             val_loader.sampler.data_source.data * \
@@ -91,7 +92,7 @@ def get_dataloader_train(config):
         raise ValueError(
                 "Data type is not implemented")
 
-    return train_loader, val_loader
+    return train_loader, val_loader, train_ds, val_ds
 
 
 def get_dataloader_test(config):

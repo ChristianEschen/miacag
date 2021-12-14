@@ -1,5 +1,6 @@
 from monai.networks import nets
 from torch import nn
+import torch
 
 
 def get_encoder(config):
@@ -20,11 +21,23 @@ def get_encoder(config):
             pretrained=pretrained)
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
+    elif config['model']['backbone'] == 'x3d_l':
+        path = '/home/gandalf/MIA/models/torchhub/X3D_L.pyth'
+        model = torch.hub.load("../pytorchvideo-main",
+                               source="local",
+                               model=config['model']['backbone'],
+                               pretrained=False)
+
+        model.load_state_dict(torch.load(path)['model_state'])
+        in_features = model.blocks[-1].proj.in_features
+        model = nn.Sequential(
+            *(list(model.blocks[:-1].children()) +
+              list(model.blocks[-1].children())[:-3])) 
     else:
         raise ValueError('not implemented')
     return model, in_features
 
 
 def modelsRequiredPermute():
-    model_list = ['r3d_18']
+    model_list = ['r3d_18', 'r2plus1d_18', 'x3d_l']
     return model_list

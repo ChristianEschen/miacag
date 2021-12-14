@@ -42,9 +42,9 @@ class ModelBuilder():
         path_encoder = self.config['model']['pretrain_encoder']
         from models.modules import ClassificationModel as m
         model = m(self.config)
-        if path_encoder != "None":
+        if path_encoder != 'None':
             model.encoder.load_state_dict(torch.load(path_encoder))
-        if path_model != "None":
+        if path_model != 'None':
             model.load_state_dict(
                 torch.load(os.path.join(path_model, 'model.pt')))
         return model

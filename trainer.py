@@ -24,7 +24,8 @@ def main():
     set_random_seeds(random_seed=config['manual_seed'])
     if config['use_DDP'] == 'True':
         torch.distributed.init_process_group(
-            backend="nccl" if config["cpu"] == "False" else "Gloo")
+            backend="nccl" if config["cpu"] == "False" else "Gloo",
+            init_method="env://")
     device = get_device(config)
     
     if config["cpu"] == "False":
@@ -43,7 +44,7 @@ def main():
             find_unused_parameters=True)
 
     # Get data loaders
-    train_loader, val_loader = get_dataloader_train(config)
+    train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
 
     # Get loss func
     criterion = get_loss_func(config)
@@ -55,9 +56,9 @@ def main():
     # Use AMP for speedup:
     scaler = torch.cuda.amp.GradScaler() \
         if config['loaders']['use_amp'] else None
-
     best_val_loss, best_val_epoch = None, None
     early_stop = False
+    train_ds.start()
     starter = time.time()
     #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
@@ -83,6 +84,7 @@ def main():
                         writer, config, scaler)
         print('time for training the epoch is (s)', time.time()-start)
         #  validation one epoch (but not necessarily each)
+        train_ds.update_cache()
         if epoch % config['trainer']['validate_frequency'] == 0:
             metric_dict_val = val_one_epoch(model, criterion, config,
                                             val_loader, device,
@@ -99,12 +101,15 @@ def main():
                 save_model(model, writer, config)
             if early_stop is True:
                 break
-        
+    train_ds.shutdown()
     if early_stop is False:
         save_model(model, writer, config)
     saver(metric_dict_val, writer, config)
     print('Finished Training')
     print('training loop (s)', time.time()-starter)
+    dist.destroy_process_group()
+    torch.cuda.empty_cache()
+
 
 if __name__ == '__main__':
     main()

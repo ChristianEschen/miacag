@@ -24,7 +24,12 @@ def get_optimizer(config, model, len_train):
                                     weight_decay=config['optimizer']
                                                        ['weight_decay'])
     # Set learning rate scheduler
-    if config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
+    if config['lr_scheduler']['type'] == 'step':
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=config['lr_scheduler']['steps_for_drop'],
+            gamma=0.1)
+    elif config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
         if config['lr_scheduler']['type'] == 'poly':
             print('to be implemented')
             lr_scheduler = PolynomialLRDecay(

@@ -58,7 +58,13 @@ class TestOptions():
             '--TestSize', type=float,
             default=0.2,
             help='Proportion of dataset used for testing')
-
+        self.parser.add_argument(
+            '--use_DDP', type=str,
+            help='use distributed data paralele? "TRUE" is yes',
+            default="True")
+        self.parser.add_argument(
+            "--local_rank", type=int,
+            help="Local rank: torch.distributed.launch.")    
     def parse(self):
         """ Parse Arguments.
         """
@@ -74,16 +80,12 @@ class TrainOptions(TestOptions):
 
     def __init__(self):
         super(TrainOptions, self).__init__()
-        self.parser.add_argument("--local_rank", type=int,
-                                 help="Local rank: torch.distributed.launch.")
+
         self.parser.add_argument(
             '--config', type=str,
             help='Path to the YAML config file',
             required=True),
-        self.parser.add_argument(
-            '--use_DDP', type=str,
-            help='use distributed data paralele? "TRUE" is yes',
-            default="True")
+
 
     def parse(self):
         """ Parse Arguments.

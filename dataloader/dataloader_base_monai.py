@@ -203,7 +203,7 @@ class base_monai_loader(DataloaderTrain):
                                 self.config['loaders']['Resize_depth']))
         return resample
 
-    def maybeToGpu(self):
+    def maybeToGpu(self, config):
         if self.config['cpu'] == 'True':
             if self.config['task_type'] in ['representation_learning',
                                             "classification"]:
@@ -212,5 +212,7 @@ class base_monai_loader(DataloaderTrain):
                 device = ToDeviced(
                     keys=self.features + ["labels"], device="cpu")
         else:
-            device = ToDeviced(keys=self.features, device="cuda:0")
+            device = ToDeviced(
+                keys=self.features,
+                device="cuda:{}".format(config['local_rank']))
         return device

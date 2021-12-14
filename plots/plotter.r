@@ -28,7 +28,6 @@ df$score  <- "Value"
 rv <- vector()
 
 for(i in 1:size_data){
-  print(i)
   prob = as.double(substr(sub(".*;1:", "", df$confidences[i]), 1, 6))
   rv <- c(rv, prob)
   }

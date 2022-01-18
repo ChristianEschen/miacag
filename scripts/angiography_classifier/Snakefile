@@ -1,3 +1,4 @@
+
 import uuid
 import os
 import socket
@@ -8,14 +9,18 @@ def mkFolder(dir):
     os.makedirs(dir, exist_ok=True)
 
 # inputs:
-DataSetPath = "/home/sauroman/DicomAnnotation/"
+DataSetPath = "/home/gandalf/mia/data/angio/"
 query = "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
-query_test = "SELECT * FROM ?table_name"
+query_test = "SELECT * FROM ?table_name;"
+query_train_plot = "SELECT * FROM ?table_name WHERE (phase = 'train');"
+query_val_plot = "SELECT * FROM ?table_name WHERE (phase = 'val');"
+query_test_plot = "SELECT * FROM ?table_name WHERE (phase = 'test');"
+
 table_name = "dicom_table"
 TestSize = 0.2
 
 # outputs
-output = "/home/sauroman/mia/scripts/angiography_classifier/runs"
+output = "/home/gandalf/angiography_data/runs"
 tensorboard_comment = 'test'
 experiment_name = datetime.now().strftime('%b%d_%H-%M-%S') + \
             '_' + socket.gethostname() + tensorboard_comment
@@ -29,12 +34,12 @@ output_table_name = table_name + "_" + experiment_name
 
 output_plots = os.path.join(output_directory, 'plots')
 mkFolder(output_plots)
+
 output_plots_train = os.path.join(output_plots, 'train')
 output_plots_val = os.path.join(output_plots, 'val')
 output_plots_test = os.path.join(output_plots, 'test')
-query_train_plot = query_test + " WHERE phase = 'train';"
-query_val_plot = query_test + " WHERE phase = 'val';"
-query_test_plot = query_test + " WHERE phase = 'test';"
+
+
 mkFolder(output_plots_train)
 mkFolder(output_plots_test)
 mkFolder(output_plots_val)
@@ -64,11 +69,11 @@ nnodes = 1
 node_rank = 0
 master_addr = socket.gethostbyname(socket.gethostname())
 master_port = 1232
-cpu = "True"
+cpu = "False"
 config_train = "../../configs/classification/_3D/classification_config_angio.yaml"
 
 # postgres configs
-username = 'sauroman'
+username = 'gandalf'
 password = '123qweasd'
 database = 'mydb'
 host = "localhost"
@@ -101,7 +106,7 @@ rule copy_table:
     shell:
         """
         mkdir -p {input.output_directory} \\
-        ; python ../copy_table.py \\
+        ; python ../../preprocessing/copy_table.py \\
             --database {params.database} \\
             --username {params.username} \\
             --password {params.password} \\
@@ -139,7 +144,7 @@ rule split_train_val:
         output_table_name = output_table_name
     shell:
        """
-       python ../../split_train_val.py \\
+       python ../../preprocessing/split_train_val.py \\
        --config {input.config} \\
        --database {params.database} \\
        --username {params.username} \\
@@ -147,7 +152,7 @@ rule split_train_val:
        --host {params.host} \\
        --table_name {params.output_table_name} \\
        --query "{params.query}" \\
-       --TestSize {params.TestSize}
+       --TestSize {params.TestSize} \\
        ; touch {output.tempfile_split_train_val}
        """
 
@@ -157,7 +162,8 @@ rule train_model:
         DataSetPath = DataSetPath,
         config = config_file_temp,
         output_directory = output_directory,
-        tempfile_table_copy_out = tempfile_table_copy_out
+        tempfile_table_copy_out = tempfile_table_copy_out,
+        tempfile_split_train_val = tempfile_split_train_val
     output:
         output_model = output_model
     params:
@@ -176,6 +182,7 @@ rule train_model:
         output_table_name = output_table_name
     shell:
        """
+       NCCL_DEBUG=info \\
        python -m torch.distributed.launch \\
        --nproc_per_node {params.nproc_per_node} \\
        --nnodes {params.nnodes} \\
@@ -193,8 +200,7 @@ rule train_model:
        --table_name {params.output_table_name} \\
        --query "{params.query}" \\
        --cpu {params.cpu} \\
-       --num_workers {params.num_workers} \\
-       ; touch {output.output_model}
+       --num_workers {params.num_workers}
        """
 
 rule eval_model_val_set:
@@ -213,22 +219,34 @@ rule eval_model_val_set:
         password = password,
         database = database,
         host = host,
-        output_table_name = output_table_name
+        output_table_name = output_table_name,
+        nproc_per_node = nproc_per_node,
+        nnodes = nnodes,
+        node_rank = node_rank,
+        master_addr = master_addr,
+        master_port = master_port,
+        use_DDP = "False"
     shell:
         """
-        python ../../tester.py \\
-        --num_workers {params.num_workers} \\
-        --DataSetPath {input.DataSetPath} \\
-        --output_directory {input.output_directory} \\
-        --database {params.database} \\
-        --username {params.username} \\
-        --password {params.password} \\
-        --host {params.host} \\
-        --table_name {params.output_table_name} \\
-        --query "{params.query_test}" \\
-        --cpu {params.cpu} \\
-        --TestSize {params.test_size} \\
-        ; touch {output.logfile_val} \\
+        python -m torch.distributed.launch \\
+        --nproc_per_node {params.nproc_per_node} \\
+       --nnodes {params.nnodes} \\
+       --node_rank {params.node_rank} \\
+       --master_addr {params.master_addr} \\
+       --master_port {params.master_port} \\
+       ../../tester.py \\
+       --num_workers {params.num_workers} \\
+       --DataSetPath {input.DataSetPath} \\
+       --output_directory {input.output_directory} \\
+       --database {params.database} \\
+       --username {params.username} \\
+       --password {params.password} \\
+       --host {params.host} \\
+       --table_name {params.output_table_name} \\
+       --query "{params.query_test}" \\
+       --cpu {params.cpu} \\
+       --TestSize {params.test_size} \\
+       ; touch {output.logfile_val} \\
         """
 
 rule plot_results_train:
@@ -239,7 +257,11 @@ rule plot_results_train:
         logfile_plot_train = temp(logfile_plot_train)
     params:
         output_table_name = output_table_name,
-        query = query_train_plot
+        query = query_train_plot,
+        username = username,
+        password = password,
+        database = database,
+        host = host
     shell:
         """
         mkdir -p {input.output_plots_train} \\
@@ -247,6 +269,10 @@ rule plot_results_train:
         {input.output_plots_train} \\
         {params.output_table_name} \\
         "{params.query}" \\
+        {params.username} \\
+        {params.password} \\
+        {params.host} \\
+        {params.database} \\
         ; touch {output.logfile_plot_train} \\
         """
 
@@ -258,7 +284,11 @@ rule plot_results_val:
         logfile_plot_val = temp(logfile_plot_val)
     params:
         output_table_name = output_table_name,
-        query = query_val_plot
+        query = query_val_plot,
+        username = username,
+        password = password,
+        database = database,
+        host = host
     shell:
         """
         mkdir -p {input.output_plots_val} \\
@@ -266,6 +296,10 @@ rule plot_results_val:
         {input.output_plots_val} \\
         {params.output_table_name} \\
         "{params.query}" \\
+        {params.username} \\
+        {params.password} \\
+        {params.host} \\
+        {params.database} \\
         ; touch {output.logfile_plot_val} \\
         """
 
@@ -277,7 +311,11 @@ rule plot_results_test:
         logfile_plot_test = temp(logfile_plot_test)
     params:
         output_table_name = output_table_name,
-        query = query_test_plot
+        query = query_test_plot,
+        username = username,
+        password = password,
+        database = database,
+        host = host
     shell:
         """
         mkdir -p {input.output_plots_test} \\
@@ -285,5 +323,9 @@ rule plot_results_test:
         {input.output_plots_test} \\
         {params.output_table_name} \\
         "{params.query}" \\
+        {params.username} \\
+        {params.password} \\
+        {params.host} \\
+        {params.database} \\
         ; touch {output.logfile_plot_test} \\
         """

@@ -5,13 +5,8 @@ from monai.data import (
     ThreadDataLoader)
 from torchvision import datasets
 import psycopg2
-from psycopg2.extras import execute_batch
 import pandas as pd
 import os
-from sklearn.model_selection import GroupShuffleSplit
-from typing import Iterator, Dict, Any, Optional
-from stringio import StringIteratorIO
-from io import StringIO
 from monai.data import DistributedWeightedRandomSampler
 
 
@@ -121,6 +116,8 @@ class ClassificationLoader():
                 weights=weights,
                 even_divisible=True,
                 shuffle=True)
+
+
             if config['loaders']['val_method']['type'] == 'patches':
                 from dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader
@@ -136,6 +133,7 @@ class ClassificationLoader():
                     self.val_df,
                     config)
             val_ds = val_ds()
+
             train_loader = ThreadDataLoader(
                 train_ds,
                 sampler=sampler,
@@ -219,6 +217,14 @@ class ClassificationLoader():
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
                 self.val_loader = val_monai_classification_loader(
+                    self.val_df,
+                    config)
+            elif config['loaders']['val_method']['type'] == 'sliding_window':
+                
+                from dataloader.Classification._3D. \
+                    dataloader_monai_classification_3D import \
+                    val_monai_classification_loader_SW
+                self.val_loader = val_monai_classification_loader_SW(
                     self.val_df,
                     config)
             else:

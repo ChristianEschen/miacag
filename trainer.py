@@ -12,6 +12,8 @@ from metrics.metrics_utils import init_metrics
 from model_utils.eval_utils import val_one_epoch
 import time
 import torch.distributed as dist
+from monai.utils import set_determinism
+import os
 
 
 def main():
@@ -19,15 +21,20 @@ def main():
     config = load_config(config['config'], config)
     config['loaders']['mode'] = 'training'
     config = maybe_create_tensorboard_logdir(config)
-    writer = SummaryWriter(config['output_directory'])
 
     set_random_seeds(random_seed=config['manual_seed'])
+    set_determinism(seed=config['manual_seed'])
     if config['use_DDP'] == 'True':
         torch.distributed.init_process_group(
             backend="nccl" if config["cpu"] == "False" else "Gloo",
-            init_method="env://")
+            init_method="env://"
+            )
     device = get_device(config)
-    
+
+    if torch.distributed.get_rank() == 0:
+        writer = SummaryWriter(config['output_directory'])
+    else:
+        writer = False
     if config["cpu"] == "False":
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
@@ -35,13 +42,12 @@ def main():
     BuildModel = ModelBuilder(config)
     model = BuildModel()
     model.to(device)
-
-    if config['cpu'] == "False":
-        model = torch.nn.parallel.DistributedDataParallel(
+    if config["cpu"] == "False":
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    #if config['cpu'] == "False":
+    model = torch.nn.parallel.DistributedDataParallel(
             model,
-            device_ids=[config['local_rank']],
-            output_device=config['local_rank'],
-            find_unused_parameters=True)
+            device_ids=[device] if config["cpu"] == "False" else None)
 
     # Get data loaders
     train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
@@ -58,34 +64,44 @@ def main():
         if config['loaders']['use_amp'] else None
     best_val_loss, best_val_epoch = None, None
     early_stop = False
-    train_ds.start()
+    if config['cache_num'] != 'None':
+        train_ds.start()
     starter = time.time()
+
+    # running_metric_train = init_metrics(
+    #     config['eval_metric_train']['name'])
+    # running_metric_val = init_metrics(
+    #     config['eval_metric_val']['name'])
+    running_loss_train = init_metrics(config['loss']['name'])
+    running_metric_train = init_metrics(
+            config['eval_metric_train']['name'])
+    running_loss_val = init_metrics(config['loss']['name'])
+    running_metric_val = init_metrics(
+                config['eval_metric_val']['name'])
+
     #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
-        running_loss_train, _ = init_metrics(config['loss']['name'],
-                                             config,
-                                             mode='loss')
-        running_metric_train, config['eval_metric_train']['name'] = \
-            init_metrics(config['eval_metric_train']['name'],
-                         config)
-        running_loss_val, _ = init_metrics(config['loss']['name'],
-                                           config,
-                                           mode='loss')
-        running_metric_val, config['eval_metric_val']['name'] = \
-            init_metrics(config['eval_metric_val']['name'],
-                         config)
+         # train one epoch
+        # running_loss_train = init_metrics(config['loss']['name'])
+        # running_metric_train = init_metrics(
+        #     config['eval_metric_train']['name'])
+
         start = time.time()
-        # train one epoch
+        
         train_one_epoch(model, criterion,
                         train_loader, device, epoch,
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
-        print('time for training the epoch is (s)', time.time()-start)
+                        
         #  validation one epoch (but not necessarily each)
-        train_ds.update_cache()
+        if config['cache_num'] != 'None':
+            train_ds.update_cache()
         if epoch % config['trainer']['validate_frequency'] == 0:
+            # running_loss_val = init_metrics(config['loss']['name'])
+            # running_metric_val = init_metrics(
+            #     config['eval_metric_val']['name'])
             metric_dict_val = val_one_epoch(model, criterion, config,
                                             val_loader, device,
                                             running_metric_val,
@@ -98,13 +114,18 @@ def main():
             config['best_val_epoch'] = best_val_epoch
             # save model
             if best_val_epoch == epoch:
-                save_model(model, writer, config)
+                if torch.distributed.get_rank() == 0:
+                    save_model(model, writer, config)
             if early_stop is True:
                 break
-    train_ds.shutdown()
+        
+    if config['cache_num'] != 'None':
+        train_ds.shutdown()
     if early_stop is False:
-        save_model(model, writer, config)
-    saver(metric_dict_val, writer, config)
+        if torch.distributed.get_rank() == 0:
+            save_model(model, writer, config)
+    if torch.distributed.get_rank() == 0:
+        saver(metric_dict_val, writer, config)
     print('Finished Training')
     print('training loop (s)', time.time()-starter)
     dist.destroy_process_group()

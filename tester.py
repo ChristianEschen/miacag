@@ -1,8 +1,7 @@
 import torch
 from dataloader.get_dataloader import get_dataloader_test
 from configs.options import TestOptions
-from metrics.metrics_utils import init_metrics, increment_metrics, \
-     normalize_metrics
+from metrics.metrics_utils import init_metrics, normalize_metrics
 from model_utils.get_loss_func import get_loss_func
 from model_utils.get_test_pipeline import TestPipeline
 from configs.config import load_config
@@ -36,7 +35,8 @@ def main():
     config = vars(TestOptions().parse())
     config = read_log_file(config)
     config['loaders']['mode'] = 'testing'
-    config['loaders']['val_method']["patches"] = 10
+    if config['loaders']['val_method']['saliency'] == 'False':
+        config['loaders']['val_method']["patches"] = 10
     set_random_seeds(random_seed=config['manual_seed'])
     if config['use_DDP'] == 'True':
         torch.distributed.init_process_group(
@@ -64,15 +64,19 @@ def main():
 
     # Get loss func
     criterion = get_loss_func(config)
+    running_loss_test = init_metrics(config['loss']['name'])
+    running_metric_test = init_metrics(
+                config['eval_metric_val']['name'])
 
-    running_metric_test, config['eval_metric_val']['name'] = \
-        init_metrics(config['eval_metric_val']['name'], config)
-    running_loss_test, _ = init_metrics(config['loss']['name'],
-                                        config,
-                                        mode='loss')
+
+    # running_metric_test, config['eval_metric_val']['name'] = \
+    #     init_metrics(config['eval_metric_val']['name'], config)
+    # running_loss_test, _ = init_metrics(config['loss']['name'],
+    #                                     config,
+    #                                     mode='loss')
     pipeline = TestPipeline()
     pipeline.get_test_pipeline(model, criterion, config, test_loader,
-                               device, init_metrics, increment_metrics,
+                               device, init_metrics,
                                normalize_metrics,
                                running_metric_test, running_loss_test)
 

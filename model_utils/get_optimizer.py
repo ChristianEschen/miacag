@@ -8,21 +8,20 @@ def get_optimizer(config, model, len_train):
         os.environ['WORLD_SIZE'] = '1'
     if config['optimizer']['type'] == 'adam':
         optimizer = torch.optim.Adam(
-                                     model.parameters(),
-                                     lr=config['optimizer']
-                                              ['learning_rate']*float(
-                                        os.environ['WORLD_SIZE']),
-                                     weight_decay=config['optimizer']
-                                                        ['weight_decay'])
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'] *
+            float(os.environ['WORLD_SIZE']),
+            weight_decay=config['optimizer']['weight_decay'])
+
     elif config['optimizer']['type'] == 'sgd':
+
         optimizer = torch.optim.SGD(
-                                    model.parameters(),
-                                    lr=config['optimizer']
-                                             ['learning_rate']*float(
-                                        os.environ['WORLD_SIZE']),
-                                    momentum=config['optimizer']['momentum'],
-                                    weight_decay=config['optimizer']
-                                                       ['weight_decay'])
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'] *
+            float(os.environ['WORLD_SIZE']),
+            momentum=config['optimizer']['momentum'],
+            weight_decay=config['optimizer']
+                                ['weight_decay'])
     # Set learning rate scheduler
     if config['lr_scheduler']['type'] == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(

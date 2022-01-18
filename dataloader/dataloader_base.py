@@ -5,7 +5,6 @@ from torchvision import transforms
 import numpy as np
 from dataloader.transforms import _transforms_video as T
 from torch.utils.data import WeightedRandomSampler
-#import av
 import os
 
 
@@ -88,6 +87,7 @@ class DataloaderTrain(DataloaderBase):
                                               config,
                                               transform)
         if config['task_type'] in ['classification']:
+            self.df['labels'] = self.df['labels'].astype(int)
             self.class_counts = self.df['labels'].value_counts().to_list()
             self.class_weights = [self.num_samples/self.class_counts[i] for
                                   i in range(len(self.class_counts))]  # [::-1]

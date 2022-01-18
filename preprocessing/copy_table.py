@@ -1,5 +1,6 @@
 import psycopg2
 import argparse
+from mia.preprocessing.utils.sql_utils import copy_table
 
 parser = argparse.ArgumentParser(
     description='Define inputs for copy table')
@@ -24,25 +25,6 @@ parser.add_argument(
 parser.add_argument(
     '--table_name_output', type=str,
     help="table name in database")
-
-
-def copy_table(sql_config):
-    sql = """
-        CREATE TABLE "{}" as
-        (SELECT * FROM "{}");
-        """.format(sql_config['table_name_output'],
-                   sql_config['table_name_input'])
-
-    connection = psycopg2.connect(
-            host=sql_config['host'],
-            database=sql_config['database'],
-            user=sql_config['username'],
-            password=sql_config['password'])
-    cursor = connection.cursor()
-    cursor.execute(sql)
-    cursor.execute("COMMIT;")
-    cursor.close()
-    connection.close()
 
 
 if __name__ == "__main__":

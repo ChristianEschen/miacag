@@ -15,7 +15,7 @@ from psycopg2.extras import execute_batch
 
 class TestPipeline():
     def get_test_pipeline(self, model, criterion, config, test_loader,
-                          device, init_metrics, increment_metrics,
+                          device, init_metrics,
                           normalize_metrics,
                           running_metric_test, running_loss_test):
 
@@ -23,7 +23,6 @@ class TestPipeline():
             self.get_test_classification_pipeline(model, criterion,
                                                   config, test_loader,
                                                   device, init_metrics,
-                                                  increment_metrics,
                                                   normalize_metrics,
                                                   running_metric_test,
                                                   running_loss_test)
@@ -31,7 +30,6 @@ class TestPipeline():
             self.get_test_segmentation_pipeline(model, criterion,
                                                 config, test_loader,
                                                 device, init_metrics,
-                                                increment_metrics,
                                                 normalize_metrics,
                                                 running_metric_test,
                                                 running_loss_test)
@@ -41,49 +39,49 @@ class TestPipeline():
     def get_test_classification_pipeline(self, model, criterion,
                                          config, test_loader,
                                          device, init_metrics,
-                                         increment_metrics,
                                          normalize_metrics,
                                          running_metric_test,
                                          running_loss_test):
 
-        if config['loaders']['val_method']['type'] in ['patches',
-                                                       'sliding_window']:
-            metrics, confidences = val_one_epoch(
-                model, criterion, config,
-                test_loader.val_loader, device,
-                running_metric_val=running_metric_test,
-                running_loss_val=running_loss_test,
-                saliency_maps=False)
+        metrics, confidences = val_one_epoch(
+            model, criterion, config,
+            test_loader.val_loader, device,
+            running_metric_val=running_metric_test,
+            running_loss_val=running_loss_test,
+            saliency_maps=False)
+        if config['loaders']['val_method']['saliency'] == 'False':
+            test_loader.val_df = self.buildPandasResults(
+                test_loader.val_df,
+                config['loaders']['val_method']['samples'],
+                confidences)
+
+            self.resetDataPaths(test_loader, config)
+            self.insert_data_to_db(test_loader, config)
+
+            acc = {'accuracy ensemble': accuracy_score(
+                test_loader.val_df['labels'].astype('float').astype('int'),
+                test_loader.val_df['predictions'].astype('float').astype('int'))}
+
+            print('accuracy_correct', acc)
+            print('metrics (mean of all preds)', metrics)
+            metrics.update(acc)
+            log_name = config["table_name"] + '_log.txt'
+            with open(os.path.join(config['model']['pretrain_model'],
+                      log_name), 'w') as file:
+                file.write(json.dumps({**metrics, **config},
+                           sort_keys=True, indent=4,
+                           separators=(',', ': ')))
+        elif config['loaders']['val_method']['saliency'] == 'True':
+            print('done producing saliency maps')
         else:
             raise ValueError(
                 "test pipeline is not implemented %s" % repr(
                     config['loaders']['val_method']['type']))
 
-        test_loader.val_df = self.buildPandasResults(
-            test_loader.val_df,
-            config['loaders']['val_method']['samples'],
-            confidences)
-
-        self.resetDataPaths(test_loader, config)
-        self.insert_data_to_db(test_loader, config)
-
-        acc = {'accuracy ensemble': accuracy_score(
-            test_loader.val_df['labels'].astype('float').astype('int'),
-            test_loader.val_df['predictions'].astype('float').astype('int'))}
-
-        print('accuracy_correct', acc)
-        print('metrics (mean of all preds)', metrics)
-        metrics.update(acc)
-        log_name = config["table_name"] + '_log.txt'
-        with open(os.path.join(config['model']['pretrain_model'],
-                               log_name), 'w') as file:
-            file.write(json.dumps({**metrics, **config},
-                                  sort_keys=True, indent=4,
-                                  separators=(',', ': ')))
 
     def get_test_segmentation_pipeline(self, model, criterion,
                                        config, test_loader,
-                                       device, init_metrics, increment_metrics,
+                                       device, init_metrics,
                                        normalize_metrics,
                                        running_metric_test, running_loss_test):
         from models.image2image_utils.utils_3D.test_utils_img2img_monai \

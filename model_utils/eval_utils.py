@@ -1,5 +1,6 @@
 from metrics.metrics_utils import normalize_metrics, get_metrics, \
-    create_loss_dict, increment_metrics, write_tensorboard
+    create_loss_dict, write_tensorboard, get_losses_metric, \
+    mkDir
 import torch
 from dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
@@ -8,57 +9,84 @@ from monai.inferers import SlidingWindowInferer
 from monai.inferers import SimpleInferer, SaliencyInferer
 from torch import nn
 from metrics.metrics import softmax_transform
-import numpy as np
+from model_utils.grad_cam_utils import prepare_cv2_img
 
 
-def  eval_one_step(model, inputs, labels, device, criterion,
-                  config, saliency_maps=False):
-    if saliency_maps:
-        model = build_model(config, device)
+def get_input_shape(config):
+    if config['model']['dimension'] in ['2D+T', 3]:
+        input_shape = (config['loaders']['Crop_height'],
+                       config['loaders']['Crop_width'],
+                       config['loaders']['Crop_depth'])
+    elif config['model']['dimension'] == 2:
+        input_shape = (config['loaders']['Crop_height'],
+                       config['loaders']['Crop_width'])
+    else:
+        raise ValueError("Invalid dimension %s" % repr(
+            config['model']['dimension']))
+    return input_shape
+
+
+def maybe_sliding_window(inputs, model, config):
+    if config['loaders']['val_method']['type'] == 'sliding_window' \
+            and config['task_type'] == "segmentation":
+        input_shape = get_input_shape(config)
+        outputs = sliding_window_inference(inputs, input_shape, 1, model)
+    else:
+        outputs = model(inputs)
+    return outputs
+
+
+def maybe_use_amp(use_amp, inputs, model):
+    if use_amp is True:
+        with torch.cuda.amp.autocast():
+            outputs = model(inputs)
+    else:
+        outputs = model(inputs)
+    return outputs
+
+
+def eval_one_step(model, inputs, labels, device, criterion,
+                  config, running_metric_val, running_loss_val,
+                  saliency_maps=False):
     # set model in eval mode
     model.eval()
     with torch.no_grad():
         # forward
-        if config['loaders']['val_method']['type'] == 'sliding_window':
-            if config['model']['dimension'] in ['2D+T', 3]:
-                input_shape = (config['loaders']['Crop_height'],
-                               config['loaders']['Crop_width'],
-                               config['loaders']['Crop_depth'],
-                               )
-            elif config['model']['dimension'] == 2:
-                input_shape = (config['loaders']['Crop_height'],
-                               config['loaders']['Crop_width'])
-            if config['loaders']['use_amp'] is True:
-                with torch.cuda.amp.autocast():
-                    outputs = sliding_window_inference(
-                            inputs, input_shape,
-                            1, model)
-            else:
-               # inferer = SaliencyInferer(cam_name="GradCAM", target_layers='module.encoder.4.1.conv2')(network=model, inputs=inputs)
-                outputs = sliding_window_inference(
-                            inputs, input_shape,
-                            1, model)
-        elif config['loaders']['val_method']['type'] in [
-                'patches', 'image_lvl',
-                'image_lvl+saliency_maps', 'saliency_maps']:
-            if config['loaders']['use_amp'] is True:
-                with torch.cuda.amp.autocast():
-                    outputs = model(inputs)
-            else:
-                outputs = model(inputs)
-        else:
-            raise ValueError("Invalid validation moode %s" % repr(
-                config['loaders']['val_method']['type']))
+        outputs = maybe_sliding_window(inputs, model, config)
 
         losses, _ = get_losses(config, outputs, labels, criterion)
         losses = create_loss_dict(config, losses)
     if config['task_type'] == "representation_learning":
         return outputs, losses, _
     else:
-        metrics = get_metrics(outputs, labels,
-                              config['eval_metric_val']['name'])
-    return outputs, losses, metrics
+        metrics = get_metrics(outputs,
+                            labels,
+                            running_metric_val,
+                            criterion,
+                            config)
+        losses_metric = get_losses_metric(
+            outputs,
+            labels,
+            running_loss_val,
+            losses,
+            criterion,
+            config)
+    
+    if config['loaders']['val_method']['saliency'] == 'True':
+        if config['loaders']['use_amp'] is True:
+            with torch.cuda.amp.autocast():
+                saliency = SaliencyInferer(
+                    cam_name="GradCAM",
+                    target_layers='module.encoder.6')
+        else:
+            saliency = SaliencyInferer(
+                    cam_name="GradCAM",
+                    target_layers='module.encoder.5.post_conv')
+        cams = saliency(network=model, inputs=inputs)
 
+        return outputs, losses, metrics, cams
+    else:
+        return outputs, losses, metrics, None
 
 def forward_model(inputs, model, config):
     if config['loaders']['use_amp'] is True:
@@ -154,16 +182,33 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
 
             inputs, labels = get_data_from_loader(data, config,
                                                     device)
-            outputs, loss, metrics = eval_one_step(
+            outputs, loss, metrics, cams = eval_one_step(
                                             model, inputs,
                                             labels, device,
                                             criterion,
-                                            config, saliency_maps)
+                                            config,
+                                            running_metric_val,
+                                            running_loss_val,
+                                            saliency_maps)
             if config['loaders']['mode'] == 'testing':
                 logits.append(outputs.cpu())
-            running_metric_val = increment_metrics(running_metric_val,
-                                                    metrics)
-            running_loss_val = increment_metrics(loss, running_loss_val)
+            if config['loaders']['val_method']['saliency'] == 'True':
+                patientID = data['image_path1_meta_dict']['0010|0020'][0]
+                studyInstanceUID = data['image_path1_meta_dict']['0020|000d'][0]
+                seriesInstanceUID = data['image_path1_meta_dict']['0020|000e'][0]
+                SOPInstanceUID = data['image_path1_meta_dict']['0008|0018'][0]
+
+                prepare_cv2_img(
+                    inputs.cpu().numpy(),
+                    cams.cpu().numpy(),
+                    patientID,
+                    studyInstanceUID,
+                    seriesInstanceUID,
+                    SOPInstanceUID,
+                    config)
+
+
+
     else:
         metric = eval_one_step_knn(
             get_data_from_loader,
@@ -184,7 +229,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             config, saliency_maps)
             # running_metric_val = increment_metrics(running_metric_val,
             #                                         metrics)
-            running_loss_val = increment_metrics(loss, running_loss_val)
+            #running_loss_val = increment_metrics(loss, running_loss_val)
 
     if config['loaders']['mode'] == 'training':
         return running_metric_val, running_loss_val, None
@@ -210,23 +255,22 @@ def val_one_epoch(model, criterion, config,
 
     # Normalize the metrics from the entire epoch
     if config['task_type'] != "representation_learning":
-        running_metric_val = normalize_metrics(
-            running_metric_val,
-            config,
-            len(validation_loader.dataset.data))
+        running_metric_val, metric_tb = normalize_metrics(
+            running_metric_val)
 
-    running_loss_val = normalize_metrics(
-        running_loss_val,
-        config,
-        len(validation_loader.dataset.data))
+    running_loss_val, loss_tb = normalize_metrics(
+        running_loss_val)
+
     if writer is not False:
-        write_tensorboard(running_loss_val,
-                          running_metric_val,
-                          writer, epoch, 'val')
-        
-    running_metric_val.update(running_loss_val)
+        loss_tb, metric_tb = write_tensorboard(
+            loss_tb,
+            metric_tb,
+            writer, epoch, 'val')
+
+    metric_tb.update(loss_tb)
+
 
     if config['loaders']['mode'] == 'training':
-        return running_metric_val
+        return metric_tb
     else:
-        return running_metric_val, confidences#, predictions
+        return metric_tb, confidences #, predictions

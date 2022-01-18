@@ -65,6 +65,7 @@ class TestOptions():
         self.parser.add_argument(
             "--local_rank", type=int,
             help="Local rank: torch.distributed.launch.")    
+
     def parse(self):
         """ Parse Arguments.
         """

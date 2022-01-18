@@ -16,6 +16,7 @@ from monai.transforms import (
     RandRotated,
     RandZoomd,
     Compose,
+    Rotate90d,
     SqueezeDimd,
     ToDeviced,
     RandLambdad,
@@ -98,7 +99,6 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 #           min_zoom=(1, 1, 0.5),
                 #           max_zoom=(1, 1, 1.5),
                 #           mode='nearest'),
-                
                # CopyItemsd(keys=self.features, times=1, names='inputs'),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
@@ -123,29 +123,31 @@ class train_monai_classification_loader(base_monai_classification_loader):
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
 
-        self.data = monai.data.partition_dataset(
+        self.data_par_train = monai.data.partition_dataset(
             data=self.data,
             num_partitions=dist.get_world_size(),
-            shuffle=False,
+            shuffle=True,
             even_divisible=True,
         )[dist.get_rank()]
 
+        self.config['train_data_len'] = len(self.data)
         # create a training data loader
         if self.config['cache_num'] != 'None':
             train_ds = monai.data.SmartCacheDataset(
-                data=self.data,
+                data=self.data_par_train,
                 transform=train_transforms,
                 copy_cache=True,
                 cache_num=self.config['cache_num'],
                 num_init_workers=int(self.config['num_workers']/2),
-                replace_rate=0.25,
+                replace_rate=self.config['cache_rate'],
                 num_replace_workers=int(self.config['num_workers']/2))
         else:
             train_ds = monai.data.CacheDataset(
-                data=self.data,
+                data=self.data_par_train,
                 transform=train_transforms,
                 copy_cache=True,
                 num_workers=self.config['num_workers'])
+
 
         return train_ds
 
@@ -186,18 +188,93 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 ]
         val_transforms = Compose(val_transforms)
         if self.config['use_DDP'] == 'True':
+            self.data_par_val = monai.data.partition_dataset(
+                data=self.data,
+                num_partitions=dist.get_world_size(),
+                shuffle=True,
+                even_divisible=True,
+            )[dist.get_rank()]
+            if self.config['cache_num'] != 'None':
+                val_ds = monai.data.SmartCacheDataset(
+                    data=self.data_par_val,
+                    transform=val_transforms,
+                    copy_cache=True,
+                    cache_num=self.config['cache_num'],
+                    num_init_workers=int(self.config['num_workers']/2),
+                    replace_rate=self.config['cache_rate'],
+                    num_replace_workers=int(self.config['num_workers']/2))
+            else:
+                val_ds = monai.data.CacheDataset(
+                    data=self.data_par_val,
+                    transform=val_transforms,
+                    copy_cache=True,
+                    num_workers=self.config['num_workers'])
+        else:
+            val_ds = monai.data.Dataset(
+                data=self.data,
+                transform=val_transforms)
+        
+
+
+        return val_ds
+
+
+class val_monai_classification_loader_SW(base_monai_classification_loader):
+    def __init__(self, df, config):
+        super(val_monai_classification_loader_SW, self).__init__(df,
+                                                              config)
+
+    def __call__(self):
+        val_transforms = [
+                LoadImaged(keys=self.features),
+                EnsureChannelFirstD(keys=self.features),
+              #  Rotate90d(keys=self.features, k=3),
+                self.resampleORresize(),
+                self.getMaybePad(),
+               # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                self.getCopy1to3Channels(),
+                ScaleIntensityd(keys=self.features),
+                NormalizeIntensityd(keys=self.features,
+                                    channel_wise=True),
+                EnsureTyped(keys=self.features, data_type='tensor'),
+
+                ConcatItemsd(keys=self.features, name='inputs'),
+               # DeleteItemsd(keys=self.features),
+                ]
+        val_transforms = Compose(val_transforms)
+        if self.config['use_DDP'] == 'True':
+            self.data_par_val = monai.data.partition_dataset(
+                data=self.data,
+                num_partitions=dist.get_world_size(),
+                shuffle=True,
+                even_divisible=True,
+            )[dist.get_rank()]
+            if self.config['cache_num'] != 'None':
+                val_ds = monai.data.SmartCacheDataset(
+                    data=self.data_par_val,
+                    transform=val_transforms,
+                    copy_cache=True,
+                    cache_num=self.config['cache_num'],
+                    num_init_workers=int(self.config['num_workers']/2),
+                    replace_rate=self.config['cache_rate'],
+                    num_replace_workers=int(self.config['num_workers']/2))
+            else:
+                val_ds = monai.data.CacheDataset(
+                    data=self.data_par_val,
+                    transform=val_transforms,
+                    copy_cache=True,
+                    num_workers=self.config['num_workers'])
+        else:
+            val_ds = monai.data.Dataset(
+                data=self.data,
+                transform=val_transforms)
+
             self.data = monai.data.partition_dataset(
                 data=self.data,
                 num_partitions=dist.get_world_size(),
                 shuffle=False,
                 even_divisible=True,
             )[dist.get_rank()]
-        # val_loader = monai.data.CacheDataset(
-        #     data=self.data,
-        #     transform=val_transforms,
-        #     copy_cache=False,
-        #     #  replace_rate=0.25,
-        #     num_workers=self.config['num_workers'])
         val_ds = monai.data.Dataset(
             data=self.data,
             transform=val_transforms)

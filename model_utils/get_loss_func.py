@@ -9,7 +9,7 @@ def get_loss_func(config):
     criterions = []
     for loss in config['loss']['name']:
         if loss == 'CE':
-            criterion = nn.CrossEntropyLoss()
+            criterion = nn.CrossEntropyLoss(reduction='mean')
             criterions.append(criterion)
         elif loss == 'dice_loss':
             criterion = DiceLoss(

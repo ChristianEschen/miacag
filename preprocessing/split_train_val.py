@@ -3,7 +3,8 @@ import psycopg2
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from psycopg2.extras import execute_batch
-from configs.config import load_config
+from mia.configs.config import load_config
+from mia.preprocessing.utils.sql_utils import update_cols, getDataFromDatabase
 
 
 parser = argparse.ArgumentParser(
@@ -43,12 +44,11 @@ parser.add_argument(
 class splitter():
     def __init__(self, sql_config, labels_config):
         self.sql_config = sql_config
-        self.getDataFromDatabase()
+        self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
 
         self.df = self.df[self.df['labels'].notna()]
         self.df['labels_transformed'] = self.df['labels']
         self.df = self.df.replace({'labels_transformed': labels_config})
-
 
     def groupEntriesPrPatient(self):
         '''Grouping entries pr patients'''
@@ -71,47 +71,17 @@ class splitter():
     def addPhase(self, train_df, val_df):
         train_df['phase'] = "train"
         val_df['phase'] = "val"
-        val_df = val_df[['phase', 'rowid']]
-        train_df = train_df[['phase', 'rowid']]
+        val_df = val_df[['phase', 'labels', 'rowid']]
+        train_df = train_df[['phase', 'labels', 'rowid']]
 
-        self.update(self.connection,
+        update_cols(self.connection,
                     val_df.to_dict('records'),
-                    'phase',
-                    self.sql_config)
-        self.update(self.connection,
+                    self.sql_config,
+                    ['phase', 'labels'],)
+        update_cols(self.connection,
                     train_df.to_dict('records'),
-                    'phase',
-                    self.sql_config)
-
-    def update(self, con, records, column, page_size=2):
-        cur = con.cursor()
-        values = []
-        for record in records:
-            value = (record['phase'], record['rowid'])
-            values.append(value)
-        values = tuple(values)
-        update_query = """
-        UPDATE {} AS t
-        SET phase = e.phase
-        FROM (VALUES %s) AS e(phase, rowid)
-        WHERE e.rowid = t.rowid;""".format(self.sql_config['table_name'])
-
-        psycopg2.extras.execute_values(
-            cur, update_query, values, template=None, page_size=100
-        )
-        con.commit()
-
-    def getDataFromDatabase(self):
-        self.connection = psycopg2.connect(
-            host=self.sql_config['host'],
-            database=self.sql_config['database'],
-            user=self.sql_config['username'],
-            password=self.sql_config['password'])
-        self.sql = self.sql_config['query'].replace(
-            "?table_name", "\"" + self.sql_config['table_name'] + "\"")
-        self.df = pd.read_sql_query(self.sql, self.connection)
-        if len(self.df) == 0:
-            print('The requested query does not have any data!')
+                    self.sql_config,
+                    ['phase', 'labels'])
 
     def __call__(self):
         self.train_df, self.val_df = self.groupEntriesPrPatient()

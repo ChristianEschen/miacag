@@ -7,7 +7,31 @@ from monai.transforms import (
     AsDiscrete,
     Compose,
 )
-
+from monai.metrics import ConfusionMatrixMetric
+from monai.data import decollate_batch
+import torch.nn.functional as F
+import monai
+import torch
+from metrics.cumulativeSumming import CumulativeSumming
+from monai.metrics import Cumulative, CumulativeAverage, CumulativeIterationMetric
+from monai.transforms import (
+    Activations,
+    AsDiscrete,
+    Compose,
+    EnsureChannelFirstd,
+    LoadImaged,
+    MapTransform,
+    NormalizeIntensityd,
+    Orientationd,
+    RandFlipd,
+    RandScaleIntensityd,
+    RandShiftIntensityd,
+    RandSpatialCropd,
+    Spacingd,
+    ToDeviced,
+    EnsureTyped,
+    EnsureType,
+)
 
 def convert_dict_to_str(labels_dict_val):
     items = []
@@ -47,42 +71,59 @@ def mkDir(directory):
         os.makedirs(directory)
 
 
-def init_metrics(metrics, config=None, mode="metric"):
-    if 'dice_class' in metrics:
-        for class_i in range(0, config['model']['num_classes']):
-            metrics.append('dice_class_'+str(class_i))
-        metrics.remove('dice_class')
-    if mode == "loss":
-        if len(metrics) > 1:
-            metrics = ['total_loss'] + metrics
+def init_metrics(metrics):
     dicts = {}
     keys = [0.0] * len(metrics)
     idx = range(len(keys))
     for i in idx:
-        dicts[metrics[i]] = keys[i]
-
-    return dicts, metrics
+        if metrics[i] == 'CE':
+            dicts[metrics[i]] = CumulativeAverage()
+            #dicts[metrics[i]] = CumulativeSumming()
+        elif metrics[i] == 'acc_top_1':
+            #dicts[metrics[i]] = CumulativeSumming()
+            dicts[metrics[i]] = ConfusionMatrixMetric(
+                metric_name='accuracy', reduction="mean", include_background=False)
+        else:
+            raise NotImplementedError(
+                'This metric {} is not implemented!'.format(metrics[i]))
+    return dicts
 
 
 def write_tensorboard(losses, metrics, writer, tb_step_writer, phase):
-    for loss in losses:
-        writer.add_scalar("{}/{}".format(loss, phase),
-                          losses[loss],
-                          tb_step_writer)
-    for metric in metrics:
-        writer.add_scalar("{}/{}".format(metric, phase),
-                          metrics[metric],
-                          tb_step_writer)
-    return None
+    if torch.distributed.get_rank() == 0:
+        for loss in losses:
+            writer.add_scalar("{}/{}".format(loss, phase),
+                              losses[loss],  # losses[loss],
+                              tb_step_writer)
+        for metric in metrics:
+            writer.add_scalar("{}/{}".format(metric, phase),
+                              metrics[metric],
+                              tb_step_writer)
+    return losses, metrics
 
-
-def get_metrics(outputs, labels, metrics):
+def get_metrics(outputs,
+                labels,
+                metrics,
+                criterion,
+                config):
     dicts = {}
     for metric in metrics:
         c = 0
         if metric == 'acc_top_1':
-            dicts[metric] = \
-                corrects_top_batch(outputs, labels, topk=(1, ))[0].item()
+            post_trans = Compose(
+                [EnsureType(),
+                 Activations(softmax=True),
+                 AsDiscrete(threshold=0.5)]
+                 )
+            outputs = [post_trans(i) for i in decollate_batch(outputs)]
+            labels = F.one_hot(
+                labels,
+                num_classes=config['model']['num_classes'])
+            metrics[metric](y_pred=outputs, y=labels)
+             
+            #corrects = torch.sum(torch.stack(outputs)*labels)
+           # metrics[metric].append(corrects.item())
+            dicts[metric] = metrics[metric]
         elif metric == 'acc_top_5':
             dicts[metric] = \
                 corrects_top_batch(outputs, labels, topk=(1, 5))[1].item()
@@ -93,24 +134,24 @@ def get_metrics(outputs, labels, metrics):
             post_trans_multiCat = Compose(
                 [Activations(softmax=True),
                  AsDiscrete(
-                     argmax=True, to_onehot=True,
-                     n_classes=labels.shape[1]),
-                     ])
+                    argmax=True, to_onehot=True,
+                    n_classes=labels.shape[1]),
+                    ])
             outputs = post_trans_multiCat(outputs)
             dice_global = DiceMetric(include_background=True,
-                                     reduction="mean")
+                                    reduction="mean")
             dicts[metric] = dice_global(outputs, labels)[0]
 
         elif metric.startswith('dice_class_'):
             if c < 1:
                 post_trans_multiCat = Compose(
                     [Activations(softmax=True),
-                     AsDiscrete(
+                    AsDiscrete(
                         argmax=True, to_onehot=True,
                         n_classes=labels.shape[1])])
                 outputs = post_trans_multiCat(outputs)
                 dice_channel = DiceMetric(include_background=True,
-                                          reduction="mean_batch")
+                                        reduction="mean_batch")
                 dice_channel_result = dice_channel(outputs, labels)[0]
                 for class_id in range(0, labels.shape[1]):
                     dicts[metric[:-1]+str(class_id)] = \
@@ -121,17 +162,42 @@ def get_metrics(outputs, labels, metrics):
     return dicts
 
 
-def normalize_metrics(running_metrics, config, data_len):
+def get_losses_metric(outputs,
+                      labels,
+                      running_losses,
+                      losses,
+                      criterion,
+                      config):
+    dicts = {}
+    for loss in losses:
+        if loss == 'CE':
+            running_losses[loss].append(losses[loss])
+            dicts[loss] = running_losses[loss]
+        else:
+            raise ValueError("Invalid loss %s" % repr(loss))
+    return dicts
+# OLD
+# def normalize_metrics(running_metrics, config, data_len):
+#     for running_metric in running_metrics:
+#         value = torch.sum(
+#             running_metrics[running_metric].get_buffer()) / data_len
+#         value = value.item()
+#         running_metrics[running_metric] = value
+#     return running_metrics
+
+# NEW
+def normalize_metrics(running_metrics):
+    metric_dict = {}
     for running_metric in running_metrics:
-        running_metrics[running_metric] = running_metrics[running_metric] \
-            / (data_len)
-    return running_metrics
-
-
-def increment_metrics(running_metrics, metrics, config=None):
-    for metric in metrics:
-        running_metrics[metric] += metrics[metric]
-    return running_metrics
+        if running_metric == 'CE':
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        else:
+           # metric_tb = running_metrics[running_metric].aggregate()[0].item()
+           # metric_tb = running_metrics[running_metric].sum.item()
+            metric_tb = running_metrics[running_metric].aggregate()[0].item()
+        metric_dict[running_metric] = metric_tb
+        running_metrics[running_metric].reset()
+    return running_metrics, metric_dict
 
 
 def create_loss_dict(config, losses):

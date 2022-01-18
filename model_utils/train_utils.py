@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import random
-from metrics.metrics_utils import get_metrics, increment_metrics
+from metrics.metrics_utils import get_metrics, get_losses_metric
 from metrics.metrics_utils import create_loss_dict
 from metrics.metrics_utils import normalize_metrics, write_tensorboard
 from dataloader.get_dataloader import get_data_from_loader
@@ -22,6 +22,8 @@ def set_random_seeds(random_seed=0):
 
 def train_one_step(model, inputs, labels, criterion,
                    optimizer, lr_scheduler, writer, config,
+                   running_loss_train,
+                   running_metric_train,
                    tb_step_writer, scaler):
     model.train()
     # zero the parameter gradients
@@ -42,9 +44,19 @@ def train_one_step(model, inputs, labels, criterion,
         optimizer.step()
 
     losses = create_loss_dict(config, losses)
-    metrics = get_metrics(outputs, labels,
-                          config['eval_metric_train']['name'])
-    return outputs, losses, metrics
+    metrics = get_metrics(outputs,
+                          labels,
+                          running_metric_train,
+                          criterion,
+                          config)
+    losses_metric = get_losses_metric(
+        outputs,
+        labels,
+        running_loss_train,
+        losses,
+        criterion,
+        config)
+    return outputs, losses, metrics, losses_metric
 
 
 def train_one_epoch(model, criterion,
@@ -54,37 +66,41 @@ def train_one_epoch(model, criterion,
                     writer, config, scaler):
     for i, data in enumerate(train_loader, 0):
         inputs, labels = get_data_from_loader(data, config, device)
-        outputs, loss, metrics = train_one_step(model,
-                                                inputs,
-                                                labels,
-                                                criterion,
-                                                optimizer,
-                                                lr_scheduler,
-                                                writer,
-                                                config,
-                                                tb_step_writer=i,
-                                                scaler=scaler)
-
-        running_metric_train = increment_metrics(running_metric_train,
-                                                 metrics,
-                                                 config=config)
-        running_loss_train = increment_metrics(running_loss_train, loss)
+        outputs, loss, metrics, loss_metric = train_one_step(
+            model,
+            inputs,
+            labels,
+            criterion,
+            optimizer,
+            lr_scheduler,
+            writer,
+            config,
+            running_loss_train,
+            running_metric_train,
+            tb_step_writer=i,
+            scaler=scaler)
+        # running_metric_train = increment_metrics(running_metric_train,
+        #                                          metrics)
+       # running_loss_train = increment_metrics(running_loss_train, loss)
+    
     if lr_scheduler is not False:
         lr_scheduler.step()
-    running_metric_train = normalize_metrics(
-        running_metric_train,
-        config,
-        len(train_loader.dataset.data)
-        if config['cache_num'] == 'None' else config['cache_num'])
-    running_loss_train = normalize_metrics(
-        running_loss_train,
-        config,
-        len(train_loader.dataset.data)
-        if config['cache_num'] == 'None' else config['cache_num'])
 
-    write_tensorboard(running_loss_train,
-                      running_metric_train,
-                      writer, epoch, 'train')
+    running_metric_train, metric_tb = normalize_metrics(
+        metrics)
+    running_loss_train, loss_tb = normalize_metrics(
+        loss_metric)
+    # running_loss_train = normalize_metrics(
+    #     running_loss_train,
+    #     config,
+    #     len(train_loader.dataset.data)
+    #     if config['cache_num'] == 'None' else config['cache_num_train'])
+
+    loss_tbe, metric_tb = write_tensorboard(loss_tb,
+                                            metric_tb,
+                                            writer,
+                                            epoch,
+                                            'train')
 
 
 def test_best_loss(best_val_loss, best_val_epoch, val_loss, epoch):
@@ -113,7 +129,7 @@ def early_stopping(best_val_loss, best_val_epoch,
 def get_device(config):
     if config["cpu"] == "False":
         #if config['loaders']['mode'] == 'training':
-        device = "cuda:{}".format(config['local_rank'])
+        device = "cuda:{}".format(os.environ['LOCAL_RANK'])
        # else:
        #     device = "cuda:0"
     else:

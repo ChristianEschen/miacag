@@ -129,7 +129,6 @@ def early_stopping(best_val_loss, best_val_epoch,
 def get_device(config):
     if config["cpu"] == "False":
         #if config['loaders']['mode'] == 'training':
-
         device = "cuda:{}".format(os.environ['LOCAL_RANK'])
        # else:
        #     device = "cuda:0"

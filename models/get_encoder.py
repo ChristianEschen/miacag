@@ -24,6 +24,7 @@ def get_encoder(config):
     elif config['model']['backbone'] == 'x3d_l':
         path = '/home/gandalf/MIA/models/torchhub/X3D_L.pyth'
         model = torch.hub.load("/home/gandalf/pytorchvideo-main",
+
                                source="local",
                                model=config['model']['backbone'],
                                pretrained=False)
@@ -42,6 +43,7 @@ def get_encoder(config):
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
+
     else:
         raise ValueError('not implemented')
     return model, in_features

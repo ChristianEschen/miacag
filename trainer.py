@@ -29,6 +29,7 @@ def main():
             backend="nccl" if config["cpu"] == "False" else "Gloo",
             init_method="env://"
             )
+
     device = get_device(config)
 
     if torch.distributed.get_rank() == 0:
@@ -66,6 +67,7 @@ def main():
     early_stop = False
     if config['cache_num'] != 'None':
         train_ds.start()
+
     starter = time.time()
 
     # running_metric_train = init_metrics(
@@ -98,6 +100,7 @@ def main():
         #  validation one epoch (but not necessarily each)
         if config['cache_num'] != 'None':
             train_ds.update_cache()
+
         if epoch % config['trainer']['validate_frequency'] == 0:
             # running_loss_val = init_metrics(config['loss']['name'])
             # running_metric_val = init_metrics(
@@ -118,9 +121,10 @@ def main():
                     save_model(model, writer, config)
             if early_stop is True:
                 break
-        
+
     if config['cache_num'] != 'None':
         train_ds.shutdown()
+
     if early_stop is False:
         if torch.distributed.get_rank() == 0:
             save_model(model, writer, config)

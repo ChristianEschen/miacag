@@ -133,7 +133,7 @@ class ClassificationLoader():
                     self.val_df,
                     config)
             val_ds = val_ds()
-
+      
             train_loader = ThreadDataLoader(
                 train_ds,
                 sampler=sampler,

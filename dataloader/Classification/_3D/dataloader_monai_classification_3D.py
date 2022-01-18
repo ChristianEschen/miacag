@@ -69,8 +69,8 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
-                self.getMaybePad(),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+               # self.getMaybePad(),
+                #DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
                 NormalizeIntensityd(keys=self.features,
@@ -99,7 +99,6 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 #           min_zoom=(1, 1, 0.5),
                 #           max_zoom=(1, 1, 1.5),
                 #           mode='nearest'),
-             
                # CopyItemsd(keys=self.features, times=1, names='inputs'),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
@@ -149,13 +148,6 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 copy_cache=True,
                 num_workers=self.config['num_workers'])
 
-        # if self.config['cache_num'] != 'None':
-        #     self.config['cache_num_train'] = min(
-        #         len(self.data_par_train) * self.config['cache_rate'],
-        #         self.config['cache_num'],
-        #         len(self.data_par_train))
-        # else:
-        #     self.config['cache_num_train'] = self.config['cache_num']
 
         return train_ds
 
@@ -191,7 +183,6 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 #                             self.config['loaders']['Crop_depth']],
                 #                         random_size=False,
                 #                         num_samples=10),
-                
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
                 ]
@@ -278,4 +269,13 @@ class val_monai_classification_loader_SW(base_monai_classification_loader):
                 data=self.data,
                 transform=val_transforms)
 
+            self.data = monai.data.partition_dataset(
+                data=self.data,
+                num_partitions=dist.get_world_size(),
+                shuffle=False,
+                even_divisible=True,
+            )[dist.get_rank()]
+        val_ds = monai.data.Dataset(
+            data=self.data,
+            transform=val_transforms)
         return val_ds

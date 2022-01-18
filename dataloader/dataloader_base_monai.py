@@ -215,4 +215,5 @@ class base_monai_loader(DataloaderTrain):
             device = ToDeviced(
                 keys=self.features,
                 device="cuda:{}".format(os.environ['LOCAL_RANK']))
+
         return device

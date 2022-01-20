@@ -4,8 +4,9 @@ import os
 
 
 class ModelBuilder():
-    def __init__(self, config):
+    def __init__(self, config, device):
         self.config = config
+        self.device = device
 
     def getFingerPrint(self, filename):
         with open(filename) as file:
@@ -37,11 +38,22 @@ class ModelBuilder():
             model.load_state_dict(torch.load(path))
         return model
 
+    def get_mayby_DDP(self, model):
+        if self.config["cpu"] == "False":
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    #if config['cpu'] == "False":
+        if self.config['use_DDP'] == 'True':
+            model = torch.nn.parallel.DistributedDataParallel(
+                    model,
+                    device_ids=[self.device] if self.config["cpu"] == "False" else None)
+        return model
+
     def get_classification_model(self):
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
         from models.modules import ClassificationModel as m
         model = m(self.config)
+        model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
             model.encoder.load_state_dict(torch.load(path_encoder))
         if path_model != 'None':

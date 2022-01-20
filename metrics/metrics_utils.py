@@ -12,7 +12,6 @@ from monai.data import decollate_batch
 import torch.nn.functional as F
 import monai
 import torch
-from metrics.cumulativeSumming import CumulativeSumming
 from monai.metrics import Cumulative, CumulativeAverage, CumulativeIterationMetric
 from monai.transforms import (
     Activations,

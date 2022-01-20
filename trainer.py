@@ -42,7 +42,7 @@ def main():
 
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
-    model.to(device)
+    
     
 
     # Get data loaders

@@ -50,7 +50,6 @@ def main():
 
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
-    model.to(device)
 
     if config['use_DDP'] == 'True':
         model = torch.nn.parallel.DistributedDataParallel(

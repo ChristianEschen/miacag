@@ -39,6 +39,7 @@ class ModelBuilder():
         return model
 
     def get_mayby_DDP(self, model):
+        model.to(self.device)
         if self.config["cpu"] == "False":
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     #if config['cpu'] == "False":

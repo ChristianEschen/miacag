@@ -76,7 +76,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 NormalizeIntensityd(keys=self.features,
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
-                self.maybeToGpu(self.config),
+                self.maybeToGpu(self.features),
                 RandSpatialCropd(keys=self.features,
                                  roi_size=[
                                      self.config['loaders']['Crop_height'],
@@ -105,15 +105,15 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug ###
-        # check_ds = monai.data.Dataset(data=self.data,
-        #                              transform=train_transforms)
-        # check_loader = DataLoader(
-        #     check_ds,
-        #     batch_size=self.config['loaders']['batchSize'],
-        #     num_workers=0,
-        #     collate_fn=list_data_collate
-        #     )
-        # check_data = monai.utils.misc.first(check_loader)
+        check_ds = monai.data.Dataset(data=self.data,
+                                     transform=train_transforms)
+        check_loader = DataLoader(
+            check_ds,
+            batch_size=self.config['loaders']['batchSize'],
+            num_workers=0,
+            collate_fn=list_data_collate
+            )
+        check_data = monai.utils.misc.first(check_loader)
         # img = check_data['inputs'].cpu().numpy()
         # import matplotlib.pyplot as plt
         # import numpy as np

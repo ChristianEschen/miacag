@@ -49,9 +49,12 @@ class base_monai_loader(DataloaderTrain):
                     lambda x: os.path.join(image_path, x))
         return csv
 
-    def get_input_features(self, csv):
-        features = [col for col in
-                    csv.columns.tolist() if col.startswith('image_path')]
+    def get_input_features(self, csv, features='image_path'):
+        if features == 'image_path':
+            features = [col for col in
+                        csv.columns.tolist() if col.startswith(features)]
+        else:
+            features = features
         return features
 
     # def set_feature_path(self, csv, features, image_path):
@@ -203,17 +206,17 @@ class base_monai_loader(DataloaderTrain):
                                 self.config['loaders']['Resize_depth']))
         return resample
 
-    def maybeToGpu(self, config):
+    def maybeToGpu(self, keys):
         if self.config['cpu'] == 'True':
             if self.config['task_type'] in ['representation_learning',
                                             "classification"]:
-                device = ToDeviced(keys=self.features, device="cpu")
+                device = ToDeviced(keys=keys, device="cpu")
             else:
                 device = ToDeviced(
-                    keys=self.features + ["labels"], device="cpu")
+                    keys=keys + ["labels"], device="cpu")
         else:
             device = ToDeviced(
-                keys=self.features,
+                keys=keys,
                 device="cuda:{}".format(os.environ['LOCAL_RANK']))
 
         return device

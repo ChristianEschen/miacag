@@ -48,17 +48,14 @@ def main():
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
 
-    BuildModel = ModelBuilder(config)
+    BuildModel = ModelBuilder(config, device)
     model = BuildModel()
     model.to(device)
 
-    if config['cpu'] == "False":
-        if config['use_DDP'] == 'True':
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[config['local_rank']],
-                output_device=config['local_rank'],
-                find_unused_parameters=True)
+    if config['use_DDP'] == 'True':
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[device] if config["cpu"] == "False" else None)
     # Get data loader
     test_loader = get_dataloader_test(config)
 

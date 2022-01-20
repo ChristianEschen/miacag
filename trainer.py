@@ -40,15 +40,10 @@ def main():
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
 
-    BuildModel = ModelBuilder(config)
+    BuildModel = ModelBuilder(config, device)
     model = BuildModel()
     model.to(device)
-    if config["cpu"] == "False":
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    #if config['cpu'] == "False":
-    model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_ids=[device] if config["cpu"] == "False" else None)
+    
 
     # Get data loaders
     train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
@@ -85,10 +80,6 @@ def main():
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)
          # train one epoch
-        # running_loss_train = init_metrics(config['loss']['name'])
-        # running_metric_train = init_metrics(
-        #     config['eval_metric_train']['name'])
-
         start = time.time()
         
         train_one_epoch(model, criterion,
@@ -102,9 +93,6 @@ def main():
             train_ds.update_cache()
 
         if epoch % config['trainer']['validate_frequency'] == 0:
-            # running_loss_val = init_metrics(config['loss']['name'])
-            # running_metric_val = init_metrics(
-            #     config['eval_metric_val']['name'])
             metric_dict_val = val_one_epoch(model, criterion, config,
                                             val_loader, device,
                                             running_metric_val,

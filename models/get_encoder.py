@@ -35,15 +35,24 @@ def get_encoder(config):
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
     elif config['model']['backbone'] == 'x3d_s':
-        model = torch.hub.load("/home/gandalf/pytorchvideo-main",
-                               source="local",
-                               model=config['model']['backbone'],
-                               pretrained=pretrained)
+        import pytorchvideo.models.x3d as x3d
+        model = x3d.create_x3d()  # default args creates x3d_s
         in_features = model.blocks[-1].proj.in_features
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
+    # Not image models
+    elif config['model']['backbone'] == 'linear':
+        from models.backbone_encoders.tabular.base_encoders \
+            import LinearEncoder
+        model = LinearEncoder(config['model']['incomming_features'])
+        in_features = config['model']['incomming_features']
 
+    elif config['model']['backbone'] == 'mlp':
+        from models.mlps import projection_MLP
+        in_features = 128
+        model = projection_MLP(config['model']['incomming_features'],
+                               in_features)
     else:
         raise ValueError('not implemented')
     return model, in_features

@@ -157,13 +157,14 @@ def save_model(model, writer, config):
 
 def saver(metric_dict_val, writer, config):
     # prepare dicts by flattening
-    config = unroll_list_in_dict(flatten(config))
+    config_tensorboard = unroll_list_in_dict(flatten(config))
     metric_dict_val = {str(key)+'/val': val
                        for key, val in metric_dict_val.items()}
     # save config
-    config.update(metric_dict_val)
-    save_config(writer, config)
+    config_tensorboard.update(metric_dict_val)
+    save_config(writer, config, 'config.yaml')
+    save_config(writer, metric_dict_val, 'metrics.yaml')
     # save tensorboard
-    writer.add_hparams(config, metric_dict=metric_dict_val)
+    writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()

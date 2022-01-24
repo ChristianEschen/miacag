@@ -22,18 +22,7 @@ def get_encoder(config):
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
     elif config['model']['backbone'] == 'x3d_l':
-        path = '/home/gandalf/MIA/models/torchhub/X3D_L.pyth'
-        model = torch.hub.load("/home/gandalf/pytorchvideo-main",
-
-                               source="local",
-                               model=config['model']['backbone'],
-                               pretrained=False)
-
-        model.load_state_dict(torch.load(path)['model_state'])
-        in_features = model.blocks[-1].proj.in_features
-        model = nn.Sequential(
-            *(list(model.blocks[:-1].children()) +
-              list(model.blocks[-1].children())[:-3]))
+        print('not implemented jet')
     elif config['model']['backbone'] == 'x3d_s':
         import pytorchvideo.models.x3d as x3d
         model = x3d.create_x3d()  # default args creates x3d_s

@@ -10,10 +10,27 @@ def getDataFromDatabase(sql_config):
         password=sql_config['password'])
     sql = sql_config['query'].replace(
         "?table_name", "\"" + sql_config['table_name'] + "\"")
+    sql = sql.replace(
+        "??", "\"")
     df = pd.read_sql_query(sql, connection)
     if len(df) == 0:
         print('The requested query does not have any data!')
+
     return df, connection
+
+
+def cols_to_set(cols):
+    if len(cols) == 1:
+        base = "?? = e.??"
+        string = base.replace("??", cols[0])
+    else:
+        string = []
+        base = "?? = e.??, "
+        for i in cols:
+            string.append(base.replace("??", i))
+        string = "".join(string)
+        string = string[:-2]
+    return string
 
 
 def update_cols(con, records, sql_config, cols, page_size=2):
@@ -23,11 +40,15 @@ def update_cols(con, records, sql_config, cols, page_size=2):
         value = tuple([record[i] for i in cols+['rowid']])
         values.append(value)
     values = tuple(values)
+    string = cols_to_set(cols)
     update_query = """
-    UPDATE "{}" AS t
-    SET phase = e.phase
-    FROM (VALUES %s) AS e(phase, labels, rowid)
-    WHERE e.rowid = t.rowid;""".format(sql_config['table_name'])
+    UPDATE "{table_name}" AS t
+    SET {cols_to_set}
+    FROM (VALUES %s) AS e({cols})
+    WHERE e.rowid = t.rowid;""".format(
+        table_name=sql_config['table_name'],
+        cols=', '.join(cols+['rowid']),
+        cols_to_set=string)
 
     psycopg2.extras.execute_values(
         cur, update_query, values, template=None, page_size=100

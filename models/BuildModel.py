@@ -46,7 +46,8 @@ class ModelBuilder():
         if self.config['use_DDP'] == 'True':
             model = torch.nn.parallel.DistributedDataParallel(
                     model,
-                    device_ids=[self.device] if self.config["cpu"] == "False" else None)
+                    device_ids=[self.device] if self.config["cpu"] == "False" else None,
+                    find_unused_parameters=True)
         return model
 
     def get_classification_model(self):
@@ -56,10 +57,17 @@ class ModelBuilder():
         model = m(self.config)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
-            model.encoder.load_state_dict(torch.load(path_encoder))
+            model.module.encoder.load_state_dict(torch.load(path_encoder))
         if path_model != 'None':
-            model.load_state_dict(
-                torch.load(os.path.join(path_model, 'model.pt')))
+            if self.config["use_DDP"] == "False":
+                #if self.config['use_DDP'] == 'True':
+                model.load_state_dict(
+                    torch.load(os.path.join(path_model, 'model.pt')))
+            else:
+                # model.load_state_dict(
+                #     torch.load(os.path.join(path_model, 'model.pt')))
+                model.module.load_state_dict(
+                    torch.load(os.path.join(path_model, 'model.pt')))
         return model
 
     def get_segmentation_model(self):

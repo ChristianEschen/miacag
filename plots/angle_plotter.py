@@ -57,4 +57,9 @@ if __name__ == '__main__':
     g.add_legend()
     g.figure.savefig("output.png")
 
-    print('done')
+    sns.scatterplot(
+        data=df,
+        x="PositionerPrimaryAngle",
+        y="PositionerSecondaryAngle",
+        hue="labels")
+    g.figure.savefig("angles.png")

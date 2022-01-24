@@ -10,11 +10,11 @@ def mkFolder(dir):
 
 # inputs:
 DataSetPath = "/home/gandalf/mia/data/angio/"
-query = "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
-query_test = "SELECT * FROM ?table_name;"
-query_train_plot = "SELECT * FROM ?table_name WHERE (phase = 'train');"
-query_val_plot = "SELECT * FROM ?table_name WHERE (phase = 'val');"
-query_test_plot = "SELECT * FROM ?table_name WHERE (phase = 'test');"
+query = """SELECT * FROM ?table_name WHERE (phase IS DISTINCT FROM 'test') AND (??PositionerPrimaryAngle?? IS NOT NULL);"""
+query_test = "SELECT * FROM ?table_name WHERE ??PositionerPrimaryAngle?? IS NOT NULL;"
+query_train_plot = "SELECT * FROM ?table_name WHERE (phase = 'train') AND (predictions IS NOT NULL);" #AND (??PositionerPrimaryAngle?? IS NOT NULL);"
+query_val_plot = "SELECT * FROM ?table_name WHERE (phase = 'val') AND (predictions IS NOT NULL);" # AND (??PositionerPrimaryAngle?? IS NOT NULL);"
+query_test_plot = "SELECT * FROM ?table_name WHERE (phase = 'test') AND (predictions IS NOT NULL);"# AND (??PositionerPrimaryAngle?? IS NOT NULL);"
 
 table_name = "dicom_table"
 TestSize = 0.2
@@ -70,7 +70,7 @@ node_rank = 0
 master_addr = socket.gethostbyname(socket.gethostname())
 master_port = 1232
 cpu = "False"
-config_train = "../../configs/classification/_3D/classification_config_angio.yaml"
+config_train = "../../configs/classification/tabular/classification_config_angio_tabular.yaml"
 
 # postgres configs
 username = 'gandalf'

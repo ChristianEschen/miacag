@@ -10,7 +10,7 @@ import os
 from preprocessing.pre_process import mkFolder
 import psycopg2
 from psycopg2.extras import execute_batch
-
+from preprocessing.utils.sql_utils import update_cols
 
 
 class TestPipeline():
@@ -129,8 +129,9 @@ class TestPipeline():
             test_loader.val_df['confidences'].to_list())
         test_loader.val_df['confidences'] = confidences
         records = test_loader.val_df.to_dict('records')
-        test_loader.update(records)
-
+        update_cols(test_loader.connection,
+                    records, config,
+                    ['predictions', 'confidences'])
 
     def resetDataPaths(self, test_loader, config):
         test_loader.val_df['DcmPathFlatten'] = \

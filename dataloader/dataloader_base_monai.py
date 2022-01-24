@@ -42,25 +42,25 @@ class base_monai_loader(DataloaderTrain):
                     csv.columns.tolist() if col.startswith('flow')]
         return features
 
-    def set_flow_path(self, csv, features, image_path):
+    def set_flow_path(self, csv, features, DcmPathFlatten):
         feature_paths = features
         for feature in feature_paths:
             csv[feature] = csv[feature].apply(
-                    lambda x: os.path.join(image_path, x))
+                    lambda x: os.path.join(DcmPathFlatten, x))
         return csv
 
-    def get_input_features(self, csv, features='image_path'):
-        if features == 'image_path':
+    def get_input_features(self, csv, features='DcmPathFlatten'):
+        if features == 'DcmPathFlatten':
             features = [col for col in
                         csv.columns.tolist() if col.startswith(features)]
         else:
             features = features
         return features
 
-    # def set_feature_path(self, csv, features, image_path):
+    # def set_feature_path(self, csv, features, DcmPathFlatten):
     #     for feature in features:
     #         csv[feature] = csv[feature].apply(
-    #                 lambda x: os.path.join(image_path, x))
+    #                 lambda x: os.path.join(DcmPathFlatten, x))
     #     return csv
 
     def getMaybeForegroundCropper(self):
@@ -214,9 +214,13 @@ class base_monai_loader(DataloaderTrain):
             else:
                 device = ToDeviced(
                     keys=keys + ["labels"], device="cpu")
+
         else:
-            device = ToDeviced(
-                keys=keys,
-                device="cuda:{}".format(os.environ['LOCAL_RANK']))
+            if self.config['use_DDP'] == 'False':
+                device = Identityd(keys=keys + ["labels"])
+            else:
+                device = ToDeviced(
+                    keys=keys,
+                    device="cuda:{}".format(os.environ['LOCAL_RANK']))
 
         return device

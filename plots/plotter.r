@@ -19,7 +19,11 @@ con <- dbConnect(drv =PostgreSQL(),
 
 #query the database and store the data in datafame
 sql = gsub(".?table_name", paste("\"",args[2],"\"",sep=""), args[3])
-
+#sql = gsub("??", paste("\"","","",sep=""), sql)
+#str_replace(sql, "??", "\"")
+# sql = gsub("??", "\"", sql)
+print('THE SQL statement:')
+print(sql)
 df <- dbGetQuery(con, sql)
 dbDisconnect(con)
 

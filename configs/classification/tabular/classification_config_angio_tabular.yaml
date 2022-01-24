@@ -41,7 +41,7 @@ loaders:
   #dimension order
   store_memory: False
   format: 'db'
-  use_amp: False
+  use_amp: True
   batchSize: 4
   # validation method 
   val_method:
@@ -55,7 +55,7 @@ trainer:
   # how many iterations between validations
   validate_frequency: 9999
   # max number of epochs
-  epochs: 1
+  epochs: 10
   # number of epochs before use early stopping
   max_stagnation: 100
 

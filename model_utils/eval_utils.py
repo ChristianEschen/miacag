@@ -193,10 +193,10 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
             if config['loaders']['mode'] == 'testing':
                 logits.append(outputs.cpu())
             if config['loaders']['val_method']['saliency'] == 'True':
-                patientID = data['image_path1_meta_dict']['0010|0020'][0]
-                studyInstanceUID = data['image_path1_meta_dict']['0020|000d'][0]
-                seriesInstanceUID = data['image_path1_meta_dict']['0020|000e'][0]
-                SOPInstanceUID = data['image_path1_meta_dict']['0008|0018'][0]
+                patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
+                studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
+                seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
+                SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
 
                 prepare_cv2_img(
                     inputs.cpu().numpy(),

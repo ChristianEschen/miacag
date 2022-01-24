@@ -59,6 +59,7 @@ class base_monai_classification_loader(base_monai_loader):
                 'DistanceSourceToPatient',
                 'DistanceSourceToDetector'])
         self.data = self.df[self.features + ['labels']]
+        self.data = self.data.dropna()
         for col in self.features:
             self.data[col] \
                 = (self.data[col] - self.data[col].mean() + 1e-10) \

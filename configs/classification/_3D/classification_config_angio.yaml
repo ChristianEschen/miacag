@@ -8,7 +8,7 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: x3d_s #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
-  num_classes: 3
+  num_classes: 2
   pretrained: False
   pretrain_model: "None"
   pretrain_encoder: "None"
@@ -41,7 +41,7 @@ loaders:
   format: 'dicom'
   store_memory: False
 
-  use_amp: True
+  use_amp: False
   
 
   CropForeGround: False
@@ -58,7 +58,7 @@ loaders:
   Crop_height: 130 #224 #312 #112 #112 # 224
   Crop_width: 130 #224 #312 #112 #112 # 224
   Crop_depth: 13
-  batchSize: 1
+  batchSize: 2
 
 
   # validation method 

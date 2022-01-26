@@ -49,6 +49,11 @@ class base_monai_loader(DataloaderTrain):
                     lambda x: os.path.join(DcmPathFlatten, x))
         return csv
 
+    def set_data_path(self, features):
+        for feature in features:
+            self.df[feature] = self.df[feature].apply(
+                        lambda x: os.path.join(self.config['DataSetPath'], x))
+
     def get_input_features(self, csv, features='DcmPathFlatten'):
         if features == 'DcmPathFlatten':
             features = [col for col in
@@ -56,12 +61,6 @@ class base_monai_loader(DataloaderTrain):
         else:
             features = features
         return features
-
-    # def set_feature_path(self, csv, features, DcmPathFlatten):
-    #     for feature in features:
-    #         csv[feature] = csv[feature].apply(
-    #                 lambda x: os.path.join(DcmPathFlatten, x))
-    #     return csv
 
     def getMaybeForegroundCropper(self):
         if self.config['loaders']['CropForeGround'] is False:

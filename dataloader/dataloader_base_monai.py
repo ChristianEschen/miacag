@@ -16,6 +16,8 @@ from monai.transforms import (
     # ScaleIntensityRanged,
     RandAdjustContrastd,
     RandRotate90d,
+    RandSpatialCropd,
+    CenterSpatialCropd,
     Spacingd,
     Identityd,
     SpatialPadd,
@@ -223,3 +225,21 @@ class base_monai_loader(DataloaderTrain):
                     device="cuda:{}".format(os.environ['LOCAL_RANK']))
 
         return device
+
+    def maybeCenterCrop(self, features):
+        if self.config['loaders']['mode'] == 'testing':
+            crop = CenterSpatialCropd(
+                keys=features,
+                roi_size=[
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']])
+        else:
+            crop = RandSpatialCropd(
+                keys=features,
+                roi_size=[
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']],
+                random_size=False)
+        return crop

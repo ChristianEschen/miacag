@@ -85,7 +85,10 @@ class train_monai_classification_loader(base_monai_classification_loader):
                     spatial_size=(self.config['loaders']['Crop_height'],
                                   self.config['loaders']['Crop_width'],
                                   self.config['loaders']['Crop_depth']),
-                    translate_range=(5, 5, 1),
+                    translate_range=(
+                         0.22*self.config['loaders']['Crop_height'],
+                         0.22*self.config['loaders']['Crop_width'],
+                         0.5*self.config['loaders']['Crop_depth']),
                     rotate_range=(0, 0, 0.17),
                     scale_range=(0.15, 0.15, 0),
                     padding_mode="zeros"),
@@ -154,8 +157,8 @@ class val_monai_classification_loader(base_monai_classification_loader):
         val_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.resampleORresize(),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
@@ -163,15 +166,29 @@ class val_monai_classification_loader(base_monai_classification_loader):
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                RandSpatialCropd(keys=self.features,
-                                 roi_size=[
-                                     self.config['loaders']['Crop_height'],
-                                     self.config['loaders']['Crop_width'],
-                                     self.config['loaders']['Crop_depth']],
-                                 random_size=False),
+                self.maybeCenterCrop(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                DeleteItemsd(keys=self.features),
+                DeleteItemsd(keys=self.features)
                 ]
+        
+        #CHECK: for debug ###
+        # check_ds = monai.data.Dataset(data=self.data,
+        #                              transform=val_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=0,
+        #     collate_fn=list_data_collate
+        #     )
+        # check_data = monai.utils.misc.first(check_loader)
+        # img = check_data['inputs'].cpu().numpy()
+        # import matplotlib.pyplot as plt
+        # import numpy as np
+        # for i in range(9, img.shape[-1]):
+        #     img2d = img[0,0,:,:,i]
+        #     fig_train = plt.figure()
+        #     plt.imshow(img2d, cmap="gray", interpolation="None")
+        #     plt.show()
         val_transforms = Compose(val_transforms)
         if self.config['use_DDP'] == 'True':
             self.data_par_val = monai.data.partition_dataset(

@@ -75,6 +75,8 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
                 NormalizeIntensityd(keys=self.features,
+                                    subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
+                                    divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
@@ -86,9 +88,9 @@ class train_monai_classification_loader(base_monai_classification_loader):
                                   self.config['loaders']['Crop_width'],
                                   self.config['loaders']['Crop_depth']),
                     translate_range=(
-                         0.22*self.config['loaders']['Crop_height'],
-                         0.22*self.config['loaders']['Crop_width'],
-                         0.5*self.config['loaders']['Crop_depth']),
+                         int(0.22*self.config['loaders']['Crop_height']),
+                         int(0.22*self.config['loaders']['Crop_width']),
+                         int(0.5*self.config['loaders']['Crop_depth'])),
                     rotate_range=(0, 0, 0.17),
                     scale_range=(0.15, 0.15, 0),
                     padding_mode="zeros"),
@@ -135,7 +137,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 copy_cache=True,
                 cache_num=self.config['cache_num'],
                 num_init_workers=int(self.config['num_workers']/2),
-                replace_rate=self.config['cache_rate'],
+                replace_rate=0.1,
                 num_replace_workers=int(self.config['num_workers']/2))
         else:
             train_ds = monai.data.CacheDataset(
@@ -163,6 +165,8 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
                 NormalizeIntensityd(keys=self.features,
+                                    subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
+                                    divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),

@@ -54,7 +54,7 @@ class ModelBuilder():
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
         from models.modules import ClassificationModel as m
-        model = m(self.config)
+        model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
             model.module.encoder.load_state_dict(torch.load(path_encoder))

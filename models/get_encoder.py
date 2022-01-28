@@ -1,6 +1,7 @@
 from monai.networks import nets
 from torch import nn
 import torch
+import os
 
 
 def get_encoder(config):
@@ -26,6 +27,15 @@ def get_encoder(config):
     elif config['model']['backbone'] == 'x3d_s':
         import pytorchvideo.models.x3d as x3d
         model = x3d.create_x3d()  # default args creates x3d_s
+        if config['model']['pretrained'] != "None":
+            if torch.distributed.get_rank() == 0:
+                loaded_model = torch.load(
+                        os.path.join(
+                            config['model']['pretrained'],
+                            'model.pt'), map_location='cpu')['model_state']
+                model.load_state_dict(loaded_model)
+                model.load_statt
+                print('load')
         in_features = model.blocks[-1].proj.in_features
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +

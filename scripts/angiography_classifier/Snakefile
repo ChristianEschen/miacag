@@ -3,34 +3,31 @@ import uuid
 import os
 import socket
 from datetime import datetime
+import yaml
 
+# params
+
+config_path = "../../configs/classification/_3D/classification_config_angio.yaml"
+num_workers = workflow.cores
+master_addr = socket.gethostbyname(socket.gethostname())
 
 def mkFolder(dir):
     os.makedirs(dir, exist_ok=True)
 
-# inputs:
-DataSetPath = "/home/gandalf/mia/data/angio/"
-query = "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
-query_test = "SELECT * FROM ?table_name;"
-query_train_plot = "SELECT * FROM ?table_name WHERE (phase = 'train');"
-query_val_plot = "SELECT * FROM ?table_name WHERE (phase = 'val');"
-query_test_plot = "SELECT * FROM ?table_name WHERE (phase = 'test');"
 
-table_name = "dicom_table"
-TestSize = 0.2
-
-# outputs
-output = "/home/gandalf/angiography_data/runs"
+with open(config_path) as file:
+    config = yaml.load(file, Loader=yaml.FullLoader)
+print('config', config)
 tensorboard_comment = 'test'
 experiment_name = datetime.now().strftime('%b%d_%H-%M-%S') + \
             '_' + socket.gethostname() + tensorboard_comment
 output_directory = os.path.join(
-            output,
+            config['output'],
             experiment_name)
 mkFolder(output_directory)
 output_model = os.path.join(output_directory, "model.pt")
 
-output_table_name = table_name + "_" + experiment_name
+output_table_name = config['table_name'] + "_" + experiment_name
 
 output_plots = os.path.join(output_directory, 'plots')
 mkFolder(output_plots)
@@ -60,25 +57,6 @@ logfile_plot_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_plot_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
 
-
-
-# params
-num_workers = workflow.cores
-nproc_per_node = 1
-nnodes = 1
-node_rank = 0
-master_addr = socket.gethostbyname(socket.gethostname())
-master_port = 1232
-cpu = "False"
-config_train = "../../configs/classification/_3D/classification_config_angio.yaml"
-
-# postgres configs
-username = 'gandalf'
-password = '123qweasd'
-database = 'mydb'
-host = "localhost"
-
-
 rule all:
     input:
         tempfile_table_copy_out,
@@ -96,11 +74,11 @@ rule copy_table:
     output:
         tempfile_table_copy_out = temp(tempfile_table_copy_out)
     params:
-        username = username,
-        password = password,
-        database = database,
-        host = host,
-        table_name = table_name,
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host'],
+        table_name = config['table_name'],
         output_table_name = output_table_name
 
     shell:
@@ -118,13 +96,13 @@ rule copy_table:
 
 rule copy_config:
     input:
-        config_train = config_train
+        config_path = config_path
     output:
         config_file_temp = temp(config_file_temp)
 
     shell:
         """
-        cp {input.config_train} {output.config_file_temp}
+        cp {input.config_path} {output.config_file_temp}
         """
 
 rule split_train_val:
@@ -135,12 +113,12 @@ rule split_train_val:
     output:
         tempfile_split_train_val = tempfile_split_train_val
     params:
-        query = query,
-        username = username,
-        password = password,
-        database = database,
-        TestSize = TestSize,
-        host = host,
+        query = config['query'],
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        TestSize = config['TestSize'],
+        host = config['host'],
         output_table_name = output_table_name
     shell:
        """
@@ -159,7 +137,7 @@ rule split_train_val:
 
 rule train_model:
     input:
-        DataSetPath = DataSetPath,
+        DataSetPath = config['DataSetPath'],
         config = config_file_temp,
         output_directory = output_directory,
         tempfile_table_copy_out = tempfile_table_copy_out,
@@ -167,18 +145,18 @@ rule train_model:
     output:
         output_model = output_model
     params:
-        query = query,
+        query = config['query'],
         num_workers = num_workers,
-        nproc_per_node = nproc_per_node,
-        nnodes = nnodes,
-        node_rank = node_rank,
+        nproc_per_node = config['nproc_per_node'],
+        nnodes = config['nnodes'],
+        node_rank = config['node_rank'],
         master_addr = master_addr,
-        master_port = master_port,
-        cpu = cpu,
-        username = username,
-        password = password,
-        database = database,
-        host = host,
+        master_port = config['master_port'],
+        cpu = config['cpu'],
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host'],
         output_table_name = output_table_name
     shell:
        """
@@ -205,26 +183,26 @@ rule train_model:
 
 rule eval_model_val_set:
     input:
-        DataSetPath = DataSetPath,
+        DataSetPath = config['DataSetPath'],
         output_directory = output_directory,
         out = rules.train_model.output.output_model
     output:
         logfile_val = temp(logfile_val)
     params:
         num_workers = 0,
-        cpu = cpu,
-        query_test = query_test,
+        cpu = config['cpu'],
+        query_test = config['query_test'],
         test_size = 1,
-        username = username,
-        password = password,
-        database = database,
-        host = host,
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host'],
         output_table_name = output_table_name,
-        nproc_per_node = nproc_per_node,
-        nnodes = nnodes,
-        node_rank = node_rank,
+        nproc_per_node = config['nproc_per_node'],
+        nnodes = config['nnodes'],
+        node_rank = config['node_rank'],
         master_addr = master_addr,
-        master_port = master_port,
+        master_port = config['master_port'],
         use_DDP = "False"
     shell:
         """
@@ -258,11 +236,11 @@ rule plot_results_train:
         logfile_plot_train = temp(logfile_plot_train)
     params:
         output_table_name = output_table_name,
-        query = query_train_plot,
-        username = username,
-        password = password,
-        database = database,
-        host = host
+        query = config['query_train_plot'],
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host']
     shell:
         """
         mkdir -p {input.output_plots_train} \\
@@ -285,11 +263,11 @@ rule plot_results_val:
         logfile_plot_val = temp(logfile_plot_val)
     params:
         output_table_name = output_table_name,
-        query = query_val_plot,
-        username = username,
-        password = password,
-        database = database,
-        host = host
+        query = config['query_val_plot'],
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host']
     shell:
         """
         mkdir -p {input.output_plots_val} \\
@@ -312,11 +290,11 @@ rule plot_results_test:
         logfile_plot_test = temp(logfile_plot_test)
     params:
         output_table_name = output_table_name,
-        query = query_test_plot,
-        username = username,
-        password = password,
-        database = database,
-        host = host
+        query = config['query_test_plot'],
+        username = config['username'],
+        password = config['password'],
+        database = config['database'],
+        host = config['host']
     shell:
         """
         mkdir -p {input.output_plots_test} \\

@@ -4,7 +4,36 @@ import torch
 import os
 
 
-def get_encoder(config):
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+def getPretrainedWeights(config, model, device):
+    if config['model']['pretrained'] != "None":
+        if torch.distributed.get_rank() == 0:
+            if config['cpu'] == 'True':
+                loaded_model = torch.load(
+                        os.path.join(
+                            config['model']['pretrained'], 'model.pt'),
+                        map_location=device)
+            else:
+                loaded_model = torch.load(
+                        os.path.join(
+                            config['model']['pretrained'], 'model.pt'))
+
+            if config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16']:
+                model.load_state_dict(loaded_model['model_state'])
+            else:
+                model.load_state_dict(loaded_model)
+    else:
+        pass
+    return model
+
+def get_encoder(config, device):
     if config['loaders']['mode'] != 'testing':
         pretrained = config['model']['pretrained']
     else:
@@ -19,28 +48,50 @@ def get_encoder(config):
         # model.fc = nn.Identity()
     elif config['model']['backbone'] == 'r2plus1d_18':
         model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
-            pretrained=pretrained)
+            pretrained="False")
+        model = getPretrainedWeights(config, model, device)
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
     elif config['model']['backbone'] == 'x3d_l':
         print('not implemented jet')
+    elif config['model']['backbone'] == 'slowfast8x8':
+        print('not impl')
+        import pytorchvideo.models.slowfast as slowfast
+        model = slowfast.create_slowfast()
+        model = getPretrainedWeights(config, model, device)
+        in_features = model.blocks[-1].proj.in_features
+        model = nn.Sequential(
+            *(list(model.blocks[:-1].children()) +
+              list(model.blocks[-1].children())[:-2]))
     elif config['model']['backbone'] == 'x3d_s':
         import pytorchvideo.models.x3d as x3d
         model = x3d.create_x3d()  # default args creates x3d_s
-        if config['model']['pretrained'] != "None":
-            if torch.distributed.get_rank() == 0:
-                loaded_model = torch.load(
-                        os.path.join(
-                            config['model']['pretrained'],
-                            'model.pt'), map_location='cpu')['model_state']
-                model.load_state_dict(loaded_model)
-                model.load_statt
-                print('load')
+        model = getPretrainedWeights(config, model, device)
         in_features = model.blocks[-1].proj.in_features
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
     # Not image models
+
+    elif config['model']['backbone'] == 'MVIT-16':
+        import pytorchvideo.models.vision_transformers as VT
+        #from pytorchvideo.models.vision_transformers import MultiscaleVisionTransformers
+       # model = MultiscaleVisionTransformers()
+        model = VT.create_multiscale_vision_transformers(
+            spatial_size=(config['loaders']['Crop_height'],
+                          config['loaders']['Crop_width']),
+            temporal_size=config['loaders']['Crop_depth'],
+            embed_dim_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
+            atten_head_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
+            pool_q_stride_size=[[1, 1, 2, 2], [3, 1, 2, 2], [14, 1, 2, 2]],
+            pool_kv_stride_size=None,
+            pool_kv_stride_adaptive=[1, 8, 8],
+            pool_kvq_kernel=[3, 3, 3])
+        model = getPretrainedWeights(config, model, device)
+        in_features = model.head.proj.in_features
+        model.head.proj = Identity()
+        # model = nn.Sequential(
+        #  *(list(model.patch_embed.children())+ [model.cls_positional_encoding] +list(model.blocks.children())) + [model.norm_embed] + list(model.head.children())[:-1])
     elif config['model']['backbone'] == 'linear':
         from models.backbone_encoders.tabular.base_encoders \
             import LinearEncoder
@@ -58,5 +109,7 @@ def get_encoder(config):
 
 
 def modelsRequiredPermute():
-    model_list = ['r3d_18', 'r2plus1d_18', 'x3d_l', 'x3d_s']
+    model_list = [
+        'r3d_18', 'r2plus1d_18',
+        'x3d_l', 'x3d_s', 'MVIT-16', 'slowfast8x8']
     return model_list

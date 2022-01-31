@@ -1,3 +1,4 @@
+from fnmatch import translate
 import os
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ from monai.transforms import (
     RandCropByPosNegLabeld,
     CopyItemsd,
     RandZoomd,
+    RandAffined,
     # ScaleIntensityRanged,
     RandAdjustContrastd,
     RandRotate90d,
@@ -243,3 +245,80 @@ class base_monai_loader(DataloaderTrain):
                     self.config['loaders']['Crop_depth']],
                 random_size=False)
         return crop
+
+    def maybeTranslate(self):
+        if self.config['loaders']['translate'] == 'True':
+            translation = RandAffined(
+                    keys=self.features,
+                    mode="bilinear",
+                    prob=0.2,
+                    spatial_size=(self.config['loaders']['Crop_height'],
+                                  self.config['loaders']['Crop_width'],
+                                  self.config['loaders']['Crop_depth']),
+                    translate_range=(
+                         int(0.22*self.config['loaders']['Crop_height']),
+                         int(0.22*self.config['loaders']['Crop_width']),
+                         int(0.5*self.config['loaders']['Crop_depth'])),
+                    padding_mode="zeros")
+        else:
+            translation = Identityd(keys=self.features)
+        return translation
+
+    def maybeSpatialScaling(self):
+        if self.config['loaders']['spatial_scaling'] == 'True':
+
+            spatial_scale = RandAffined(
+                        keys=self.features,
+                        mode="bilinear",
+                        prob=0.2,
+                        spatial_size=(self.config['loaders']['Crop_height'],
+                                      self.config['loaders']['Crop_width'],
+                                      self.config['loaders']['Crop_depth']),
+                        scale_range=(0.15, 0.15, 0),
+                        padding_mode="zeros")
+        else:
+            spatial_scale = Identityd(keys=self.features)
+        return spatial_scale
+
+    def maybeTemporalScaling(self):
+        if self.config['loaders']['temporal_scaling'] == 'True':
+
+            temporal_scaling = RandZoomd(
+                keys=self.features,
+                prob=0.2,
+                min_zoom=(1, 1, 0.5),
+                max_zoom=(1, 1, 1.5),
+                mode='nearest')
+        else:
+            temporal_scaling = Identityd(keys=self.features)
+        return temporal_scaling
+
+    def maybeRotate(self):
+        if self.config['loaders']['rotate'] == 'True':
+            rotate = RandAffined(
+                        keys=self.features,
+                        mode="bilinear",
+                        prob=0.2,
+                        rotate_range=(0, 0, 0.17),
+                        padding_mode="zeros")
+        else:
+            rotate = Identityd(keys=self.features)
+        return rotate
+
+    def maybeNormalize(self):
+        if self['config']['model']['backbone'] in ['x3d_s', 'slowfast8x8']:
+            normalize = NormalizeIntensityd(
+                keys=self.features,
+                subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
+                divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
+                channel_wise=True)
+        elif self['config']['model']['backbone'] == 'r2plus1d_18':
+            normalize = NormalizeIntensityd(
+                keys=self.features,
+                subtrahend=(0.43216, 0.394666, 0.37645),
+                divisor=(0.22803, 0.22145, 0.216989),
+                channel_wise=True)
+        else:
+            raise ValueError('not implemented')
+
+        return normalize

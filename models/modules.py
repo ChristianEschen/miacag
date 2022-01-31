@@ -2,6 +2,7 @@ from torch import nn
 from models.mlps import prediction_MLP, projection_MLP
 from models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
+import torch
 
 
 def maybePermuteInput(x, config):
@@ -13,11 +14,28 @@ def maybePermuteInput(x, config):
         return x
 
 
+def maybePackPathway(frames, config):
+    if config['model']['backbone'] == 'slowfast8x8':
+        fast_pathway = frames
+        alpha = 4
+        # Perform temporal sampling from the fast pathway.
+        slow_pathway = torch.index_select(
+            frames,
+            1,
+            torch.linspace(
+                0, frames.shape[1] - 1, frames.shape[1] // alpha
+            ).long())
+        frame_list = [slow_pathway, fast_pathway]
+        return frame_list
+    else:
+        return frames
+
+
 class EncoderModel(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, device):
         super(EncoderModel, self).__init__()
 
-        self.encoder, self.in_features = get_encoder(config)
+        self.encoder, self.in_features = get_encoder(config, device)
 
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
@@ -26,8 +44,8 @@ class EncoderModel(nn.Module):
 
 
 class ClassificationModel(EncoderModel):
-    def __init__(self, config):
-        super(ClassificationModel, self).__init__(config)
+    def __init__(self, config, device):
+        super(ClassificationModel, self).__init__(config, device)
         self.config = config
         self.fc = nn.Linear(self.in_features,
                             config['model']['num_classes'])
@@ -37,7 +55,10 @@ class ClassificationModel(EncoderModel):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
-            p = p.mean(dim=(-3, -2, -1))
+            if self.config['model']['backbone'] != "MVIT-16":
+                p = p.mean(dim=(-3, -2, -1))
+            else:
+                pass
         elif self.dimension == 'tabular':
             p = p
         else:
@@ -47,9 +68,9 @@ class ClassificationModel(EncoderModel):
 
 
 class SimSiam(EncoderModel):
-    def __init__(self, config):
+    def __init__(self, config, device):
         super(SimSiam, self).__init__(
-            config)
+            config, device)
         self.projector = projection_MLP(self.in_features,
                                         config['model']['feat_dim'],
                                         config['model']['num_proj_layers'],

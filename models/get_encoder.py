@@ -49,7 +49,8 @@ def get_encoder(config, device):
     elif config['model']['backbone'] == 'r2plus1d_18':
         model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
             pretrained="False")
-        model = getPretrainedWeights(config, model, device)
+        if config['loaders']['mode'] != 'testing':
+            model = getPretrainedWeights(config, model, device)
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
     elif config['model']['backbone'] == 'x3d_l':
@@ -66,7 +67,8 @@ def get_encoder(config, device):
     elif config['model']['backbone'] == 'x3d_s':
         import pytorchvideo.models.x3d as x3d
         model = x3d.create_x3d()  # default args creates x3d_s
-        model = getPretrainedWeights(config, model, device)
+        if config['loaders']['mode'] != 'testing':
+            model = getPretrainedWeights(config, model, device)
         in_features = model.blocks[-1].proj.in_features
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
@@ -87,7 +89,8 @@ def get_encoder(config, device):
             pool_kv_stride_size=None,
             pool_kv_stride_adaptive=[1, 8, 8],
             pool_kvq_kernel=[3, 3, 3])
-        model = getPretrainedWeights(config, model, device)
+        if config['loaders']['mode'] != 'testing':
+            model = getPretrainedWeights(config, model, device)
         in_features = model.head.proj.in_features
         model.head.proj = Identity()
         # model = nn.Sequential(

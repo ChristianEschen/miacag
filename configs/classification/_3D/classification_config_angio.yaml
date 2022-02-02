@@ -1,15 +1,17 @@
 # inputs:
-DataSetPath: "/home/sauroman/DicomAnnotation/"
+
+tensorboard_comment: 'test_v1'
+DataSetPath: "/home/sauroman/DicomAnnotation/sample_data/test"
 query: "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test: "SELECT * FROM ?table_name;"
 query_train_plot: "SELECT * FROM ?table_name WHERE (phase = 'train');"
 query_val_plot: "SELECT * FROM ?table_name WHERE (phase = 'val');"
 query_test_plot: "SELECT * FROM ?table_name WHERE (phase = 'test');"
 
-table_name: "dicom_table"
+table_name: "dicom_table_test"
 TestSize: 0.2
 
-nproc_per_node: 1
+nproc_per_node: 2
 nnodes: 1
 node_rank: 0
 master_port: 1232
@@ -32,9 +34,9 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "MVIT-16" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
   num_classes: 2
-  pretrained: "/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrained: "None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None"
   pretrain_encoder: "None"
 # Data loader configuration
@@ -77,17 +79,17 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 224 #224 #312 #224 #224 # 224
-  Resize_width: 224 #224 #312 #224 #224 # 224
+  Resize_height: 130 #130 #312 #130 #130 # 130
+  Resize_width: 130 #130 #312 #130 #130 # 130
   Resize_depth: -1 #-1
 
-  spatial_scaling: "True"
-  temporal_scaling: "True"
-  translate: "True"
-  rotate: "True"
+  spatial_scaling: "False"
+  temporal_scaling: "False"
+  translate: "False"
+  rotate: "False"
 
-  Crop_height: 224 #224 #312 #224 #224 # 224
-  Crop_width: 224 #224 #312 #224 #224 # 224
+  Crop_height: 130 #130 #312 #130 #130 # 130
+  Crop_width: 130 #130 #312 #224 #224 # 224
   Crop_depth: 16
   batchSize: 2
 

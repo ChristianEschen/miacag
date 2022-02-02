@@ -11,6 +11,7 @@ from preprocessing.pre_process import mkFolder
 import psycopg2
 from psycopg2.extras import execute_batch
 from preprocessing.utils.sql_utils import update_cols
+import torch
 
 
 class TestPipeline():
@@ -43,34 +44,35 @@ class TestPipeline():
                                          running_metric_test,
                                          running_loss_test):
 
-        metrics, confidences = val_one_epoch(
+        metrics, confidences, index = val_one_epoch(
             model, criterion, config,
             test_loader.val_loader, device,
             running_metric_val=running_metric_test,
             running_loss_val=running_loss_test,
             saliency_maps=False)
         if config['loaders']['val_method']['saliency'] == 'False':
-            test_loader.val_df = self.buildPandasResults(
-                test_loader.val_df,
-                config['loaders']['val_method']['samples'],
-                confidences)
+            csv_files = self.saveCsvFiles(confidences, index, config)
+            if torch.distributed.get_rank() == 0:
+                test_loader.val_df = self.buildPandasResults(
+                    test_loader.val_df,
+                    csv_files
+                    )
+                self.resetDataPaths(test_loader, config)
+                self.insert_data_to_db(test_loader, config)
 
-            self.resetDataPaths(test_loader, config)
-            self.insert_data_to_db(test_loader, config)
+                acc = {'accuracy ensemble': accuracy_score(
+                    test_loader.val_df['labels'].astype('float').astype('int'),
+                    test_loader.val_df['predictions'].astype('float').astype('int'))}
 
-            acc = {'accuracy ensemble': accuracy_score(
-                test_loader.val_df['labels'].astype('float').astype('int'),
-                test_loader.val_df['predictions'].astype('float').astype('int'))}
-
-            print('accuracy_correct', acc)
-            print('metrics (mean of all preds)', metrics)
-            metrics.update(acc)
-            log_name = config["table_name"] + '_log.txt'
-            with open(os.path.join(config['model']['pretrain_model'],
-                      log_name), 'w') as file:
-                file.write(json.dumps({**metrics, **config},
-                           sort_keys=True, indent=4,
-                           separators=(',', ': ')))
+                print('accuracy_correct', acc)
+                print('metrics (mean of all preds)', metrics)
+                metrics.update(acc)
+                log_name = config["table_name"] + '_log.txt'
+                with open(os.path.join(config['model']['pretrain_model'],
+                        log_name), 'w') as file:
+                    file.write(json.dumps({**metrics, **config},
+                            sort_keys=True, indent=4,
+                            separators=(',', ': ')))
         elif config['loaders']['val_method']['saliency'] == 'True':
             print('done producing saliency maps')
         else:
@@ -93,14 +95,13 @@ class TestPipeline():
                                        saliency_maps=False)
         testModule()
 
-    def buildPandasResults(self, val_df, samples, confidences):
-        val_df = val_df.append(
-            [val_df] * (samples - 1),
-            ignore_index=True)
-        df_pred = pd.DataFrame(
-            {'confidences': confidences.numpy().tolist()},
-            columns=['confidences'],
-            index=val_df.index)
+    def buildPandasResults(self, val_df, csv_files):
+        df_pred = self.appendDataframes(csv_files)
+        df_pred['index'] = df_pred['index'].astype(float).astype(int)
+        col_names = [i for i in df_pred.columns.to_list() if i.startswith('confidence')]
+
+        df_pred['confidences'] = df_pred[col_names].values.tolist()
+
 
         if 'predictions' in val_df.columns:
             val_df = val_df.drop(columns=['predictions'])
@@ -153,3 +154,27 @@ class TestPipeline():
 
     def tuple2key(self, t, delimiter=u';'):
         return delimiter.join(t)
+
+    def saveCsvFiles(self, confidences, index, config):
+        csv_files = os.path.join(config['model']['pretrain_model'], 'csv_files_pred')
+        mkFolder(csv_files)
+        array = np.concatenate((confidences.numpy(), np.expand_dims(index.numpy(), 1)), axis=1)
+        confidence_col = ['confidence_' + str(i) for i in range(0, confidences.shape[-1])]
+        cols = confidence_col + ['index']
+        df = pd.DataFrame(
+            array,
+            columns=cols)
+        df.to_csv(
+            os.path.join(csv_files, str(torch.distributed.get_rank()))+'.csv')
+        return csv_files
+      #  df.to_csv()
+    
+    def appendDataframes(self, csv_files_dir):
+        paths = os.listdir(csv_files_dir)
+        paths = [os.path.join(csv_files_dir, p) for p in paths]
+        li = []
+        for filename in paths:
+            df = pd.read_csv(filename, index_col=None,
+                             header=0, dtype=str)
+            li.append(df)
+        return pd.concat(li, axis=0, ignore_index=True)

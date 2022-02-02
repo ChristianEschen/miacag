@@ -17,8 +17,7 @@ def mkFolder(dir):
 
 with open(config_path) as file:
     config = yaml.load(file, Loader=yaml.FullLoader)
-print('config', config)
-tensorboard_comment = 'test'
+tensorboard_comment = config['tensorboard_comment']
 experiment_name = datetime.now().strftime('%b%d_%H-%M-%S') + \
             '_' + socket.gethostname() + tensorboard_comment
 output_directory = os.path.join(
@@ -50,7 +49,7 @@ tempfile_split_train_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_val = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
 
-config_file_temp = os.path.join('runs', str(uuid.uuid4())) + '.yaml'
+config_file_temp = os.path.join(output_directory, str(uuid.uuid4())) + '.yaml'
 
 logfile_plot_train = os.path.join('runs', str(uuid.uuid4())) + '.log'
 logfile_plot_test = os.path.join('runs', str(uuid.uuid4())) + '.log'
@@ -98,7 +97,7 @@ rule copy_config:
     input:
         config_path = config_path
     output:
-        config_file_temp = temp(config_file_temp)
+        config_file_temp = config_file_temp
 
     shell:
         """
@@ -111,7 +110,7 @@ rule split_train_val:
         output_directory = output_directory,
         tempfile_table_copy_out = tempfile_table_copy_out
     output:
-        tempfile_split_train_val = tempfile_split_train_val
+        tempfile_split_train_val = temp(tempfile_split_train_val)
     params:
         query = config['query'],
         username = config['username'],
@@ -203,7 +202,7 @@ rule eval_model_val_set:
         node_rank = config['node_rank'],
         master_addr = master_addr,
         master_port = config['master_port'],
-        use_DDP = "False"
+        use_DDP = "True"
     shell:
         """
         python -m torch.distributed.launch \\

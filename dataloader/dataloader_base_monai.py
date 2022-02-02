@@ -252,13 +252,13 @@ class base_monai_loader(DataloaderTrain):
                     keys=self.features,
                     mode="bilinear",
                     prob=0.2,
-                    spatial_size=(self.config['loaders']['Crop_height'],
-                                  self.config['loaders']['Crop_width'],
-                                  self.config['loaders']['Crop_depth']),
+                    spatial_size=(self.config['loaders']['Resize_height'],
+                                  self.config['loaders']['Resize_width'],
+                                  self.config['loaders']['Resize_depth']),
                     translate_range=(
-                         int(0.22*self.config['loaders']['Crop_height']),
-                         int(0.22*self.config['loaders']['Crop_width']),
-                         int(0.5*self.config['loaders']['Crop_depth'])),
+                         int(0.22*self.config['loaders']['Resize_height']),
+                         int(0.22*self.config['loaders']['Resize_width']),
+                         int(0.5*self.config['loaders']['Resize_depth'])),
                     padding_mode="zeros")
         else:
             translation = Identityd(keys=self.features)
@@ -271,9 +271,9 @@ class base_monai_loader(DataloaderTrain):
                         keys=self.features,
                         mode="bilinear",
                         prob=0.2,
-                        spatial_size=(self.config['loaders']['Crop_height'],
-                                      self.config['loaders']['Crop_width'],
-                                      self.config['loaders']['Crop_depth']),
+                        spatial_size=(self.config['loaders']['Resize_height'],
+                                      self.config['loaders']['Resize_width'],
+                                      self.config['loaders']['Resize_depth']),
                         scale_range=(0.15, 0.15, 0),
                         padding_mode="zeros")
         else:
@@ -300,19 +300,22 @@ class base_monai_loader(DataloaderTrain):
                         mode="bilinear",
                         prob=0.2,
                         rotate_range=(0, 0, 0.17),
+                        spatial_size=(self.config['loaders']['Resize_height'],
+                                      self.config['loaders']['Resize_width'],
+                                      self.config['loaders']['Resize_depth']),
                         padding_mode="zeros")
         else:
             rotate = Identityd(keys=self.features)
         return rotate
 
     def maybeNormalize(self):
-        if self['config']['model']['backbone'] in ['x3d_s', 'slowfast8x8']:
+        if self.config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
                 divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self['config']['model']['backbone'] == 'r2plus1d_18':
+        elif self.config['model']['backbone'] == 'r2plus1d_18':
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.43216, 0.394666, 0.37645),
@@ -322,3 +325,13 @@ class base_monai_loader(DataloaderTrain):
             raise ValueError('not implemented')
 
         return normalize
+
+    def CropTemporal(self):
+        crop = RandSpatialCropd(
+            keys=self.features,
+            roi_size=[
+                self.config['loaders']['Crop_height'],
+                self.config['loaders']['Crop_width'],
+                self.config['loaders']['Crop_depth']],
+            random_size=False)
+        return crop

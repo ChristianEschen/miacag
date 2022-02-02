@@ -44,7 +44,10 @@ def get_data_from_loader(data, config, device, val_phase=False):
     else:
         raise ValueError(
                 "Data type is not implemented")
-    return inputs, labels
+    if config['loaders']['mode'] == 'testing':
+        return inputs, labels, data['index']
+    else:
+        return inputs, labels
 
 def get_data_from_standard_Datasets(data, config, device, val_phase):
     data = {
@@ -102,9 +105,9 @@ def get_dataloader_test(config):
             ClassificationLoader
         CL = ClassificationLoader(config)
         CL.get_classificationloader_patch_lvl_test(config)
-        CL.val_loader.sampler.data_source.data = \
-            CL.val_loader.sampler.data_source.data * \
-            config['loaders']['val_method']['samples']
+        # CL.val_loader.sampler.data_source.data = \
+        #     CL.val_loader.sampler.data_source.data * \
+        #     config['loaders']['val_method']['patches']
         return CL
 
     elif config['task_type'] == 'image2image':

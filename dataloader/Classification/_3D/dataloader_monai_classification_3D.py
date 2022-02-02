@@ -54,7 +54,8 @@ class base_monai_classification_loader(base_monai_loader):
 
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        self.data = self.df[self.features + ['labels']]
+        self.df['index'] = self.df.index
+        self.data = self.df[self.features + ['labels', 'rowid', 'index']]
         self.data = self.data.to_dict('records')
 
 
@@ -74,16 +75,14 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
-                NormalizeIntensityd(keys=self.features,
-                                    subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
-                                    divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
-                                    channel_wise=True),
+                self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeTranslate(),
                 self.maybeSpatialScaling(),
                 self.maybeTemporalScaling(),
                 self.maybeRotate(),
+                self.CropTemporal(),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
                 ]
@@ -149,10 +148,7 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
-                NormalizeIntensityd(keys=self.features,
-                                    subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
-                                    divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
-                                    channel_wise=True),
+                self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features),
@@ -186,21 +182,26 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 shuffle=True,
                 even_divisible=True,
             )[dist.get_rank()]
-            if self.config['cache_num'] != 'None':
-                val_ds = monai.data.SmartCacheDataset(
-                    data=self.data_par_val,
-                    transform=val_transforms,
-                    copy_cache=True,
-                    cache_num=self.config['cache_num'],
-                    num_init_workers=int(self.config['num_workers']/2),
-                    replace_rate=self.config['cache_rate'],
-                    num_replace_workers=int(self.config['num_workers']/2))
+            if self.config['loaders']['mode'] != 'testing':
+                if self.config['cache_num'] != 'None':
+                    val_ds = monai.data.SmartCacheDataset(
+                        data=self.data_par_val,
+                        transform=val_transforms,
+                        copy_cache=True,
+                        cache_num=self.config['cache_num'],
+                        num_init_workers=int(self.config['num_workers']/2),
+                        replace_rate=self.config['cache_rate'],
+                        num_replace_workers=int(self.config['num_workers']/2))
+                else:
+                    val_ds = monai.data.CacheDataset(
+                        data=self.data_par_val,
+                        transform=val_transforms,
+                        copy_cache=True,
+                        num_workers=self.config['num_workers'])
             else:
-                val_ds = monai.data.CacheDataset(
-                    data=self.data_par_val,
-                    transform=val_transforms,
-                    copy_cache=True,
-                    num_workers=self.config['num_workers'])
+                val_ds = monai.data.Dataset(
+                    data=self.data,
+                    transform=val_transforms)
         else:
             val_ds = monai.data.Dataset(
                 data=self.data,

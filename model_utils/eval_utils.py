@@ -178,9 +178,13 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                      running_loss_val):
     if config['task_type'] != "representation_learning":
         logits = []
+        rowids = []
         for data in validation_loader:
-
-            inputs, labels = get_data_from_loader(data, config,
+            if config['loaders']['mode'] == 'testing':
+                inputs, labels, rowid = get_data_from_loader(data, config,
+                                                    device)
+            else:
+                inputs, labels = get_data_from_loader(data, config,
                                                     device)
             outputs, loss, metrics, cams = eval_one_step(
                                             model, inputs,
@@ -192,6 +196,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             saliency_maps)
             if config['loaders']['mode'] == 'testing':
                 logits.append(outputs.cpu())
+                rowids.append(rowid.cpu())
             if config['loaders']['val_method']['saliency'] == 'True':
                 patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
                 studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
@@ -232,10 +237,11 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
             #running_loss_val = increment_metrics(loss, running_loss_val)
 
     if config['loaders']['mode'] == 'training':
-        return running_metric_val, running_loss_val, None
+        return running_metric_val, running_loss_val, None, None
     else:
         logits = torch.cat(logits, dim=0)
-        return running_metric_val, running_loss_val, logits
+        rowids = torch.cat(rowids, dim=0)
+        return running_metric_val, running_loss_val, logits, rowids
 
 
 def val_one_epoch(model, criterion, config,
@@ -248,9 +254,9 @@ def val_one_epoch(model, criterion, config,
             saliency_maps,
             running_metric_val, running_loss_val)
     if config['loaders']['mode'] == 'training':
-        running_metric_val, running_loss_val, _ = eval_outputs
+        running_metric_val, running_loss_val, _, _ = eval_outputs
     else:
-        running_metric_val, running_loss_val, logits = eval_outputs
+        running_metric_val, running_loss_val, logits, rowid = eval_outputs
         confidences = softmax_transform(logits.float())
 
     # Normalize the metrics from the entire epoch
@@ -273,4 +279,4 @@ def val_one_epoch(model, criterion, config,
     if config['loaders']['mode'] == 'training':
         return metric_tb
     else:
-        return metric_tb, confidences #, predictions
+        return metric_tb, confidences, rowid  # predictions

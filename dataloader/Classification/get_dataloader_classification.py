@@ -9,6 +9,7 @@ import pandas as pd
 import os
 from monai.data import DistributedWeightedRandomSampler
 from preprocessing.utils.sql_utils import getDataFromDatabase
+import numpy as np
 
 class ClassificationLoader():
     def __init__(self, config) -> None:
@@ -86,6 +87,10 @@ class ClassificationLoader():
                 from dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
+                nr_repeat = config['loaders']['val_method']['patches']
+                self.val_df = pd.DataFrame(np.repeat(
+                    self.val_df.values, nr_repeat,
+                    axis=0), columns=self.val_df.columns)
                 self.val_loader = val_monai_classification_loader(
                     self.val_df,
                     config)

@@ -64,10 +64,13 @@ class ModelBuilder():
                 model.load_state_dict(
                     torch.load(os.path.join(path_model, 'model.pt')))
             else:
-                # model.load_state_dict(
-                #     torch.load(os.path.join(path_model, 'model.pt')))
-                model.module.load_state_dict(
-                    torch.load(os.path.join(path_model, 'model.pt')))
+                if torch.distributed.get_rank() == 0:
+                    if self.config['cpu'] == 'True':
+                        model.load_state_dict(
+                            torch.load(os.path.join(path_model, 'model.pt')))
+                    else:
+                        model.module.load_state_dict(
+                            torch.load(os.path.join(path_model, 'model.pt')))
         return model
 
     def get_segmentation_model(self):

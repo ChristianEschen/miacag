@@ -229,7 +229,7 @@ class base_monai_loader(DataloaderTrain):
         return device
 
     def maybeCenterCrop(self, features):
-        if self.config['loaders']['mode'] == 'testing':
+        if self.config['loaders']['mode'] == 'training':
             crop = CenterSpatialCropd(
                 keys=features,
                 roi_size=[

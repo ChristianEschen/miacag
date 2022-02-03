@@ -199,9 +199,12 @@ class val_monai_classification_loader(base_monai_classification_loader):
                         copy_cache=True,
                         num_workers=self.config['num_workers'])
             else:
-                val_ds = monai.data.Dataset(
-                    data=self.data,
-                    transform=val_transforms)
+                val_ds = monai.data.CacheDataset(
+                        data=self.data_par_val,
+                        transform=val_transforms,
+                        copy_cache=True,
+                        num_workers=self.config['num_workers'])
+
         else:
             val_ds = monai.data.Dataset(
                 data=self.data,

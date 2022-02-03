@@ -16,7 +16,6 @@ nnodes: 1
 node_rank: 0
 master_port: 1232
 cpu: "True"
-config_train: "../../configs/classification/_3D/classification_config_angio.yaml"
 
 # postgres configs
 username: 'sauroman'
@@ -34,10 +33,10 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  backbone: "MVIT-16" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
   num_classes: 2
   pretrained: "None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
-  pretrain_model: "None"
+  pretrain_model: "/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_encoder: "None"
 # Data loader configuration
 task_type: "classification"
@@ -79,8 +78,8 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 130 #130 #312 #130 #130 # 130
-  Resize_width: 130 #130 #312 #130 #130 # 130
+  Resize_height: 224 #224 #312 #224 #224 # 224
+  Resize_width: 224 #224 #312 #224 #224 # 224
   Resize_depth: -1 #-1
 
   spatial_scaling: "False"
@@ -88,17 +87,17 @@ loaders:
   translate: "False"
   rotate: "False"
 
-  Crop_height: 130 #130 #312 #130 #130 # 130
-  Crop_width: 130 #130 #312 #224 #224 # 224
+  Crop_height: 224 #224 #312 #224 #224 # 224
+  Crop_width: 224 #224 #312 #224 #224 # 224
   Crop_depth: 16
-  batchSize: 2
+  batchSize: 1
 
 
   # validation method 
   val_method:
     type: patches #'sliding_window' # patches | sliding_window
     samples: 1
-    saliency: 'False'
+    saliency: 'True'
     misprediction: 'False'
 
 # trainer configuration

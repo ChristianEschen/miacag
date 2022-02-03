@@ -239,25 +239,20 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
     if config['loaders']['mode'] == 'training':
         return running_metric_val, running_loss_val, None, None
     else:
-        logits = torch.cat(logits, dim=0)
-        rowids = torch.cat(rowids, dim=0)
         return running_metric_val, running_loss_val, logits, rowids
 
 
-def val_one_epoch(model, criterion, config,
-                  validation_loader, device,
-                  running_metric_val=0.0, running_loss_val=0.0,
-                  writer=False, epoch=0, saliency_maps=False):
-
+def val_one_epoch_train(
+        model, criterion, config,
+        validation_loader, device,
+        running_metric_val=0.0, running_loss_val=0.0,
+        writer=False, epoch=0, saliency_maps=False):
+    
     eval_outputs = run_val_one_step(
             model, config, validation_loader, device, criterion,
             saliency_maps,
             running_metric_val, running_loss_val)
-    if config['loaders']['mode'] == 'training':
-        running_metric_val, running_loss_val, _, _ = eval_outputs
-    else:
-        running_metric_val, running_loss_val, logits, rowid = eval_outputs
-        confidences = softmax_transform(logits.float())
+    running_metric_val, running_loss_val, _, _ = eval_outputs
 
     # Normalize the metrics from the entire epoch
     if config['task_type'] != "representation_learning":
@@ -274,9 +269,99 @@ def val_one_epoch(model, criterion, config,
             writer, epoch, 'val')
 
     metric_tb.update(loss_tb)
+    return metric_tb
 
 
+def val_one_epoch_test(
+        model, criterion, config,
+        validation_loader, device,
+        running_metric_val=0.0, running_loss_val=0.0,
+        writer=False, epoch=0, saliency_maps=False):
+    # running_metric_vals = []
+    # running_loss_vals = []
+    logitsS = []
+    rowidsS = []
+    for i in range(0, config['loaders']['val_method']["samples"]):
+        eval_outputs = run_val_one_step(
+                model, config, validation_loader, device, criterion,
+                saliency_maps,
+                running_metric_val, running_loss_val)
+        running_metric_val, running_loss_val, logits, rowids = eval_outputs
+        # running_metric_vals.append(running_metric_val)
+        # running_loss_vals.append(running_loss_val)
+        logitsS.append(logits)
+        rowidsS.append(rowids)
+    logitsS = [item for sublist in logitsS for item in sublist]
+    rowidsS = [item for sublist in rowidsS for item in sublist]
+    logits = torch.cat(logitsS, dim=0)
+    rowids = torch.cat(rowidsS, dim=0)
+    if config['task_type'] != "representation_learning":
+        running_metric_val, metric_tb = normalize_metrics(
+            running_metric_val)
+
+    running_loss_val, loss_tb = normalize_metrics(
+        running_loss_val)
+    confidences = softmax_transform(logits.float())
+    return metric_tb, confidences, rowids
+
+
+def val_one_epoch(model, criterion, config,
+                  validation_loader, device,
+                  running_metric_val=0.0, running_loss_val=0.0,
+                  writer=False, epoch=0, saliency_maps=False):
     if config['loaders']['mode'] == 'training':
+        metric_tb = val_one_epoch_train(
+            model, criterion, config,
+            validation_loader, device,
+            running_metric_val, running_loss_val,
+            writer, epoch, saliency_maps)
         return metric_tb
+
     else:
+        metric_tb, confidences, rowid = val_one_epoch_test(
+            model, criterion, config,
+            validation_loader, device,
+            running_metric_val, running_loss_val,
+            writer, epoch, saliency_maps)
         return metric_tb, confidences, rowid  # predictions
+
+### GRAVEYARD
+
+
+# def val_one_epoch(model, criterion, config,
+#                   validation_loader, device,
+#                   running_metric_val=0.0, running_loss_val=0.0,
+#                   writer=False, epoch=0, saliency_maps=False):
+#     #e  
+#     for sample in range(0, config['loaders']['val_method']["samples"]):
+#         eval_outputs = run_val_one_step(
+#                 model, config, validation_loader, device, criterion,
+#                 saliency_maps,
+#                 running_metric_val, running_loss_val)
+#     if config['loaders']['mode'] == 'training':
+#         running_metric_val, running_loss_val, _, _ = eval_outputs
+#     else:
+#         running_metric_val, running_loss_val, logits, rowid = eval_outputs
+#         confidences = softmax_transform(logits.float())
+
+#     # Normalize the metrics from the entire epoch
+#     if config['task_type'] != "representation_learning":
+#         running_metric_val, metric_tb = normalize_metrics(
+#             running_metric_val)
+
+#     running_loss_val, loss_tb = normalize_metrics(
+#         running_loss_val)
+
+#     if writer is not False:
+#         loss_tb, metric_tb = write_tensorboard(
+#             loss_tb,
+#             metric_tb,
+#             writer, epoch, 'val')
+
+#     metric_tb.update(loss_tb)
+
+
+#     if config['loaders']['mode'] == 'training':
+#         return metric_tb
+#     else:
+#         return metric_tb, confidences, rowid  # predictions

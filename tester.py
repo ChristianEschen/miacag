@@ -36,7 +36,7 @@ def main():
     config = read_log_file(config)
     config['loaders']['mode'] = 'testing'
     if config['loaders']['val_method']['saliency'] == 'False':
-        config['loaders']['val_method']["patches"] = 2
+        config['loaders']['val_method']["samples"] = 2
     set_random_seeds(random_seed=config['manual_seed'])
     if config['use_DDP'] == 'True':
         torch.distributed.init_process_group(

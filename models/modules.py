@@ -1,6 +1,6 @@
 from torch import nn
-from models.mlps import prediction_MLP, projection_MLP
-from models.get_encoder import get_encoder, modelsRequiredPermute
+from mia.models.mlps import prediction_MLP, projection_MLP
+from mia.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
 
@@ -55,7 +55,7 @@ class ClassificationModel(EncoderModel):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] != "MVIT-16":
+            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
                 p = p.mean(dim=(-3, -2, -1))
             else:
                 pass

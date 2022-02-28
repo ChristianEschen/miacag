@@ -47,30 +47,32 @@ class ModelBuilder():
             model = torch.nn.parallel.DistributedDataParallel(
                     model,
                     device_ids=[self.device] if self.config["cpu"] == "False" else None,
-                    find_unused_parameters=True)
+                    find_unused_parameters=False)
         return model
 
     def get_classification_model(self):
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
-        from models.modules import ClassificationModel as m
+        from mia.models.modules import ClassificationModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
             model.module.encoder.load_state_dict(torch.load(path_encoder))
+            
         if path_model != 'None':
             if self.config["use_DDP"] == "False":
                 #if self.config['use_DDP'] == 'True':
                 model.load_state_dict(
                     torch.load(os.path.join(path_model, 'model.pt')))
             else:
-                if torch.distributed.get_rank() == 0:
-                    if self.config['cpu'] == 'True':
-                        model.load_state_dict(
-                            torch.load(os.path.join(path_model, 'model.pt')))
-                    else:
-                        model.module.load_state_dict(
-                            torch.load(os.path.join(path_model, 'model.pt')))
+              #  if torch.distributed.get_rank() == 0:
+                if self.config['cpu'] == 'True':
+                    model.load_state_dict(
+                        torch.load(os.path.join(path_model, 'model.pt')))
+                else:
+                    model.module.load_state_dict(
+                        torch.load(os.path.join(path_model, 'model.pt')))
+                    print('model loaded state dict', model.module.encoder[0].conv.conv_t.weight[0:2,0:2,0, 0,0])
         return model
 
     def get_segmentation_model(self):

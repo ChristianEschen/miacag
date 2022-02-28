@@ -43,27 +43,32 @@ from monai.transforms import (
     Resized,
     Lambdad,
     RandSpatialCropSamplesd)
-from dataloader.dataloader_base_monai import base_monai_loader
+from mia.dataloader.dataloader_base_monai import base_monai_loader
 
 
-class base_monai_classification_loader(base_monai_loader):
+# class base_monai_classification_loader(base_monai_loader):
+#     def __init__(self, df, config):
+#         super(base_monai_classification_loader, self).__init__(
+#             df,
+#             config)
+
+#         self.features = self.get_input_features(self.df)
+#         self.set_data_path(self.features)
+#         self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+#         self.data = self.data.to_dict('records')
+
+
+class train_monai_classification_loader(base_monai_loader):
     def __init__(self, df, config):
-        super(base_monai_classification_loader, self).__init__(
+        super(base_monai_loader, self).__init__(
             df,
             config)
-
+        self.getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        self.df['index'] = self.df.index
-        self.data = self.df[self.features + ['labels', 'rowid', 'index']]
+        self.data = self.df[self.features + ['labels_transformed', 'rowid']]
         self.data = self.data.to_dict('records')
-
-
-class train_monai_classification_loader(base_monai_classification_loader):
-    def __init__(self, df, config):
-        super(train_monai_classification_loader, self).__init__(
-            df,
-            config)
+        
 
     def __call__(self):
         # define transforms for image
@@ -87,6 +92,7 @@ class train_monai_classification_loader(base_monai_classification_loader):
                 DeleteItemsd(keys=self.features),
                 ]
         train_transforms = Compose(train_transforms)
+        train_transforms.set_random_state(seed=0)
         # CHECK: for debug ###
         # check_ds = monai.data.Dataset(data=self.data,
         #                              transform=train_transforms)
@@ -134,17 +140,23 @@ class train_monai_classification_loader(base_monai_classification_loader):
         return train_ds
 
 
-class val_monai_classification_loader(base_monai_classification_loader):
+class val_monai_classification_loader(base_monai_loader):
     def __init__(self, df, config):
         super(val_monai_classification_loader, self).__init__(df,
                                                               config)
+
+        self.features = self.get_input_features(self.df)
+        self.set_data_path(self.features)
+        self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+        self.data = self.data.to_dict('records')
+
 
     def __call__(self):
         val_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                self.maybeDeleteMeta(),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
@@ -153,8 +165,9 @@ class val_monai_classification_loader(base_monai_classification_loader):
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                DeleteItemsd(keys=self.features)
+                self.maybeDeleteFeatures()
                 ]
+       # if self.config['loaders']['mode'] != 'testing':
         
         #CHECK: for debug ###
         # check_ds = monai.data.Dataset(data=self.data,
@@ -175,13 +188,15 @@ class val_monai_classification_loader(base_monai_classification_loader):
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
         val_transforms = Compose(val_transforms)
+        val_transforms.set_random_state(seed=0)
         if self.config['use_DDP'] == 'True':
             self.data_par_val = monai.data.partition_dataset(
                 data=self.data,
                 num_partitions=dist.get_world_size(),
-                shuffle=True,
-                even_divisible=True,
+                shuffle=False,
+                even_divisible=True if self.config['loaders']['mode'] != 'testing' else False,
             )[dist.get_rank()]
+            rowids = [i["rowid"] for i in self.data_par_val]
             if self.config['loaders']['mode'] != 'testing':
                 if self.config['cache_num'] != 'None':
                     val_ds = monai.data.SmartCacheDataset(
@@ -213,10 +228,14 @@ class val_monai_classification_loader(base_monai_classification_loader):
         return val_ds
 
 
-class val_monai_classification_loader_SW(base_monai_classification_loader):
+class val_monai_classification_loader_SW(base_monai_loader):
     def __init__(self, df, config):
         super(val_monai_classification_loader_SW, self).__init__(df,
                                                               config)
+        self.features = self.get_input_features(self.df)
+        self.set_data_path(self.features)
+        self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+        self.data = self.data.to_dict('records')
 
     def __call__(self):
         val_transforms = [

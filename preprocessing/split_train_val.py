@@ -45,47 +45,54 @@ class splitter():
     def __init__(self, sql_config, labels_config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
-
+        self.df = self.df[self.df['phase'] != 'test']
         self.df = self.df[self.df['labels'].notna()]
         self.df['labels_transformed'] = self.df['labels']
         self.df = self.df.replace({'labels_transformed': labels_config})
 
-    def groupEntriesPrPatient(self):
+    def groupEntriesPrPatient(self, df):
         '''Grouping entries pr patients'''
-        X = self.df.drop('labels', 1)
-        y = self.df['labels']
+        X = df.drop('labels_transformed', 1)
+        y = df['labels_transformed']
         if self.sql_config['TestSize'] == 1:
-            return None, self.df
+            return None, df
         else:
             gs = GroupShuffleSplit(
                 n_splits=2,
                 test_size=self.sql_config['TestSize'],
                 random_state=0)
             train_ix, val_ix = next(
-                gs.split(X, y, groups=self.df['PatientID']))
-            df_train = self.df.iloc[train_ix]
-            df_val = self.df.iloc[val_ix]
+                gs.split(X, y, groups=df['PatientID']))
+            df_train = df.iloc[train_ix]
+            df_val = df.iloc[val_ix]
             self.addPhase(df_train, df_val)
             return df_train, df_val
 
     def addPhase(self, train_df, val_df):
         train_df['phase'] = "train"
         val_df['phase'] = "val"
-        val_df = val_df[['phase', 'labels', 'rowid']]
-        train_df = train_df[['phase', 'labels', 'rowid']]
+        val_df = val_df[['phase', 'labels_transformed', 'rowid']]
+        train_df = train_df[['phase', 'labels_transformed', 'rowid']]
 
         update_cols(self.connection,
                     val_df.to_dict('records'),
                     self.sql_config,
-                    ['phase', 'labels'],)
+                    ['phase', 'labels_transformed'],)
         update_cols(self.connection,
                     train_df.to_dict('records'),
                     self.sql_config,
-                    ['phase', 'labels'])
+                    ['phase', 'labels_transformed'])
 
     def __call__(self):
-        self.train_df, self.val_df = self.groupEntriesPrPatient()
+        df = self.df[self.df['phase'] != 'test']
+        self.train_df, self.val_df = self.groupEntriesPrPatient(df)
+        self.test_df = self.df[self.df['phase'] == 'test']
+        self.test_df = self.test_df[['phase', 'labels_transformed', 'rowid']]
 
+        update_cols(self.connection,
+                    self.test_df.to_dict('records'),
+                    self.sql_config,
+                    ['phase', 'labels_transformed'],)
 
 if __name__ == '__main__':
     args = parser.parse_args()

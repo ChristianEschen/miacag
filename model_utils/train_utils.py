@@ -1,13 +1,13 @@
 import torch
 import numpy as np
 import random
-from metrics.metrics_utils import get_metrics, get_losses_metric
-from metrics.metrics_utils import create_loss_dict
-from metrics.metrics_utils import normalize_metrics, write_tensorboard
-from dataloader.get_dataloader import get_data_from_loader
-from model_utils.eval_utils import get_losses
-from configs.config import save_config
-from metrics.metrics_utils import flatten, \
+from mia.metrics.metrics_utils import get_metrics, get_losses_metric
+from mia.metrics.metrics_utils import create_loss_dict
+from mia.metrics.metrics_utils import normalize_metrics, write_tensorboard
+from mia.dataloader.get_dataloader import get_data_from_loader
+from mia.model_utils.eval_utils import get_losses
+from mia.configs.config import save_config
+from mia.metrics.metrics_utils import flatten, \
     unroll_list_in_dict
 import os
 

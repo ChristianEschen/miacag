@@ -16,11 +16,11 @@ class projection_MLP(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-        self.layer2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(inplace=True)
-        )
+        # self.layer2 = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.BatchNorm1d(hidden_dim),
+        #     nn.ReLU(inplace=True)
+        # )
         self.layer3 = nn.Sequential(
             nn.Linear(hidden_dim, out_dim),
             nn.BatchNorm1d(out_dim, affine=False)  # Page:5, Paragraph:2

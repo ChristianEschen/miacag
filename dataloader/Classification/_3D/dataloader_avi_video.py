@@ -18,7 +18,7 @@ class VideoDataloaderAVITrain(VideoDataloaderTrain):
         video = self.load_video(vid_name)
         video = torch.from_numpy(video)
         labels = torch.tensor(np.int(self.mapped_labels.iloc[idx]))
-        sample = {'inputs': video, 'labels': labels}
+        sample = {'inputs': video, 'labels_transformed': labels}
         if self.transform:
             sample['inputs'] = self.transform(sample['inputs'])
         return sample
@@ -42,7 +42,7 @@ class VideoDataloaderAVITest(VideoDataloaderTest):
                                                      self.transform)
         labels = torch.tensor(np.int(self.mapped_labels.iloc[idx]))
         sample = {'inputs': patches,
-                  'labels': labels,
+                  'labels_transformed': labels,
                   'file': self.csv['path'].iloc[idx],
                   'shape': video.shape[2]}
         return sample

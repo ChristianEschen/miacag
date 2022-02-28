@@ -42,7 +42,7 @@ df$score <- rv
 # ROC Curve
 pdf(file=file.path(output_folder, 'roc.pdf'))
 
-my_roc = roc(df$labels, df$score, smoothed = TRUE,
+my_roc = roc(df$labels_transformed, df$score, smoothed = TRUE,
    # arguments for plot
    plot=TRUE,
    print.auc=TRUE, show.thres=TRUE)
@@ -52,11 +52,11 @@ dev.off()
 
 categories = c('LCA', 'RCA')
 d1 <- data.frame(Col1=c(0, 1), Col2=categories, stringsAsFactors=FALSE)
-df$labels = d1$Col2[match(df$labels, d1$Col1)]
+df$labels_transformed = d1$Col2[match(df$labels_transformed, d1$Col1)]
 
 pdf(file=file.path(output_folder, 'histogram.pdf'))
 
-ggplot(df, aes(x=score, color=labels)) +
+ggplot(df, aes(x=score, color=labels_transformed)) +
   geom_histogram(fill="white")
 dev.off() 
 
@@ -64,7 +64,7 @@ dev.off()
 
 
 #create confusion matrix
-confmat <- confusionMatrix(data=factor(d1$Col2[match(df$predictions, d1$Col1)]), reference = factor(df$labels))
+confmat <- confusionMatrix(data=factor(d1$Col2[match(df$predictions, d1$Col1)]), reference = factor(df$labels_transformed))
 draw_confusion_matrix <- function(cm, cats) {
   
   layout(matrix(c(1,1,2)))

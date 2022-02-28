@@ -2,7 +2,7 @@ from fnmatch import translate
 import os
 import numpy as np
 import pandas as pd
-from dataloader.dataloader_base import DataloaderTrain
+from mia.dataloader.dataloader_base import DataloaderBase
 from monai.transforms import (
     AddChanneld,
     Compose,
@@ -15,6 +15,7 @@ from monai.transforms import (
     CopyItemsd,
     RandZoomd,
     RandAffined,
+    DeleteItemsd,
     # ScaleIntensityRanged,
     RandAdjustContrastd,
     RandRotate90d,
@@ -35,7 +36,7 @@ from monai.transforms import (
     ToDeviced)
 
 
-class base_monai_loader(DataloaderTrain):
+class base_monai_loader(DataloaderBase):
     def __init__(self, df,
                  config):
         super(base_monai_loader, self).__init__(df,
@@ -309,7 +310,8 @@ class base_monai_loader(DataloaderTrain):
         return rotate
 
     def maybeNormalize(self):
-        if self.config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16']:
+        if self.config['model']['backbone'] in [
+            'x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
@@ -335,3 +337,18 @@ class base_monai_loader(DataloaderTrain):
                 self.config['loaders']['Crop_depth']],
             random_size=False)
         return crop
+
+    def maybeDeleteFeatures(self):
+        if self.config['loaders']['mode'] == 'training':
+            deleter = DeleteItemsd(keys=self.features)
+        else:
+            deleter = Identityd(keys=self.features)
+        return deleter
+
+    def maybeDeleteMeta(self):
+        if self.config['loaders']['mode'] == 'training':
+            deleter = DeleteItemsd(
+                keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True)
+        else:
+            deleter = Identityd(keys=self.features)
+        return deleter

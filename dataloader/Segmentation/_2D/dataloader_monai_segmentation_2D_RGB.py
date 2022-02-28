@@ -47,7 +47,7 @@ class base_monai_segmentation_loader():
                                          self.features,
                                          self.image_path)
         self.data = self.csv.to_dict('records')
-        self.image_data = self.csv[self.features+['labels']].to_dict('records')
+        self.image_data = self.csv[self.features+['labels_transformed']].to_dict('records')
         self.config = config
 
     def get_input_features(self, csv):
@@ -56,7 +56,7 @@ class base_monai_segmentation_loader():
         return features
 
     def set_feature_path(self, csv, features, image_path):
-        feature_paths = features + ['labels']
+        feature_paths = features + ['labels_transformed']
         for feature in feature_paths:
             csv[feature] = csv[feature].apply(
                     lambda x: os.path.join(image_path, x))

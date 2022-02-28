@@ -1,5 +1,5 @@
 import os
-from metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
+from mia.metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
 import collections
 from monai.metrics import DiceMetric
 from monai.transforms import (

@@ -111,8 +111,8 @@ def main():
     #df_train = maybeConcatDf(df_train, args.unlabeled_folder)
     df_train = remove_leakage(df_train, df_val, 'bth_pid')
 
-    df_train['labels_ori'] = df_train['labels']
-    df_val['labels_ori'] = df_val['labels']
+    df_train['labels_ori'] = df_train['labels_transformed']
+    df_val['labels_ori'] = df_val['labels_transformed']
     di = {'0': '0',
           '1': '1',
           '2': '2',
@@ -133,12 +133,12 @@ def main():
           '18': '6',
           '19': '6',
           '20': '6'}
-    df_train = df_train.replace({'labels': di})
-    df_val = df_val.replace({'labels': di})
-    df_val = df_val[df_val['labels'] != 'stop']
-    df_val = df_val[df_val['labels'] != 'slut']
-    df_train = df_train[df_train['labels'] != 'stop']
-    df_train = df_train[df_train['labels'] != 'slut']
+    df_train = df_train.replace({'labels_transformed': di})
+    df_val = df_val.replace({'labels_transformed': di})
+    df_val = df_val[df_val['labels_transformed'] != 'stop']
+    df_val = df_val[df_val['labels_transformed'] != 'slut']
+    df_train = df_train[df_train['labels_transformed'] != 'stop']
+    df_train = df_train[df_train['labels_transformed'] != 'slut']
 
     df_val['image1'] = df_val['RecursiveFilePath'].apply(
             lambda x: os.path.splitext(
@@ -195,8 +195,8 @@ def main():
 
 
     # do baseline 
-    labels_train = df_train['labels'].dropna().astype(int).to_numpy()
-    labels_val = df_val['labels'].dropna().astype(int).to_numpy()
+    labels_train = df_train['labels_transformed'].dropna().astype(int).to_numpy()
+    labels_val = df_val['labels_transformed'].dropna().astype(int).to_numpy()
     preds_train = np.zeros(len(labels_train)).astype(int)
     preds_val = np.zeros(len(labels_val)).astype(int)
     print(

@@ -13,6 +13,7 @@ def maybe_create_tensorboard_logdir(config):
     return config
 
 
+
 def load_config(config_path, configs={}):
     # get config file
     config = _load_config_yaml(config_path)

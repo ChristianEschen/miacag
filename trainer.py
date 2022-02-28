@@ -1,34 +1,30 @@
-from dataloader.get_dataloader import get_dataloader_train
+from mia.dataloader.get_dataloader import get_dataloader_train
 import torch
-from models.BuildModel import ModelBuilder
-from configs.config import load_config, maybe_create_tensorboard_logdir
+from mia.models.BuildModel import ModelBuilder
+from mia.configs.config import load_config, maybe_create_tensorboard_logdir
 from torch.utils.tensorboard import SummaryWriter
-from model_utils.get_optimizer import get_optimizer
-from model_utils.get_loss_func import get_loss_func
-from configs.options import TrainOptions
-from model_utils.train_utils import set_random_seeds, train_one_epoch, early_stopping, \
+from mia.model_utils.get_optimizer import get_optimizer
+from mia.model_utils.get_loss_func import get_loss_func
+from mia.configs.options import TrainOptions
+from mia.model_utils.train_utils import set_random_seeds, \
+    train_one_epoch, early_stopping, \
     get_device, saver, save_model
-from metrics.metrics_utils import init_metrics
-from model_utils.eval_utils import val_one_epoch
+from mia.metrics.metrics_utils import init_metrics
+from mia.model_utils.eval_utils import val_one_epoch
 import time
 import torch.distributed as dist
 from monai.utils import set_determinism
-import os
 
 
-def main():
-    config = vars(TrainOptions().parse())
-    config = load_config(config['config'], config)
+def train(config):
     config['loaders']['mode'] = 'training'
-    config = maybe_create_tensorboard_logdir(config)
-
     set_random_seeds(random_seed=config['manual_seed'])
     set_determinism(seed=config['manual_seed'])
-    if config['use_DDP'] == 'True':
-        torch.distributed.init_process_group(
-            backend="nccl" if config["cpu"] == "False" else "Gloo",
-            init_method="env://"
-            )
+    # if config['use_DDP'] == 'True':
+        # torch.distributed.init_process_group(
+        #     backend="nccl" if config["cpu"] == "False" else "Gloo",
+        #     init_method="env://"
+        #     )
 
     device = get_device(config)
 
@@ -42,8 +38,6 @@ def main():
 
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
-    
-    
 
     # Get data loaders
     train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
@@ -120,9 +114,16 @@ def main():
         saver(metric_dict_val, writer, config)
     print('Finished Training')
     print('training loop (s)', time.time()-starter)
-    dist.destroy_process_group()
+    # dist.destroy_process_group()
     torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
-    main()
+    config = vars(TrainOptions().parse())
+    config = load_config(config['config'], config)
+    config = maybe_create_tensorboard_logdir(config)
+    torch.distributed.init_process_group(
+            backend="nccl" if config["cpu"] == "False" else "Gloo",
+            init_method="env://"
+            )
+    train(config)

@@ -8,7 +8,7 @@ from torchvision.transforms import (
     RandomResizedCrop,
 )
 
-from dataloader.transforms import _functional_video as F
+from mia.dataloader.transforms import _functional_video as F
 import torch
 
 __all__ = [

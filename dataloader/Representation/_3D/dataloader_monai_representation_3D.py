@@ -217,7 +217,7 @@ class SlidingClassificationDataset(monai.data.Dataset):
         data = self.transform_pre(self.data[idx])
         data = self.create_patches(data, self.config, self.transform_post)
         sample = {'inputs': data['inputs'],
-                  'labels': data['labels'],
+                  'labels_transformed': data['labels_transformed'],
                   'file': data['image1_meta_dict']['filename_or_obj'],
                   'shape': data['image1'].shape[3]}
         return sample

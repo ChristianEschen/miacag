@@ -8,14 +8,14 @@ import psycopg2
 import pandas as pd
 import os
 from monai.data import DistributedWeightedRandomSampler
-from preprocessing.utils.sql_utils import getDataFromDatabase
+from mia.preprocessing.utils.sql_utils import getDataFromDatabase
 import numpy as np
 
 class ClassificationLoader():
     def __init__(self, config) -> None:
         self.config = config
         self.df, self.connection = getDataFromDatabase(self.config)
-        self.df = self.df[self.df['labels'].notna()]
+        self.df = self.df[self.df['labels_transformed'].notna()]
         if self.config['loaders']['mode'] == 'testing':
             self.val_df = self.df
         else:
@@ -25,20 +25,20 @@ class ClassificationLoader():
  
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] in ['dicom']:
-            from dataloader.Classification._3D.dataloader_monai_classification_3D import \
+            from mia.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                 train_monai_classification_loader
             if config['loaders']['val_method']['type'] == 'patches':
-                from dataloader.Classification._3D.dataloader_monai_classification_3D import \
+                from mia.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader
             elif config['loaders']['val_method']['type'] == 'sliding_window':
-                from dataloader.Classification._3D.dataloader_monai_classification_3D import \
+                from mia.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader_SW as val_monai_classification_loader
             else:
                 raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
         elif config['loaders']['format'] in ['db']:
             from \
-                dataloader.Classification.tabular.dataloader_monai_classification_tabular import \
+                mia.dataloader.Classification.tabular.dataloader_monai_classification_tabular import \
                 train_monai_classification_loader, val_monai_classification_loader
         elif config['loaders']['format'] in ['dicom_db']:
             print('NOT implemented')
@@ -84,29 +84,29 @@ class ClassificationLoader():
     def get_classificationloader_patch_lvl_test(self, config):
         if config['loaders']['format'] == 'dicom':
             if config['loaders']['val_method']['type'] == 'patches':
-                from dataloader.Classification._3D. \
+                from mia.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
                 # nr_repeat = config['loaders']['val_method']['patches']
                 # self.val_df = pd.DataFrame(np.repeat(
                 #     self.val_df.values, nr_repeat,
                 #     axis=0), columns=self.val_df.columns)
-                self.val_loader = val_monai_classification_loader(
+                self.val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)
             elif config['loaders']['val_method']['type'] == 'sliding_window':
-                from dataloader.Classification._3D. \
+                from mia.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader_SW
-                self.val_loader = val_monai_classification_loader_SW(
+                self.val_ds = val_monai_classification_loader_SW(
                     self.val_df,
                     config)
         elif config['loaders']['format'] == 'db':
             if config['loaders']['val_method']['type'] == 'full':
-                from dataloader.Classification.tabular. \
+                from mia.dataloader.Classification.tabular. \
                     dataloader_monai_classification_tabular import \
                     val_monai_classification_loader
-                self.val_loader = val_monai_classification_loader(
+                self.val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)
             else:
@@ -116,21 +116,21 @@ class ClassificationLoader():
         else:
             raise ValueError("Invalid data format %s" % repr(
                     config['loaders']['format']))
-        self.val_ds = self.val_loader()
+        self.val_ds = self.val_ds()
         with torch.no_grad():
-            # self.val_loader = DataLoader(
-            #     self.val_loader,
-            #     batch_size=config['loaders']['batchSize'],
-            #     shuffle=False,
-            #     num_workers=config['num_workers'],
-            #     collate_fn=list_data_collate if
-            #             config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
-            #     pin_memory=False if config['cpu'] == "False" else True,)
+            self.val_loader = DataLoader(
+                self.val_ds,
+                batch_size=config['loaders']['batchSize'],
+                shuffle=False,
+                num_workers=0,
+                collate_fn=list_data_collate if
+                        config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
+                pin_memory=False if config['cpu'] == "False" else True,)
 
-            self.val_loader = ThreadDataLoader(
-                            self.val_ds,
-                            batch_size=config['loaders']['batchSize'],
-                            shuffle=False,
-                            num_workers=0,
-                            collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-                            pin_memory=False,)
+            # self.val_loader = ThreadDataLoader(
+            #                 self.val_ds,
+            #                 batch_size=config['loaders']['batchSize'],
+            #                 shuffle=False,
+            #                 num_workers=0,
+            #                 collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+            #                 pin_memory=False,)

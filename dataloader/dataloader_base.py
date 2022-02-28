@@ -3,9 +3,40 @@ import torch.utils.data as data
 import pandas as pd
 from torchvision import transforms
 import numpy as np
-from dataloader.transforms import _transforms_video as T
+from mia.dataloader.transforms import _transforms_video as T
 from torch.utils.data import WeightedRandomSampler
 import os
+#from mia.dataloader.dataloader_base import DataloaderTrain
+from monai.transforms import (
+    AddChanneld,
+    Compose,
+    LoadImaged,
+    RepeatChanneld,
+    MapTransform,
+    NormalizeIntensityd,
+    RandFlipd,
+    RandCropByPosNegLabeld,
+    CopyItemsd,
+    RandZoomd,
+    RandAffined,
+    # ScaleIntensityRanged,
+    RandAdjustContrastd,
+    RandRotate90d,
+    RandSpatialCropd,
+    CenterSpatialCropd,
+    Spacingd,
+    Identityd,
+    SpatialPadd,
+    Lambdad,
+    Resized,
+    ToTensord,
+    ConcatItemsd,
+    CropForegroundd,
+    CastToTyped,
+    RandGaussianNoised,
+    RandGaussianSmoothd,
+    RandScaleIntensityd,
+    ToDeviced)
 
 
 class DataloaderBase(data.Dataset):
@@ -17,36 +48,24 @@ class DataloaderBase(data.Dataset):
         self.transform = transform
         self.df = df
         self.num_samples = len(self.df)
+        if config['task_type'] in ['classification']:
+            self.df['labels_transformed'] = self.df['labels_transformed'].astype(int)
+            self.class_counts = self.df['labels_transformed'].value_counts().to_list()
 
     def __len__(self):
         return self.num_samples
 
-    def replace_labels(self, label_uniques):
-        new_values = np.int16(np.linspace(0, len(label_uniques),
-                              len(label_uniques), endpoint=False))
-        dictionary = dict(zip(np.array(label_uniques),
-                              new_values))
-        return dictionary
+    def getSampler(self):
+        self.class_weights = [self.num_samples/self.class_counts[i] for
+                              i in range(len(self.class_counts))]  # [::-1]
+        self.weights = [self.class_weights[self.df['labels_transformed'].to_list()[i]]
+                        for i in range(int(self.num_samples))]
 
-    def map_labels(self, labels):
-        mapping = self.replace_labels(self.labels.drop_duplicates())
-        labels = pd.Series([mapping[k] for k in self.df['labels'].to_list()])
-        return labels
-
-    # def load_video(self, path):
-    #     # use av backend
-    #     container = av.open(path)
-    #     array_3d = np.zeros((
-    #                     container.streams.video[0].height,
-    #                     container.streams.video[0].width,
-    #                     container.streams.video[0].frames, 3), dtype=np.uint8)
-    #     i = 0
-    #     for frame in container.decode(video=0):
-    #         array_3d[:, :, i, :] = np.array(frame.to_image())
-    #         i += 1
-    #     return array_3d
+        self.sampler = WeightedRandomSampler(
+            torch.DoubleTensor(self.weights), int(self.num_samples))
 
 
+ 
 class DataloaderTest(DataloaderBase):
     def __init__(self, df, transform=None):
         super(DataloaderTest, self).__init__(df, transform)
@@ -81,21 +100,18 @@ class DataloaderTest(DataloaderBase):
         return crop_size
 
 
-class DataloaderTrain(DataloaderBase):
-    def __init__(self, df, config, transform=None):
-        super(DataloaderTrain, self).__init__(df,
-                                              config,
-                                              transform)
-        if config['task_type'] in ['classification']:
-            self.df['labels'] = self.df['labels'].astype(int)
-            self.class_counts = self.df['labels'].value_counts().to_list()
-            self.class_weights = [self.num_samples/self.class_counts[i] for
-                                  i in range(len(self.class_counts))]  # [::-1]
-            self.weights = [self.class_weights[self.df['labels'].to_list()[i]]
-                            for i in range(int(self.num_samples))]
+# class DataloaderTrain(DataloaderBase):
+#     def __init__(self, df, config):
+#         super(DataloaderTrain, self).__init__(df,
+#                                               config)
 
-            self.sampler = WeightedRandomSampler(
-                torch.DoubleTensor(self.weights), int(self.num_samples))
+#         self.class_weights = [self.num_samples/self.class_counts[i] for
+#                               i in range(len(self.class_counts))]  # [::-1]
+#         self.weights = [self.class_weights[self.df['labels_transformed'].to_list()[i]]
+#                         for i in range(int(self.num_samples))]
+
+#         self.sampler = WeightedRandomSampler(
+#             torch.DoubleTensor(self.weights), int(self.num_samples))
 
 
 def getVideoTrainTransforms(nr_frames=32,

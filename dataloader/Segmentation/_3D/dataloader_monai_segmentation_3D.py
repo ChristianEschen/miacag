@@ -42,10 +42,10 @@ class base_monai_segmentation_loader(base_monai_loader):
                                          self.features,
                                          self.image_path)
         self.csv = self.set_feature_path(self.csv,
-                                         ['labels'],
+                                         ['labels_transformed'],
                                          self.image_path)
         self.data = self.csv.to_dict('records')
-        self.image_data = self.csv[self.features+['labels']].to_dict('records')
+        self.image_data = self.csv[self.features+['labels_transformed']].to_dict('records')
         self.config = config
 
 

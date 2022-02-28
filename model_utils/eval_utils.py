@@ -1,15 +1,15 @@
-from metrics.metrics_utils import normalize_metrics, get_metrics, \
+from mia.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
     mkDir
 import torch
-from dataloader.get_dataloader import get_data_from_loader
+from mia.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
 from monai.inferers import SimpleInferer, SaliencyInferer
 from torch import nn
-from metrics.metrics import softmax_transform
-from model_utils.grad_cam_utils import prepare_cv2_img
+from mia.metrics.metrics import softmax_transform
+from mia.model_utils.grad_cam_utils import prepare_cv2_img
 
 
 def get_input_shape(config):
@@ -79,11 +79,21 @@ def eval_one_step(model, inputs, labels, device, criterion,
                     cam_name="GradCAM",
                     target_layers='module.encoder.6')
         else:
+            if config['model']['backbone'] == 'r2plus1d_18':
+                layer_name = 'module.encoder.4.1.relu'
+            elif config['model']['backbone'] == 'x3d_s':
+                layer_name = 'module.encoder.5.post_conv'
+            elif config['model']['backbone'] in ['MVIT-16', 'MVIT-32']:
+               # layer_name = 'module.encoder.blocks.15.norm1'
+                layer_name="module.encoder.blocks.15.attn.pool_v"
+
+            else:
+                layer_name='module.encoder.5.post_conv'
             saliency = SaliencyInferer(
                     cam_name="GradCAM",
-                    target_layers='module.encoder.5.post_conv')
-        cams = saliency(network=model, inputs=inputs)
-
+                    target_layers=layer_name)
+        cams = saliency(network=model.module, inputs=inputs)
+        cams = cams[0:1,:,:,:,:]
         return outputs, losses, metrics, cams
     else:
         return outputs, losses, metrics, None
@@ -198,6 +208,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                 logits.append(outputs.cpu())
                 rowids.append(rowid.cpu())
             if config['loaders']['val_method']['saliency'] == 'True':
+                data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
                 patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
                 studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
                 seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
@@ -206,6 +217,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                 prepare_cv2_img(
                     inputs.cpu().numpy(),
                     cams.cpu().numpy(),
+                    data_path,
                     patientID,
                     studyInstanceUID,
                     seriesInstanceUID,
@@ -324,44 +336,3 @@ def val_one_epoch(model, criterion, config,
             running_metric_val, running_loss_val,
             writer, epoch, saliency_maps)
         return metric_tb, confidences, rowid  # predictions
-
-### GRAVEYARD
-
-
-# def val_one_epoch(model, criterion, config,
-#                   validation_loader, device,
-#                   running_metric_val=0.0, running_loss_val=0.0,
-#                   writer=False, epoch=0, saliency_maps=False):
-#     #e  
-#     for sample in range(0, config['loaders']['val_method']["samples"]):
-#         eval_outputs = run_val_one_step(
-#                 model, config, validation_loader, device, criterion,
-#                 saliency_maps,
-#                 running_metric_val, running_loss_val)
-#     if config['loaders']['mode'] == 'training':
-#         running_metric_val, running_loss_val, _, _ = eval_outputs
-#     else:
-#         running_metric_val, running_loss_val, logits, rowid = eval_outputs
-#         confidences = softmax_transform(logits.float())
-
-#     # Normalize the metrics from the entire epoch
-#     if config['task_type'] != "representation_learning":
-#         running_metric_val, metric_tb = normalize_metrics(
-#             running_metric_val)
-
-#     running_loss_val, loss_tb = normalize_metrics(
-#         running_loss_val)
-
-#     if writer is not False:
-#         loss_tb, metric_tb = write_tensorboard(
-#             loss_tb,
-#             metric_tb,
-#             writer, epoch, 'val')
-
-#     metric_tb.update(loss_tb)
-
-
-#     if config['loaders']['mode'] == 'training':
-#         return metric_tb
-#     else:
-#         return metric_tb, confidences, rowid  # predictions

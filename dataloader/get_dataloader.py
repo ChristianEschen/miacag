@@ -6,11 +6,11 @@ def get_data_from_loader(data, config, device, val_phase=False):
     if config['loaders']['store_memory'] is True:
         data = {
                 'inputs': data[0],
-                'labels': data[1]
+                'labels_transformed': data[1]
                 }
     if config['task_type'] in ['classification', 'segmentation']:
         inputs = data['inputs'].to(device)
-        labels = data['labels'].long().to(device)
+        labels = data['labels_transformed'].long().to(device)
     elif config['task_type'] == "representation_learning":
         if val_phase is False:
             if config['loaders']['store_memory'] is False:
@@ -37,7 +37,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
         else:
             if config['loaders']['store_memory'] is False:
                 inputs = data['inputs'].to(device)
-                labels = data['labels'].long().to(device)
+                labels = data['labels_transformed'].long().to(device)
             else:
                 inputs = data[0].to(device)
                 labels = data[1].long().to(device)
@@ -45,14 +45,14 @@ def get_data_from_loader(data, config, device, val_phase=False):
         raise ValueError(
                 "Data type is not implemented")
     if config['loaders']['mode'] == 'testing':
-        return inputs, labels, data['index']
+        return inputs, labels, data['rowid']
     else:
         return inputs, labels
 
 def get_data_from_standard_Datasets(data, config, device, val_phase):
     data = {
                 'inputs': data[0],
-                'labels': data[1]
+                'labels_transformed': data[1]
                 }
     if config['task_type'] == "representation_learning":
         if val_phase is False:
@@ -64,7 +64,7 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
 
 def get_dataloader_train(config):
     if config['task_type'] in ['classification']:
-        from dataloader.Classification.get_dataloader_classification import \
+        from mia.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
         train_loader, val_loader, train_ds, val_ds = \
@@ -101,7 +101,7 @@ def get_dataloader_train(config):
 
 def get_dataloader_test(config):
     if config['task_type'] in ["classification"]:
-        from dataloader.Classification.get_dataloader_classification import \
+        from mia.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
         CL.get_classificationloader_patch_lvl_test(config)
@@ -111,7 +111,7 @@ def get_dataloader_test(config):
         return CL
 
     elif config['task_type'] == 'image2image':
-        from dataloader.get_dataloader_segmentation import \
+        from mia.dataloader.get_dataloader_segmentation import \
             SegmentationLoader
         SL = SegmentationLoader()
         test_loader = SL.get_segmentationloader_test(config)

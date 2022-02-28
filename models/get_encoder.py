@@ -25,7 +25,7 @@ def getPretrainedWeights(config, model, device):
                         os.path.join(
                             config['model']['pretrained'], 'model.pt'))
 
-            if config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16']:
+            if config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
                 model.load_state_dict(loaded_model['model_state'])
             else:
                 model.load_state_dict(loaded_model)
@@ -48,7 +48,7 @@ def get_encoder(config, device):
         # model.fc = nn.Identity()
     elif config['model']['backbone'] == 'r2plus1d_18':
         model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
-            pretrained="False")
+            pretrained=False)
         if config['loaders']['mode'] != 'testing':
             model = getPretrainedWeights(config, model, device)
         in_features = model.fc.in_features
@@ -73,12 +73,9 @@ def get_encoder(config, device):
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
-    # Not image models
 
-    elif config['model']['backbone'] == 'MVIT-16':
+    elif config['model']['backbone'] in ['MVIT-16', 'MVIT-32']:
         import pytorchvideo.models.vision_transformers as VT
-        #from pytorchvideo.models.vision_transformers import MultiscaleVisionTransformers
-       # model = MultiscaleVisionTransformers()
         model = VT.create_multiscale_vision_transformers(
             spatial_size=(config['loaders']['Crop_height'],
                           config['loaders']['Crop_width']),
@@ -93,8 +90,7 @@ def get_encoder(config, device):
             model = getPretrainedWeights(config, model, device)
         in_features = model.head.proj.in_features
         model.head.proj = Identity()
-        # model = nn.Sequential(
-        #  *(list(model.patch_embed.children())+ [model.cls_positional_encoding] +list(model.blocks.children())) + [model.norm_embed] + list(model.head.children())[:-1])
+
     elif config['model']['backbone'] == 'linear':
         from models.backbone_encoders.tabular.base_encoders \
             import LinearEncoder
@@ -114,5 +110,5 @@ def get_encoder(config, device):
 def modelsRequiredPermute():
     model_list = [
         'r3d_18', 'r2plus1d_18',
-        'x3d_l', 'x3d_s', 'MVIT-16', 'slowfast8x8']
+        'x3d_l', 'x3d_s', 'MVIT-16', 'MVIT-32', 'slowfast8x8']
     return model_list

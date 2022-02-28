@@ -1,17 +1,18 @@
-from model_utils.eval_utils import val_one_epoch
-from model_utils.eval_utils import eval_one_step
+from mia.model_utils.eval_utils import val_one_epoch
+from mia.model_utils.eval_utils import eval_one_step
 import os
 import json
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score
-from preprocessing.pre_process import appendDataframes
+from mia.preprocessing.pre_process import appendDataframes
 import os
-from preprocessing.pre_process import mkFolder
+from mia.preprocessing.pre_process import mkFolder
 import psycopg2
 from psycopg2.extras import execute_batch
-from preprocessing.utils.sql_utils import update_cols
+from mia.preprocessing.utils.sql_utils import update_cols
 import torch
+import shutil
 
 
 class TestPipeline():
@@ -52,6 +53,7 @@ class TestPipeline():
             saliency_maps=False)
         if config['loaders']['val_method']['saliency'] == 'False':
             csv_files = self.saveCsvFiles(confidences, index, config)
+            torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
                 test_loader.val_df = self.buildPandasResults(
                     test_loader.val_df,
@@ -61,14 +63,14 @@ class TestPipeline():
                 self.insert_data_to_db(test_loader, config)
 
                 acc = {'accuracy ensemble': accuracy_score(
-                    test_loader.val_df['labels'].astype('float').astype('int'),
+                    test_loader.val_df['labels_transformed'].astype('float').astype('int'),
                     test_loader.val_df['predictions'].astype('float').astype('int'))}
-
+                shutil.rmtree(csv_files)
                 print('accuracy_correct', acc)
                 print('metrics (mean of all preds)', metrics)
                 metrics.update(acc)
                 log_name = config["table_name"] + '_log.txt'
-                with open(os.path.join(config['model']['pretrain_model'],
+                with open(os.path.join(config['output_directory'],
                         log_name), 'w') as file:
                     file.write(json.dumps({**metrics, **config},
                             sort_keys=True, indent=4,
@@ -97,9 +99,8 @@ class TestPipeline():
 
     def buildPandasResults(self, val_df, csv_files):
         df_pred = self.appendDataframes(csv_files)
-        df_pred['index'] = df_pred['index'].astype(float).astype(int)
+        df_pred['rowid'] = df_pred['rowid'].astype(float).astype(int)
         col_names = [i for i in df_pred.columns.to_list() if i.startswith('confidence')]
-
         df_pred['confidences'] = df_pred[col_names].values.tolist()
 
 
@@ -107,7 +108,9 @@ class TestPipeline():
             val_df = val_df.drop(columns=['predictions'])
         if 'confidences' in val_df.columns:
             val_df = val_df.drop(columns=['confidences'])
-        val_df = pd.concat([val_df, df_pred], axis=1)
+        #val_df = pd.concat([val_df, df_pred], axis=1)
+        val_df = val_df.merge(
+            df_pred, left_on='rowid', right_on='rowid', how='right')
         val_df['confidences'] = \
             val_df['confidences'].apply(pd.to_numeric)
         val_df_conf = pd.DataFrame()
@@ -156,11 +159,11 @@ class TestPipeline():
         return delimiter.join(t)
 
     def saveCsvFiles(self, confidences, index, config):
-        csv_files = os.path.join(config['model']['pretrain_model'], 'csv_files_pred')
+        csv_files = os.path.join(config['output_directory'], 'csv_files_pred')
         mkFolder(csv_files)
         array = np.concatenate((confidences.numpy(), np.expand_dims(index.numpy(), 1)), axis=1)
         confidence_col = ['confidence_' + str(i) for i in range(0, confidences.shape[-1])]
-        cols = confidence_col + ['index']
+        cols = confidence_col + ['rowid']
         df = pd.DataFrame(
             array,
             columns=cols)

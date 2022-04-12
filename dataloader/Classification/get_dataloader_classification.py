@@ -7,7 +7,7 @@ from torchvision import datasets
 import psycopg2
 import pandas as pd
 import os
-from monai.data import DistributedWeightedRandomSampler
+from monai.data import DistributedWeightedRandomSampler, DistributedSampler
 from mia.preprocessing.utils.sql_utils import getDataFromDatabase
 import numpy as np
 
@@ -15,7 +15,7 @@ class ClassificationLoader():
     def __init__(self, config) -> None:
         self.config = config
         self.df, self.connection = getDataFromDatabase(self.config)
-        self.df = self.df[self.df['labels_transformed'].notna()]
+        self.df = self.df.dropna(subset=config["labels_names"], how='any')
         if self.config['loaders']['mode'] == 'testing':
             self.val_df = self.df
         else:
@@ -49,15 +49,21 @@ class ClassificationLoader():
             self.train_df,
             config)
 
-        weights = train_ds.weights
-        train_ds = train_ds()
-        sampler = DistributedWeightedRandomSampler(
-            dataset=train_ds,
-            weights=weights,
-            even_divisible=True,
-            shuffle=True)
-
-
+        if config['weighted_sampler'] == 'True':
+            weights = train_ds.weights
+            train_ds = train_ds()
+            sampler = DistributedWeightedRandomSampler(
+                dataset=train_ds,
+                weights=weights,
+                even_divisible=True,
+                shuffle=True)
+        else:
+            train_ds = train_ds()
+            sampler = DistributedSampler(
+                dataset=train_ds,
+                even_divisible=True,
+                shuffle=True)
+            
         val_ds = val_monai_classification_loader(
                 self.val_df,
                 config)

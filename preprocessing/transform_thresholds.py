@@ -8,7 +8,7 @@ from mia.preprocessing.utils.sql_utils import update_cols, getDataFromDatabase
 
 
 parser = argparse.ArgumentParser(
-    description='Define inputs for building database.')
+    description='Define inputs.')
 parser.add_argument(
             '--query', type=str,
             help='query for retrieving data',
@@ -17,10 +17,6 @@ parser.add_argument(
             '--config', type=str,
             help='Path to the YAML config file',
             required=True)
-parser.add_argument(
-    '--TestSize', type=float,
-    default=0.2,
-    help='Proportion of dataset used for testing')
 parser.add_argument(
     '--database', type=str,
     help="database name")
@@ -41,50 +37,19 @@ parser.add_argument(
     help="table_name in database")
 
 
-class splitter():
-    def __init__(self, sql_config, labels_config=None):
+class transformThreshold():
+    def __init__(self, sql_config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
-        self.df = self.df.dropna(subset=sql_config["labels_names"], how='any')
-
-    def groupEntriesPrPatient(self, df):
-        '''Grouping entries pr patients'''
-        X = df.drop(self.sql_config['labels_names'], 1)
-        y = df[self.sql_config['labels_names']]
-        if self.sql_config['TestSize'] == 1:
-            return None, df
-        else:
-            gs = GroupShuffleSplit(
-                n_splits=2,
-                test_size=self.sql_config['TestSize'],
-                random_state=0)
-            train_ix, val_ix = next(
-                gs.split(X, y, groups=df['PatientID']))
-            df_train = df.iloc[train_ix]
-            df_val = df.iloc[val_ix]
-            self.addPhase(df_train, df_val)
-            return df_train, df_val
-
-    def addPhase(self, train_df, val_df):
-        train_df['phase'] = "train"
-        val_df['phase'] = "val"
-        val_df = val_df[['phase', 'rowid'] + self.sql_config['labels_names']]
-        train_df = train_df[
-            ['phase', 'rowid'] + self.sql_config['labels_names']]
-
-        update_cols(self.connection,
-                    val_df.to_dict('records'),
-                    self.sql_config,
-                    ['phase'] + self.sql_config['labels_names'],)
-        update_cols(self.connection,
-                    train_df.to_dict('records'),
-                    self.sql_config,
-                    ['phase'] + self.sql_config['labels_names'])
 
     def __call__(self):
-        df = self.df[self.df['phase'] != 'test']
-        self.train_df, self.val_df = self.groupEntriesPrPatient(df)
-
+        for label_name in self.sql_config['labels_names']:
+            self.df[label_name][self.df[label_name] < 70] = 0
+            self.df[label_name][self.df[label_name] >= 70] = 1
+        update_cols(self.connection,
+                    self.df.to_dict('records'),
+                    self.sql_config,
+                    self.sql_config['labels_names'],)
 
 
 if __name__ == '__main__':
@@ -110,5 +75,5 @@ if __name__ == '__main__':
                   args.TestSize
                   }
 
-    spl = splitter(sql_config, labels_config)
-    spl()
+    mapper = labelsMap(sql_config, labels_config)
+    mapper()

@@ -49,8 +49,8 @@ class DataloaderBase(data.Dataset):
         self.df = df
         self.num_samples = len(self.df)
         if config['task_type'] in ['classification']:
-            self.df['labels_transformed'] = self.df['labels_transformed'].astype(int)
-            self.class_counts = self.df['labels_transformed'].value_counts().to_list()
+            self.df[config['labels_names']] = self.df[config['labels_names']].astype(int)
+            self.class_counts = self.df[config['labels_names']].value_counts().to_list()
 
     def __len__(self):
         return self.num_samples
@@ -58,7 +58,8 @@ class DataloaderBase(data.Dataset):
     def getSampler(self):
         self.class_weights = [self.num_samples/self.class_counts[i] for
                               i in range(len(self.class_counts))]  # [::-1]
-        self.weights = [self.class_weights[self.df['labels_transformed'].to_list()[i]]
+        self.weights = [self.class_weights[
+            self.df[self.config['labels_names']].squeeze().to_list()[i]]
                         for i in range(int(self.num_samples))]
 
         self.sampler = WeightedRandomSampler(
@@ -107,7 +108,7 @@ class DataloaderTest(DataloaderBase):
 
 #         self.class_weights = [self.num_samples/self.class_counts[i] for
 #                               i in range(len(self.class_counts))]  # [::-1]
-#         self.weights = [self.class_weights[self.df['labels_transformed'].to_list()[i]]
+#         self.weights = [self.class_weights[self.df[config['labels_names']].to_list()[i]]
 #                         for i in range(int(self.num_samples))]
 
 #         self.sampler = WeightedRandomSampler(

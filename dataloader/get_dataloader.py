@@ -2,26 +2,39 @@ import torch
 import os
 
 
+def to_long(data, config):
+    for label_name in config['labels_names']:
+        data[label_name] = data[label_name].long()
+    return data
+
+
+def to_device(data, device, fields):
+    for field in fields:
+        data[field] = data[field].to(device)
+    return data
+
+
 def get_data_from_loader(data, config, device, val_phase=False):
     if config['loaders']['store_memory'] is True:
         data = {
                 'inputs': data[0],
-                'labels_transformed': data[1]
+                config['labels_names']: data[1]
                 }
     if config['task_type'] in ['classification', 'segmentation']:
-        inputs = data['inputs'].to(device)
-        labels = data['labels_transformed'].long().to(device)
+        data = to_device(data, device, ['inputs'])
+        data = to_long(data, config)
+        data = to_device(data, device, config['labels_names'])
     elif config['task_type'] == "representation_learning":
         if val_phase is False:
             if config['loaders']['store_memory'] is False:
-                inputs = data['inputs'].to(device)
+                data['inputs'] = data['inputs'].to(device)
                 if config['model']['dimension'] == '2D':
-                    inputs = torch.cat(
+                    data['inputs'] = torch.cat(
                         (torch.unsqueeze(inputs[::2, :, :, :], dim=1),
                             torch.unsqueeze(inputs[1::2, :, :, :], dim=1)),
                         dim=1)
                 elif config['model']['dimension'] in ['3D', '2D+T']:
-                    inputs = torch.cat(
+                    data['inputs'] = torch.cat(
                         (torch.unsqueeze(inputs[::2, :, :, :, :], dim=1),
                             torch.unsqueeze(inputs[1::2, :, :, :, :], dim=1)),
                         dim=1)
@@ -29,34 +42,32 @@ def get_data_from_loader(data, config, device, val_phase=False):
                     raise ValueError(
                             "model dimension not implemented")
             else:
-                inputs = torch.cat(
+                data['inputs'] = torch.cat(
                     (torch.unsqueeze(data[0][0].to(device), 1),
                      torch.unsqueeze(data[0][1].to(device), 1)),
                     dim=1)
-            labels = None
+            data['labels'] = None
         else:
             if config['loaders']['store_memory'] is False:
-                inputs = data['inputs'].to(device)
-                labels = data['labels_transformed'].long().to(device)
+                data['inputs'] = data['inputs'].to(device)
+                data['labels'] = data[config['labels_names']].long().to(device)
             else:
-                inputs = data[0].to(device)
-                labels = data[1].long().to(device)
+                data['inputs'] = data[0].to(device)
+                data['labels'] = data[1].long().to(device)
     else:
         raise ValueError(
                 "Data type is not implemented")
-    if config['loaders']['mode'] == 'testing':
-        return inputs, labels, data['rowid']
-    else:
-        return inputs, labels
+
+    return data
 
 def get_data_from_standard_Datasets(data, config, device, val_phase):
     data = {
                 'inputs': data[0],
-                'labels_transformed': data[1]
+                config['labels_names']: data[1]
                 }
     if config['task_type'] == "representation_learning":
         if val_phase is False:
-            inputs = torch.cat(
+            data['inputs'] = torch.cat(
                         (torch.unsqueeze(data[0][0].to(device), 1),
                         torch.unsqueeze(data[0][1].to(device), 1)),
                         dim=1)

@@ -47,8 +47,11 @@ class ClassificationModel(EncoderModel):
     def __init__(self, config, device):
         super(ClassificationModel, self).__init__(config, device)
         self.config = config
-        self.fc = nn.Linear(self.in_features,
-                            config['model']['num_classes'])
+        self.fcs = []
+        for head in range(0, len(self.config['labels_names'])):
+            self.fcs.append(
+                nn.Linear(self.in_features,
+                          config['model']['num_classes']))
         self.dimension = config['model']['dimension']
 
     def forward(self, x):
@@ -63,8 +66,10 @@ class ClassificationModel(EncoderModel):
             p = p
         else:
             p = p.mean(dim=(-2, -1))
-        p = self.fc(p)
-        return p
+        ps = []
+        for fc in self.fcs:
+            ps.append(fc(p))
+        return ps
 
 
 class SimSiam(EncoderModel):

@@ -69,15 +69,15 @@ class base_monai_loader(DataloaderBase):
 
     def getMaybeForegroundCropper(self):
         if self.config['loaders']['CropForeGround'] is False:
-            fCropper = Identityd(keys=self.features + ["labels"])
+            fCropper = Identityd(keys=self.features + [self.config["labels_names"]])
         else:
-            fCropper = CropForegroundd(keys=self.features + ["labels"],
-                                       source_key="labels")
+            fCropper = CropForegroundd(keys=self.features + [self.config["labels_names"]],
+                                       source_key=self.config["labels_names"])
         return fCropper
 
     def getMaybeClip(self):
         if self.config['loaders']['isCT'] is False:
-            clip = Identityd(keys=self.features + ["labels"])
+            clip = Identityd(keys=self.features + [self.config["labels_names"]])
         else:
             clip = Lambdad(keys=self.features,
                            func=lambda x: np.clip(
@@ -114,14 +114,14 @@ class base_monai_loader(DataloaderBase):
     def getMaybeRandCrop(self):
         if self.config['loaders']['val_method']['type'] == "patches":
             randCrop = RandCropByPosNegLabeld(
-                    keys=self.features + ["labels"],
-                    label_key="labels",
+                    keys=self.features + [self.config["labels_names"]],
+                    label_key=self.config["labels_names"],
                     spatial_size=[self.config['loaders']['depth'],
                                   self.config['loaders']['height'],
                                   self.config['loaders']['width']],
                     pos=1, neg=1, num_samples=1)
         elif self.config['loaders']['val_method']['type'] == "sliding_window":
-            randCrop = Identityd(keys=self.features + ["labels"])
+            randCrop = Identityd(keys=self.features + [self.config["labels_names"]])
         else:
             raise ValueError("Invalid val_method %s" % repr(
              self.config['loaders']['val_method']['type']))
@@ -133,7 +133,7 @@ class base_monai_loader(DataloaderBase):
                                             "classification"]:
                 keys_ = self.features
             elif self.config['task_type'] == "segmentation":
-                keys_ = self.features + ["labels"]
+                keys_ = self.features + [self.config["labels_names"]]
             else:
                 raise ValueError('not implemented')
             pad = SpatialPadd(
@@ -150,7 +150,7 @@ class base_monai_loader(DataloaderBase):
                                   self.config['loaders']['Crop_width'],
                                   self.config['loaders']['Crop_depth']])
             elif self.config['task_type'] == "segmentation":
-                pad = Identityd(keys=self.features + ["labels"])
+                pad = Identityd(keys=self.features + [self.config["labels_names"]])
             else:
                 raise ValueError('not implemented')
         else:
@@ -166,7 +166,7 @@ class base_monai_loader(DataloaderBase):
                     func=lambda x: x.transpose(2, 3, 0, 1))
             elif self.config['model']['dimension'] == '3D':
                 permute = Lambdad(
-                    keys=self.features + ["labels"],
+                    keys=self.features + [self.config["labels_names"]],
                     func=lambda x: np.transpose(x, (0, 3, 1, 2)))
             else:
                 raise ValueError('data model dimension not understood')
@@ -175,7 +175,7 @@ class base_monai_loader(DataloaderBase):
                     keys=self.features,
                     func=lambda x: x.transpose(1, 2, 0))
         else:
-            permute = Identityd(keys=self.features + ["labels"])
+            permute = Identityd(keys=self.features + [self.config["labels_names"]])
         return permute
 
     def resampleORresize(self):
@@ -188,7 +188,7 @@ class base_monai_loader(DataloaderBase):
             if len(mode_) == 1:
                 mode_ = mode_[0]
         elif self.config['task_type'] == "segmentation":
-            keys_ = self.features + ["labels"]
+            keys_ = self.features + [self.config["labels_names"]]
             mode_ = tuple([
                          'bilinear' for i in
                          range(len(self.features))]+['nearest'])
@@ -217,11 +217,11 @@ class base_monai_loader(DataloaderBase):
                 device = ToDeviced(keys=keys, device="cpu")
             else:
                 device = ToDeviced(
-                    keys=keys + ["labels"], device="cpu")
+                    keys=keys + [self.config["labels_names"]], device="cpu")
 
         else:
             if self.config['use_DDP'] == 'False':
-                device = Identityd(keys=keys + ["labels"])
+                device = Identityd(keys=keys + [self.config["labels_names"]])
             else:
                 device = ToDeviced(
                     keys=keys,
@@ -339,14 +339,14 @@ class base_monai_loader(DataloaderBase):
         return crop
 
     def maybeDeleteFeatures(self):
-        if self.config['loaders']['mode'] == 'training':
+        if self.config['loaders']['val_method']['saliency'] != 'False':
             deleter = DeleteItemsd(keys=self.features)
         else:
             deleter = Identityd(keys=self.features)
         return deleter
 
     def maybeDeleteMeta(self):
-        if self.config['loaders']['mode'] == 'training':
+        if self.config['loaders']['val_method']['saliency'] != 'False':
             deleter = DeleteItemsd(
                 keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True)
         else:

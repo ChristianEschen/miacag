@@ -3,7 +3,7 @@ import argparse
 from mia.preprocessing.utils.sql_utils import copy_table
 
 parser = argparse.ArgumentParser(
-    description='Define inputs for copy table')
+    description='Define data['inputs'] for copy table')
 parser.add_argument(
     '--database', type=str,
     help="database name")

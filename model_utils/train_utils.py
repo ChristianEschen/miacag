@@ -2,10 +2,10 @@ import torch
 import numpy as np
 import random
 from mia.metrics.metrics_utils import get_metrics, get_losses_metric
-from mia.metrics.metrics_utils import create_loss_dict
+from mia.metrics.metrics_utils import create_loss_dict, get_loss_metric_class
 from mia.metrics.metrics_utils import normalize_metrics, write_tensorboard
 from mia.dataloader.get_dataloader import get_data_from_loader
-from mia.model_utils.eval_utils import get_losses
+from mia.model_utils.eval_utils import get_losses, get_losses_class
 from mia.configs.config import save_config
 from mia.metrics.metrics_utils import flatten, \
     unroll_list_in_dict
@@ -20,7 +20,7 @@ def set_random_seeds(random_seed=0):
     random.seed(random_seed)
 
 
-def train_one_step(model, inputs, labels, criterion,
+def train_one_step(model, data, criterion,
                    optimizer, lr_scheduler, writer, config,
                    running_loss_train,
                    running_metric_train,
@@ -32,30 +32,31 @@ def train_one_step(model, inputs, labels, criterion,
     # forward + backward + optimize
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
-            outputs = model(inputs)
-            losses, loss = get_losses(config, outputs, labels, criterion)
+            outputs = model(data['inputs'])
+            losses, loss = get_losses_class(config,
+                                            outputs,
+                                            data,
+                                            criterion)
+            # losses, loss = get_losses(config, outputs,
+            #                           data[config['labels_names']],
+            #                           criterion)
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
     else:
-        outputs = model(inputs)
-        losses, loss = get_losses(config, outputs, labels, criterion)
+        outputs = model(data['inputs'])
+        losses, loss = get_losses_class(config,
+                                        outputs,
+                                        data,
+                                        criterion)
         loss.backward()
         optimizer.step()
 
-    losses = create_loss_dict(config, losses)
-    metrics = get_metrics(outputs,
-                          labels,
-                          running_metric_train,
-                          criterion,
-                          config)
-    losses_metric = get_losses_metric(
-        outputs,
-        labels,
-        running_loss_train,
-        losses,
-        criterion,
-        config)
+    losses = create_loss_dict(config, losses, loss)
+    metrics, losses_metric = get_loss_metric_class(
+        config, outputs, data, losses, running_metric_train,
+        running_loss_train, criterion)
+
     return outputs, losses, metrics, losses_metric
 
 
@@ -65,11 +66,10 @@ def train_one_epoch(model, criterion,
                     running_metric_train, running_loss_train,
                     writer, config, scaler):
     for i, data in enumerate(train_loader, 0):
-        inputs, labels = get_data_from_loader(data, config, device)
+        data = get_data_from_loader(data, config, device)
         outputs, loss, metrics, loss_metric = train_one_step(
             model,
-            inputs,
-            labels,
+            data,
             criterion,
             optimizer,
             lr_scheduler,

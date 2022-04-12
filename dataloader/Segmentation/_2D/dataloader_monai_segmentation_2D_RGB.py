@@ -47,7 +47,7 @@ class base_monai_segmentation_loader():
                                          self.features,
                                          self.image_path)
         self.data = self.csv.to_dict('records')
-        self.image_data = self.csv[self.features+['labels_transformed']].to_dict('records')
+        self.image_data = self.csv[self.features+[config['labels_names']]].to_dict('records')
         self.config = config
 
     def get_input_features(self, csv):
@@ -56,7 +56,7 @@ class base_monai_segmentation_loader():
         return features
 
     def set_feature_path(self, csv, features, image_path):
-        feature_paths = features + ['labels_transformed']
+        feature_paths = features + [config['labels_names']]
         for feature in feature_paths:
             csv[feature] = csv[feature].apply(
                     lambda x: os.path.join(image_path, x))
@@ -72,18 +72,18 @@ class train_monai_segmentation_loader(base_monai_segmentation_loader):
     def __call__(self):
         # define transforms for image and segmentation
         trans_pre = [
-                LoadImaged(keys=self.features + ["labels"]),
-                ConvertToMultiChannel(keys="labels"),
+                LoadImaged(keys=self.features + [self.config["labels_names"]]),
+                ConvertToMultiChannel(keys=self.config["labels_names"]),
                 AsChannelFirstd(keys=self.features),
                 RandCropByPosNegLabeld(
-                    keys=self.features + ["labels"],
-                    label_key="labels",
+                    keys=self.features + [self.config["labels_names"]],
+                    label_key=self.config["labels_names"],
                     spatial_size=[self.config['loaders']['height'],
                                   self.config['loaders']['width']],
                     pos=1, neg=1, num_samples=1),
                 NormalizeIntensityd(keys=self.features, nonzero=True,
                                     channel_wise=True),
-                ToTensord(keys=self.features + ["labels"]),
+                ToTensord(keys=self.features + [self.config["labels_names"]]),
             ]
 
         train_transforms = Compose(trans_pre)
@@ -112,18 +112,18 @@ class val_monai_segmentation_loader(base_monai_segmentation_loader):
 
     def __call__(self):
         trans_pre = [
-                LoadImaged(keys=self.features + ["labels"]),
-                ConvertToMultiChannel(keys="labels"),
+                LoadImaged(keys=self.features + [self.config["labels_names"]]),
+                ConvertToMultiChannel(keys=self.config["labels_names"]),
                 AsChannelFirstd(keys=self.features),
                 RandCropByPosNegLabeld(
-                    keys=self.features + ["labels"],
-                    label_key="labels",
+                    keys=self.features + [self.config["labels_names"]],
+                    label_key=self.config["labels_names"],
                     spatial_size=[self.config['loaders']['height'],
                                   self.config['loaders']['width']],
                     pos=1, neg=1, num_samples=1),
                 NormalizeIntensityd(keys=self.features, nonzero=True,
                                     channel_wise=True),
-                ToTensord(keys=self.features + ["labels"]),
+                ToTensord(keys=self.features + [self.config["labels_names"]]),
 
             ]
 
@@ -142,12 +142,12 @@ class val_monai_loader_sliding_window(base_monai_segmentation_loader):
 
     def __call__(self):
         trans_pre = [
-                LoadImaged(keys=self.features + ["labels"]),
-                ConvertToMultiChannel(keys="labels"),
+                LoadImaged(keys=self.features + [self.config["labels_names"]]),
+                ConvertToMultiChannel(keys=self.config["labels_names"]),
                 AsChannelFirstd(keys=self.features),
                 NormalizeIntensityd(keys=self.features, nonzero=True,
                                     channel_wise=True),
-                ToTensord(keys=self.features + ["labels"]),
+                ToTensord(keys=self.features + [self.config["labels_names"]]),
 
             ]
 

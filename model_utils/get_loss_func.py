@@ -26,6 +26,8 @@ def get_loss_func(config):
         elif loss == 'Siam':
             criterion = SimSiamLoss('original')
             criterions.append(criterion)
+        elif loss == 'total':
+            pass
         else:
             raise ValueError("Loss type is not implemented")
     return criterions

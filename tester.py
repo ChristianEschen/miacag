@@ -14,8 +14,6 @@ from mia.model_utils.train_utils import set_random_seeds
 def read_log_file(config_input):
     config = load_config(
         os.path.join(config_input['output_directory'], 'config.yaml'))
-    # config = load_config(config_train_out['config'])
-    # config.update(config_input)
     config['model']['pretrain_model'] = config['output_directory']
     return config
 
@@ -31,12 +29,13 @@ def convert_string_to_tuple(field):
             temp = []
     return res[0]
 
+
 def test(config):
     config['loaders']['mode'] = 'testing'
     if config['loaders']['val_method']['saliency'] == 'False':
         config['loaders']['val_method']["samples"] = 2
     set_random_seeds(random_seed=config['manual_seed'])
-    
+
     device = get_device(config)
 
     if config["cpu"] == "False":
@@ -44,7 +43,6 @@ def test(config):
         torch.backends.cudnn.benchmark = True
 
     BuildModel = ModelBuilder(config, device)
-    #if torch.distributed.get_rank() == 0:
     model = BuildModel()
     if config['use_DDP'] == 'True':
         model = torch.nn.parallel.DistributedDataParallel(
@@ -60,11 +58,6 @@ def test(config):
                 config['eval_metric_val']['name'])
 
 
-    # running_metric_test, config['eval_metric_val']['name'] = \
-    #     init_metrics(config['eval_metric_val']['name'], config)
-    # running_loss_test, _ = init_metrics(config['loss']['name'],
-    #                                     config,
-    #                                     mode='loss')
     pipeline = TestPipeline()
     pipeline.get_test_pipeline(model, criterion, config, test_loader,
                                device, init_metrics,

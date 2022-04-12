@@ -55,6 +55,7 @@ def update_cols(con, records, sql_config, cols, page_size=2):
     )
     con.commit()
 
+
 def copy_table(sql_config):
     sql = """
         CREATE TABLE "{}" as

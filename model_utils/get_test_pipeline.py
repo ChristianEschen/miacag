@@ -63,7 +63,7 @@ class TestPipeline():
                 self.insert_data_to_db(test_loader, config)
 
                 acc = {'accuracy ensemble': accuracy_score(
-                    test_loader.val_df['labels_transformed'].astype('float').astype('int'),
+                    test_loader.val_df[config['labels_names']].astype('float').astype('int'),
                     test_loader.val_df['predictions'].astype('float').astype('int'))}
                 shutil.rmtree(csv_files)
                 print('accuracy_correct', acc)

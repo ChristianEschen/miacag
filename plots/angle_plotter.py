@@ -2,7 +2,7 @@ from mia.preprocessing.utils.sql_utils import getDataFromDatabase
 import seaborn as sns
 import argparse
 parser = argparse.ArgumentParser(
-    description='Define inputs for building database.')
+    description='Define data['inputs'] for building database.')
 parser.add_argument(
             '--query', type=str,
             help='query for retrieving data',
@@ -47,11 +47,11 @@ if __name__ == '__main__':
                   args.query
                   }
     df, connection = getDataFromDatabase(sql_config)
-    df = df[["PositionerPrimaryAngle", "PositionerSecondaryAngle", "DistanceSourceToPatient", "DistanceSourceToDetector", "labels"]]
+    df = df[["PositionerPrimaryAngle", "PositionerSecondaryAngle", "DistanceSourceToPatient", "DistanceSourceToDetector", self.config["labels_names"]]]
     map_dict = {0: "LCA",
                 1: "RCA"}
-    df["labels"] = df["labels"].map(map_dict)
-    g = sns.PairGrid(df, hue="labels")
+    df[self.config["labels_names"]] = df[self.config["labels_names"]].map(map_dict)
+    g = sns.PairGrid(df, hue=self.config["labels_names"])
     g.map_diag(sns.histplot)
     g.map_offdiag(sns.scatterplot)
     g.add_legend()
@@ -61,5 +61,5 @@ if __name__ == '__main__':
         data=df,
         x="PositionerPrimaryAngle",
         y="PositionerSecondaryAngle",
-        hue="labels")
+        hue=self.config["labels_names"])
     g.figure.savefig("angles.png")

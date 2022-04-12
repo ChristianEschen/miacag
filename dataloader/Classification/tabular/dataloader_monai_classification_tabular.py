@@ -54,7 +54,7 @@ from mia.dataloader.dataloader_base_monai import base_monai_loader
 
 #         self.features = self.get_input_features(self.df)
 #         self.set_data_path(self.features)
-#         self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+#         self.data = self.df[self.features + [config['labels_names'], 'rowid']]
 #         self.data = self.data.to_dict('records')
 
 
@@ -70,7 +70,7 @@ class train_monai_classification_loader(base_monai_loader):
                 'PositionerSecondaryAngle',
                 'DistanceSourceToPatient',
                 'DistanceSourceToDetector'])
-        self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+        self.data = self.df[self.features + [config['labels_names'], 'rowid']]
         self.data = self.data.dropna()
         for col in self.features:
             self.data[col] \
@@ -146,7 +146,7 @@ class val_monai_classification_loader(base_monai_loader):
                 'PositionerSecondaryAngle',
                 'DistanceSourceToPatient',
                 'DistanceSourceToDetector'])
-        self.data = self.df[self.features + ['labels_transformed']]
+        self.data = self.df[self.features + [config['labels_names']]]
         self.data = self.data.dropna()
         for col in self.features:
             self.data[col] \
@@ -229,7 +229,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
                                                               config)
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        self.data = self.df[self.features + ['labels_transformed', 'rowid']]
+        self.data = self.df[self.features + [config['labels_names'], 'rowid']]
         self.data = self.data.to_dict('records')
 
     def __call__(self):

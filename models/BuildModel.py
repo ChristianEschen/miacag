@@ -58,7 +58,7 @@ class ModelBuilder():
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
             model.module.encoder.load_state_dict(torch.load(path_encoder))
-            
+
         if path_model != 'None':
             if self.config["use_DDP"] == "False":
                 #if self.config['use_DDP'] == 'True':
@@ -72,7 +72,6 @@ class ModelBuilder():
                 else:
                     model.module.load_state_dict(
                         torch.load(os.path.join(path_model, 'model.pt')))
-                    print('model loaded state dict', model.module.encoder[0].conv.conv_t.weight[0:2,0:2,0, 0,0])
         return model
 
     def get_segmentation_model(self):

@@ -1,6 +1,6 @@
 from mia.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
-    mkDir
+    mkDir, get_loss_metric_class
 import torch
 from mia.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
@@ -45,32 +45,37 @@ def maybe_use_amp(use_amp, inputs, model):
     return outputs
 
 
-def eval_one_step(model, inputs, labels, device, criterion,
+def eval_one_step(model, data, device, criterion,
                   config, running_metric_val, running_loss_val,
                   saliency_maps=False):
     # set model in eval mode
     model.eval()
     with torch.no_grad():
         # forward
-        outputs = maybe_sliding_window(inputs, model, config)
-
-        losses, _ = get_losses(config, outputs, labels, criterion)
-        losses = create_loss_dict(config, losses)
-    if config['task_type'] == "representation_learning":
-        return outputs, losses, _
-    else:
-        metrics = get_metrics(outputs,
-                            labels,
-                            running_metric_val,
-                            criterion,
-                            config)
-        losses_metric = get_losses_metric(
-            outputs,
-            labels,
-            running_loss_val,
-            losses,
-            criterion,
-            config)
+        for label_name in config['labels_names']:
+            outputs = maybe_sliding_window(data['inputs'], model, config)
+            #losses, _ = get_losses(config, outputs,
+            #                       data[label_name], criterion)
+            #losses = create_loss_dict(config, losses)
+            losses, loss = get_losses_class(config, outputs, data, criterion)
+            losses = create_loss_dict(config, losses, loss)
+            metrics, losses_metric = get_loss_metric_class(config, outputs,
+                                                           data, losses,
+                                                           running_metric_val,
+                                                           running_loss_val,
+                                                           criterion)
+            # metrics = get_metrics(outputs,
+            #                       data[label_name],
+            #                       running_metric_val,
+            #                       criterion,
+            #                       config)
+            # losses_metric = get_losses_metric(
+            #     outputs,
+            #     data[label_name],
+            #     running_loss_val,
+            #     losses,
+            #     criterion,
+            #     config)
     
     if config['loaders']['val_method']['saliency'] == 'True':
         if config['loaders']['use_amp'] is True:
@@ -127,11 +132,11 @@ def eval_one_step_knn(get_data_from_loader,
 
     train_features = torch.zeros([config['model']['feat_dim'], n_data],
                                  device=device)
-    train_labels = torch.zeros([config['model']['feat_dim'], n_data],
+    train_data['labels'] = torch.zeros([config['model']['feat_dim'], n_data],
                                  device=device)
     with torch.no_grad():
         for batch_idx, data in enumerate(train_loader):
-            inputs, labels = get_data_from_loader(data, config,
+            inputs, data['labels'] = get_data_from_loader(data, config,
                                                   device, val_phase=True)
             # forward
             features = forward_model(inputs, encoder_model, config)
@@ -147,7 +152,7 @@ def eval_one_step_knn(get_data_from_loader,
     correct = 0
     with torch.no_grad():
         for batch_idx, data in enumerate(val_loader):
-            inputs, labels = get_data_from_loader(data, config,
+            inputs, data['labels'] = get_data_from_loader(data, config,
                                                   device, val_phase=True)
             features = forward_model(inputs, encoder_model, config)
             features = features.type(torch.cuda.FloatTensor)
@@ -176,6 +181,17 @@ def get_losses(config, outputs, labels, criterion):
     return losses, loss
 
 
+def get_losses_class(config, outputs, data, criterion):
+    losses = []
+    for count, label_name in enumerate(config['labels_names']):
+        losses_tmp, loss = get_losses(
+            config, outputs[count],
+            data[label_name], criterion)
+        losses.append(losses_tmp[0])
+        loss += loss
+    return losses, loss
+
+
 def set_uniform_sample_pct(validation_loader, percentage):
     for i in validation_loader.dataset.transform.transforms:
         if hasattr(i, 'percentage'):
@@ -190,15 +206,10 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
         logits = []
         rowids = []
         for data in validation_loader:
-            if config['loaders']['mode'] == 'testing':
-                inputs, labels, rowid = get_data_from_loader(data, config,
-                                                    device)
-            else:
-                inputs, labels = get_data_from_loader(data, config,
-                                                    device)
+            data = get_data_from_loader(data, config, device)
+
             outputs, loss, metrics, cams = eval_one_step(
-                                            model, inputs,
-                                            labels, device,
+                                            model, data, device,
                                             criterion,
                                             config,
                                             running_metric_val,
@@ -206,7 +217,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             saliency_maps)
             if config['loaders']['mode'] == 'testing':
                 logits.append(outputs.cpu())
-                rowids.append(rowid.cpu())
+                rowids.append(data['rowid'].cpu())
             if config['loaders']['val_method']['saliency'] == 'True':
                 data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
                 patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
@@ -215,7 +226,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                 SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
 
                 prepare_cv2_img(
-                    inputs.cpu().numpy(),
+                    data['inputs'].cpu().numpy(),
                     cams.cpu().numpy(),
                     data_path,
                     patientID,
@@ -237,7 +248,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
         running_metric_val[config['eval_metric_val']['name'][0]] = metric
 
         for data in validation_loader[0]:
-            inputs, labels = get_data_from_loader(data, config,
+            inputs, data['labels'] = get_data_from_loader(data, config,
                                                     device)
             _, loss, _ = eval_one_step(
                                             model, inputs,

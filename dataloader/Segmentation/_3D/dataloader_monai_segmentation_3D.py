@@ -42,10 +42,10 @@ class base_monai_segmentation_loader(base_monai_loader):
                                          self.features,
                                          self.image_path)
         self.csv = self.set_feature_path(self.csv,
-                                         ['labels_transformed'],
+                                         [config['labels_names']],
                                          self.image_path)
         self.data = self.csv.to_dict('records')
-        self.image_data = self.csv[self.features+['labels_transformed']].to_dict('records')
+        self.image_data = self.csv[self.features+[config['labels_names']]].to_dict('records')
         self.config = config
 
 
@@ -57,13 +57,13 @@ class train_monai_segmentation_loader(base_monai_segmentation_loader):
 
     def __call__(self):
         train_transforms = [
-                LoadImaged(keys=self.features + ["labels"]),
+                LoadImaged(keys=self.features + [self.config["labels_names"]]),
                 AddChanneld(keys=self.features),
-                ConvertToMultiChannel(keys="labels"),
+                ConvertToMultiChannel(keys=self.config["labels_names"]),
                 self.maybeReorder_z_dim(),
                 self.getMaybeForegroundCropper(),
                 Spacingd(
-                     keys=self.features + ["labels"],
+                     keys=self.features + [self.config["labels_names"]],
                      pixdim=(self.config['loaders']['pixdim_depth'],
                              self.config['loaders']['pixdim_height'],
                              self.config['loaders']['pixdim_width']),
@@ -76,16 +76,16 @@ class train_monai_segmentation_loader(base_monai_segmentation_loader):
                 NormalizeIntensityd(keys=self.features, nonzero=True,
                                     channel_wise=True),
                 RandCropByPosNegLabeld(
-                    keys=self.features + ["labels"],
-                    label_key="labels",
+                    keys=self.features + [self.config["labels_names"]],
+                    label_key=self.config["labels_names"],
                     spatial_size=[self.config['loaders']['depth'],
                                   self.config['loaders']['height'],
                                   self.config['loaders']['width']],
                     pos=1, neg=1, num_samples=1),
-                RandRotate90d(keys=self.features + ["labels"], prob=0.1, max_k=3,
+                RandRotate90d(keys=self.features + [self.config["labels_names"]], prob=0.1, max_k=3,
                               spatial_axes=(1, 2)),
                 RandZoomd(
-                    keys=self.features + ["labels"],
+                    keys=self.features + [self.config["labels_names"]],
                     min_zoom=0.9,
                     max_zoom=1.2,
                     mode=tuple([
@@ -96,7 +96,7 @@ class train_monai_segmentation_loader(base_monai_segmentation_loader):
                                     range(len(self.features))]) + (None,),
                     prob=0.16,
                 ),
-                CastToTyped(keys=self.features + ["labels"],
+                CastToTyped(keys=self.features + [self.config["labels_names"]],
                             dtype=tuple([
                                     np.float32 for i in
                                     range(len(self.features))]) + (np.uint8,)),
@@ -113,10 +113,10 @@ class train_monai_segmentation_loader(base_monai_segmentation_loader):
                 RandScaleIntensityd(keys=self.features,
                                     factors=0.3,
                                     prob=0.15),
-                # RandFlipd(self.features + ["labels"],
+                # RandFlipd(self.features + [self.config["labels_names"]],
                 #           spatial_axis=[0, 1, 2], prob=0.5),
                 self.getMaybeConcat(),
-                ToTensord(keys=["inputs", "labels"]),
+                ToTensord(keys=["inputs", self.config["labels_names"]]),
                             ]
         train_transforms = Compose(train_transforms)
         # CHECK: for debug
@@ -145,13 +145,13 @@ class val_monai_segmentation_loader(base_monai_segmentation_loader):
 
     def __call__(self):
         val_transforms = [
-                LoadImaged(keys=self.features + ["labels"]),
+                LoadImaged(keys=self.features + [self.config["labels_names"]]),
                 AddChanneld(keys=self.features),
-                ConvertToMultiChannel(keys="labels"),
+                ConvertToMultiChannel(keys=self.config["labels_names"]),
                 self.maybeReorder_z_dim(),
                 self.getMaybeForegroundCropper(),
                 Spacingd(
-                     keys=self.features + ["labels"],
+                     keys=self.features + [self.config["labels_names"]],
                      pixdim=(self.config['loaders']['pixdim_depth'],
                              self.config['loaders']['pixdim_height'],
                              self.config['loaders']['pixdim_width']),
@@ -164,12 +164,12 @@ class val_monai_segmentation_loader(base_monai_segmentation_loader):
                 NormalizeIntensityd(keys=self.features, nonzero=True,
                                     channel_wise=True),
                 self.getMaybeRandCrop(),
-                CastToTyped(keys=self.features + ["labels"],
+                CastToTyped(keys=self.features + [self.config["labels_names"]],
                             dtype=tuple([
                                     np.float32 for i in
                                     range(len(self.features))]) + (np.uint8,)),
                 self.getMaybeConcat(),
-                ToTensord(keys=["inputs", "labels"]),
+                ToTensord(keys=["inputs", self.config["labels_names"]]),
                             ]
         val_transforms = Compose(val_transforms)
         # CHECK: for debug
@@ -191,7 +191,7 @@ class val_monai_segmentation_loader(base_monai_segmentation_loader):
 
 class ConvertToMultiChannel(MapTransform):
     """
-    Convert labels to multi channels based.
+    Convert data['labels'] to multi channels based.
     Background is also encoded
     """
 

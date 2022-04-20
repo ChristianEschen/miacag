@@ -73,3 +73,29 @@ def copy_table(sql_config):
     cursor.execute("COMMIT;")
     cursor.close()
     connection.close()
+
+
+def add_columns(sql_config, column_names, data_types):
+
+    for count, column_name in enumerate(column_names):
+        data_type = data_types[count]
+        sql = """
+        ALTER TABLE "{}"
+        ADD COLUMN "{}" {};
+        """.format(sql_config['table_name'],
+                   column_name,
+                   data_type)
+
+        connection = psycopg2.connect(
+                host=sql_config['host'],
+                database=sql_config['database'],
+                user=sql_config['username'],
+                password=sql_config['password'])
+        cursor = connection.cursor()
+
+        cursor.execute(sql)
+        cursor.execute("COMMIT;")
+        cursor.close()
+        connection.close()
+
+    return None

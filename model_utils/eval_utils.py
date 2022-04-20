@@ -54,9 +54,6 @@ def eval_one_step(model, data, device, criterion,
         # forward
         for label_name in config['labels_names']:
             outputs = maybe_sliding_window(data['inputs'], model, config)
-            #losses, _ = get_losses(config, outputs,
-            #                       data[label_name], criterion)
-            #losses = create_loss_dict(config, losses)
             losses, loss = get_losses_class(config, outputs, data, criterion)
             losses = create_loss_dict(config, losses, loss)
             metrics, losses_metric = get_loss_metric_class(config, outputs,
@@ -64,18 +61,7 @@ def eval_one_step(model, data, device, criterion,
                                                            running_metric_val,
                                                            running_loss_val,
                                                            criterion)
-            # metrics = get_metrics(outputs,
-            #                       data[label_name],
-            #                       running_metric_val,
-            #                       criterion,
-            #                       config)
-            # losses_metric = get_losses_metric(
-            #     outputs,
-            #     data[label_name],
-            #     running_loss_val,
-            #     losses,
-            #     criterion,
-            #     config)
+ 
     
     if config['loaders']['val_method']['saliency'] == 'True':
         if config['loaders']['use_amp'] is True:
@@ -216,7 +202,8 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             running_loss_val,
                                             saliency_maps)
             if config['loaders']['mode'] == 'testing':
-                logits.append(outputs.cpu())
+                #logits.append(outputs.cpu())
+                logits.append([out.cpu() for out in outputs])
                 rowids.append(data['rowid'].cpu())
             if config['loaders']['val_method']['saliency'] == 'True':
                 data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
@@ -310,13 +297,12 @@ def val_one_epoch_test(
                 saliency_maps,
                 running_metric_val, running_loss_val)
         running_metric_val, running_loss_val, logits, rowids = eval_outputs
-        # running_metric_vals.append(running_metric_val)
-        # running_loss_vals.append(running_loss_val)
+
         logitsS.append(logits)
         rowidsS.append(rowids)
-    logitsS = [item for sublist in logitsS for item in sublist]
+    logitsS_new = [item for sublist in logitsS for item in sublist]
     rowidsS = [item for sublist in rowidsS for item in sublist]
-    logits = torch.cat(logitsS, dim=0)
+    logits = torch.cat([li[0] for li in logitsS_new], dim=0)
     rowids = torch.cat(rowidsS, dim=0)
     if config['task_type'] != "representation_learning":
         running_metric_val, metric_tb = normalize_metrics(
@@ -327,6 +313,16 @@ def val_one_epoch_test(
     confidences = softmax_transform(logits.float())
     return metric_tb, confidences, rowids
 
+# def getListOfLogits(logits, rowids):
+#     # return list of logits with shape list(labels) of samplesXproba
+#     sample_proba = []
+#     for sample in logits:
+#         for label in sample:
+#             for class_id in label:
+
+
+#     logits_labels = logits
+#     return logits
 
 def val_one_epoch(model, criterion, config,
                   validation_loader, device,

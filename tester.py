@@ -53,10 +53,12 @@ def test(config):
 
     # Get loss func
     criterion = get_loss_func(config)
-    running_loss_test = init_metrics(config['loss']['name'])
+    running_loss_test = init_metrics(config['loss']['name'],
+                                     config,
+                                     ptype='loss')
     running_metric_test = init_metrics(
-                config['eval_metric_val']['name'])
-
+                config['eval_metric_val']['name'],
+                config)
 
     pipeline = TestPipeline()
     pipeline.get_test_pipeline(model, criterion, config, test_loader,

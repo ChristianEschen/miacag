@@ -1,4 +1,0 @@
-Building DAG of jobs...
-MissingInputException in line 63 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
-Missing input files for rule copy_config:
-/home/sauroman/mia/configs/classification/_3D/classification_config_angio.yaml

@@ -1,4 +1,0 @@
-Building DAG of jobs...
-MissingInputException in line 108 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
-Missing input files for rule eval_model_val_set:
-SELECT * FROM DICOM_TABLE

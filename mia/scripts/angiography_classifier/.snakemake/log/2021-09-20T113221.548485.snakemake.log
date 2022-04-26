@@ -1,5 +1,0 @@
-Building DAG of jobs...
-MissingInputException in line 39 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
-Missing input files for rule all:
-runs/84df6d9c-e0e3-4321-a98e-b296a1246176.log
-/home/gandalf/angiography_data/runs/Sep20_11-32-21_gandalf-MS-7845test

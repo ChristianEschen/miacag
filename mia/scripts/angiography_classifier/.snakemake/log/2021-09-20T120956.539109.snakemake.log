@@ -1,3 +1,0 @@
-NameError in line 85 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
-name 'query_cat' is not defined
-  File "/home/gandalf/MIA/scripts/angiography_classifier/Snakefile", line 85, in <module>

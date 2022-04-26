@@ -1,4 +1,0 @@
-The flag 'temp' used in rule train_model is only valid for outputs, not inputs.
-Building DAG of jobs...
-CyclicGraphException in line 76 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
-Cyclic dependency on rule train_model.

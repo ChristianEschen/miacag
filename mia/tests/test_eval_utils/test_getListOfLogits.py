@@ -1,5 +1,5 @@
 import torch
-from mia.model_utils.eval_utils import getListOfLogits
+from miac.model_utils.eval_utils import getListOfLogits
 
 
 def test_getListOflogtis():

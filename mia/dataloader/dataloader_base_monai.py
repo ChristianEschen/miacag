@@ -2,7 +2,7 @@ from fnmatch import translate
 import os
 import numpy as np
 import pandas as pd
-from mia.dataloader.dataloader_base import DataloaderBase
+from miac.dataloader.dataloader_base import DataloaderBase
 from monai.transforms import (
     AddChanneld,
     Compose,

@@ -53,7 +53,7 @@ class ModelBuilder():
     def get_classification_model(self):
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
-        from mia.models.modules import ClassificationModel as m
+        from miac.models.modules import ClassificationModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':

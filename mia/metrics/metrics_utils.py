@@ -1,5 +1,5 @@
 import os
-from mia.metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
+from miac.metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
 import collections
 from monai.metrics import DiceMetric
 from monai.transforms import (
@@ -12,7 +12,7 @@ from monai.data import decollate_batch
 import torch.nn.functional as F
 import monai
 import torch
-from monai.metrics import Cumulative, CumulativeAverage, CumulativeIterationMetric
+from monai.metrics import CumulativeAverage, CumulativeIterationMetric
 from monai.transforms import (
     Activations,
     AsDiscrete,

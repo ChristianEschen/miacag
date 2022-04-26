@@ -1,14 +1,14 @@
 import torch
-from mia.dataloader.get_dataloader import get_dataloader_test
-from mia.configs.options import TestOptions
-from mia.metrics.metrics_utils import init_metrics, normalize_metrics
-from mia.model_utils.get_loss_func import get_loss_func
-from mia.model_utils.get_test_pipeline import TestPipeline
-from mia.configs.config import load_config
-from mia.trainer import get_device
-from mia.models.BuildModel import ModelBuilder
+from miac.dataloader.get_dataloader import get_dataloader_test
+from miac.configs.options import TestOptions
+from miac.metrics.metrics_utils import init_metrics, normalize_metrics
+from miac.model_utils.get_loss_func import get_loss_func
+from miac.model_utils.get_test_pipeline import TestPipeline
+from miac.configs.config import load_config
+from miac.trainer import get_device
+from miac.models.BuildModel import ModelBuilder
 import os
-from mia.model_utils.train_utils import set_random_seeds
+from miac.model_utils.train_utils import set_random_seeds
 
 
 def read_log_file(config_input):

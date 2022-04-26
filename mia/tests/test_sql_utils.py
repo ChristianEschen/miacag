@@ -1,6 +1,6 @@
 import psycopg2
 import pytest
-from mia.preprocessing.utils.sql_utils import add_columns
+from miac.preprocessing.utils.sql_utils import add_columns
 import os
 import subprocess
 

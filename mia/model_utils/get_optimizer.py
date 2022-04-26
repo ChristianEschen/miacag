@@ -1,6 +1,6 @@
 import os
 import torch
-from mia.model_utils.scheduler import WarmupMultiStepLR
+from miac.model_utils.scheduler import WarmupMultiStepLR
 
 
 def get_optimizer(config, model, len_train):

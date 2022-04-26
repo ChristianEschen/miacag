@@ -1,6 +1,6 @@
 from torch import nn
-from mia.models.mlps import prediction_MLP, projection_MLP
-from mia.models.get_encoder import get_encoder, modelsRequiredPermute
+from miac.models.mlps import prediction_MLP, projection_MLP
+from miac.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
 

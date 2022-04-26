@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from mia.preprocessing.utils.sql_utils import getDataFromDatabase
+from miac.preprocessing.utils.sql_utils import getDataFromDatabase
 from sklearn.metrics import f1_score, \
      accuracy_score, confusion_matrix, plot_confusion_matrix
 import pandas as pd

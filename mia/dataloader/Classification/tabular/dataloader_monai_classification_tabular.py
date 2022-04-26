@@ -43,7 +43,7 @@ from monai.transforms import (
     Resized,
     Lambdad,
     RandSpatialCropSamplesd)
-from mia.dataloader.dataloader_base_monai import base_monai_loader
+from miac.dataloader.dataloader_base_monai import base_monai_loader
 
 
 # class base_monai_classification_loader(base_monai_loader):

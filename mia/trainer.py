@@ -1,16 +1,16 @@
-from mia.dataloader.get_dataloader import get_dataloader_train
+from miac.dataloader.get_dataloader import get_dataloader_train
 import torch
-from mia.models.BuildModel import ModelBuilder
-from mia.configs.config import load_config, maybe_create_tensorboard_logdir
+from miac.models.BuildModel import ModelBuilder
+from miac.configs.config import load_config, maybe_create_tensorboard_logdir
 from torch.utils.tensorboard import SummaryWriter
-from mia.model_utils.get_optimizer import get_optimizer
-from mia.model_utils.get_loss_func import get_loss_func
-from mia.configs.options import TrainOptions
-from mia.model_utils.train_utils import set_random_seeds, \
+from miac.model_utils.get_optimizer import get_optimizer
+from miac.model_utils.get_loss_func import get_loss_func
+from miac.configs.options import TrainOptions
+from miac.model_utils.train_utils import set_random_seeds, \
     train_one_epoch, early_stopping, \
     get_device, saver, save_model
-from mia.metrics.metrics_utils import init_metrics
-from mia.model_utils.eval_utils import val_one_epoch
+from miac.metrics.metrics_utils import init_metrics
+from miac.model_utils.eval_utils import val_one_epoch
 import time
 import torch.distributed as dist
 from monai.utils import set_determinism

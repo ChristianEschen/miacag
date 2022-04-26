@@ -1,15 +1,15 @@
-from mia.metrics.metrics_utils import normalize_metrics, get_metrics, \
+from miac.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
     mkDir, get_loss_metric_class
 import torch
-from mia.dataloader.get_dataloader import get_data_from_loader
+from miac.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
 from monai.inferers import SimpleInferer, SaliencyInferer
 from torch import nn
-from mia.metrics.metrics import softmax_transform
-from mia.model_utils.grad_cam_utils import prepare_cv2_img
+from miac.metrics.metrics import softmax_transform
+from miac.model_utils.grad_cam_utils import prepare_cv2_img
 import numpy as np
 
 

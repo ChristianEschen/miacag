@@ -3,10 +3,10 @@ import torch.utils.data as data
 import pandas as pd
 from torchvision import transforms
 import numpy as np
-from mia.dataloader.transforms import _transforms_video as T
+from miac.dataloader.transforms import _transforms_video as T
 from torch.utils.data import WeightedRandomSampler
 import os
-#from mia.dataloader.dataloader_base import DataloaderTrain
+#from miac.dataloader.dataloader_base import DataloaderTrain
 from monai.transforms import (
     AddChanneld,
     Compose,

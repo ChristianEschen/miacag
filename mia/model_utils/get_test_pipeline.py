@@ -1,16 +1,16 @@
-from mia.model_utils.eval_utils import val_one_epoch
-from mia.model_utils.eval_utils import eval_one_step
+from miac.model_utils.eval_utils import val_one_epoch
+from miac.model_utils.eval_utils import eval_one_step
 import os
 import json
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score
-from mia.preprocessing.pre_process import appendDataframes
+from miac.preprocessing.pre_process import appendDataframes
 import os
-from mia.preprocessing.pre_process import mkFolder
+from miac.preprocessing.pre_process import mkFolder
 import psycopg2
 from psycopg2.extras import execute_batch
-from mia.preprocessing.utils.sql_utils import update_cols
+from miac.preprocessing.utils.sql_utils import update_cols
 import torch
 import shutil
 

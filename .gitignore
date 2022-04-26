@@ -1,7 +1,9 @@
-data
+mia/data
 runs
-scripts/**
+mia/scripts/**
 .vscode
 *.pyc
-scripts
+mia/scripts
 **/configs
+mia.egg-info
+mia/models/torchhub/3D

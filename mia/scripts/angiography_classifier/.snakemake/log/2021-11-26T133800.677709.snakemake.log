@@ -1,0 +1,10 @@
+PermissionError in line 8 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
+[Errno 13] Permission denied: '/home/sauroman'
+  File "/home/gandalf/MIA/scripts/angiography_classifier/Snakefile", line 25, in <module>
+  File "/home/gandalf/MIA/scripts/angiography_classifier/Snakefile", line 8, in mkFolder
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 213, in makedirs
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 213, in makedirs
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 213, in makedirs
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 213, in makedirs
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 213, in makedirs
+  File "/home/gandalf/anaconda3/envs/open-mmlab/lib/python3.7/os.py", line 223, in makedirs

@@ -1,0 +1,4 @@
+Building DAG of jobs...
+MissingInputException in line 160 of /home/gandalf/mia/scripts/angiography_classifier/Snakefile:
+Missing input files for rule train_model:
+/home/gandalf/MIA/data/angio

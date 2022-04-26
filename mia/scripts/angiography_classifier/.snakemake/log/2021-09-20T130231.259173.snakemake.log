@@ -1,0 +1,3 @@
+NameError in line 23 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
+name 'snake_log' is not defined
+  File "/home/gandalf/MIA/scripts/angiography_classifier/Snakefile", line 23, in <module>

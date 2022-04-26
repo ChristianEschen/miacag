@@ -1,0 +1,111 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job                   count    min threads    max threads
+------------------  -------  -------------  -------------
+all                       1              1              1
+copy_config               1              1              1
+copy_table                1              1              1
+eval_model_val_set        1              1              1
+plot_results_test         1              1              1
+plot_results_train        1              1              1
+plot_results_val          1              1              1
+train_model               1              1              1
+total                     8              1              1
+
+
+[Fri Nov 26 14:37:04 2021]
+rule copy_config:
+    input: ../../configs/classification/_3D/classification_config_angio.yaml
+    output: runs/ca597752-c197-4032-a90d-a1ec957337d1.yaml
+    jobid: 2
+    resources: tmpdir=/tmp
+
+
+[Fri Nov 26 14:37:04 2021]
+rule copy_table:
+    input: /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test
+    output: runs/a5a8758a-4192-4450-9178-487904f1af03.log
+    jobid: 1
+    resources: tmpdir=/tmp
+
+[Fri Nov 26 14:37:04 2021]
+Finished job 2.
+1 of 8 steps (12%) done
+[Fri Nov 26 14:37:04 2021]
+Finished job 1.
+2 of 8 steps (25%) done
+
+[Fri Nov 26 14:37:04 2021]
+rule train_model:
+    input: /home/gandalf/MIA/data/angio, runs/ca597752-c197-4032-a90d-a1ec957337d1.yaml, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test, runs/a5a8758a-4192-4450-9178-487904f1af03.log
+    output: /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/model.pt
+    jobid: 3
+    resources: tmpdir=/tmp
+
+[Fri Nov 26 14:37:05 2021]
+Finished job 3.
+3 of 8 steps (38%) done
+
+[Fri Nov 26 14:37:05 2021]
+rule eval_model_val_set:
+    input: /home/gandalf/MIA/data/angio, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/model.pt
+    output: runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log
+    jobid: 4
+    resources: tmpdir=/tmp
+
+[Fri Nov 26 14:37:06 2021]
+Finished job 4.
+4 of 8 steps (50%) done
+
+[Fri Nov 26 14:37:06 2021]
+rule plot_results_train:
+    input: runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/plots/train
+    output: runs/a568e23d-e2a1-4988-90e6-78129e0a208b.log
+    jobid: 5
+    resources: tmpdir=/tmp
+
+
+[Fri Nov 26 14:37:06 2021]
+rule plot_results_test:
+    input: runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/plots/test
+    output: runs/c3ef4c07-9535-486d-bc6b-d440da638695.log
+    jobid: 7
+    resources: tmpdir=/tmp
+
+[Fri Nov 26 14:37:07 2021]
+Finished job 5.
+5 of 8 steps (62%) done
+
+[Fri Nov 26 14:37:07 2021]
+rule plot_results_val:
+    input: runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/plots/val
+    output: runs/334299bc-21be-4cec-8a4d-56875f91e673.log
+    jobid: 6
+    resources: tmpdir=/tmp
+
+[Fri Nov 26 14:37:08 2021]
+Finished job 7.
+6 of 8 steps (75%) done
+[Fri Nov 26 14:37:09 2021]
+Finished job 6.
+7 of 8 steps (88%) done
+
+[Fri Nov 26 14:37:09 2021]
+localrule all:
+    input: runs/a5a8758a-4192-4450-9178-487904f1af03.log, runs/ca597752-c197-4032-a90d-a1ec957337d1.yaml, /home/gandalf/MIA/scripts/angiography_classifier/runs/Nov26_14-37-04_gandalf-MS-7845test/model.pt, runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log, runs/a568e23d-e2a1-4988-90e6-78129e0a208b.log, runs/334299bc-21be-4cec-8a4d-56875f91e673.log, runs/c3ef4c07-9535-486d-bc6b-d440da638695.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+Removing temporary output file runs/a5a8758a-4192-4450-9178-487904f1af03.log.
+Removing temporary output file runs/ca597752-c197-4032-a90d-a1ec957337d1.yaml.
+Removing temporary output file runs/707d60b0-a3ab-4183-a192-68e89930c2eb.log.
+Removing temporary output file runs/a568e23d-e2a1-4988-90e6-78129e0a208b.log.
+Removing temporary output file runs/334299bc-21be-4cec-8a4d-56875f91e673.log.
+Removing temporary output file runs/c3ef4c07-9535-486d-bc6b-d440da638695.log.
+[Fri Nov 26 14:37:09 2021]
+Finished job 0.
+8 of 8 steps (100%) done
+Complete log: /home/gandalf/MIA/scripts/angiography_classifier/.snakemake/log/2021-11-26T143704.442162.snakemake.log

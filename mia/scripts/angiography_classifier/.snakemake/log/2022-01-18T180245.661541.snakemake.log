@@ -1,0 +1,123 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job                   count    min threads    max threads
+------------------  -------  -------------  -------------
+all                       1              1              1
+copy_config               1              1              1
+copy_table                1              1              1
+eval_model_val_set        1              1              1
+plot_results_test         1              1              1
+plot_results_train        1              1              1
+plot_results_val          1              1              1
+split_train_val           1              1              1
+train_model               1              1              1
+total                     9              1              1
+
+
+[Tue Jan 18 18:02:45 2022]
+rule copy_table:
+    input: /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test
+    output: runs/e81232ad-7f8c-41b6-8cdb-6a273c7610b6.log
+    jobid: 1
+    resources: tmpdir=/tmp
+
+
+[Tue Jan 18 18:02:45 2022]
+rule copy_config:
+    input: ../../configs/classification/_3D/classification_config_angio.yaml
+    output: runs/cc10d569-3460-4306-be90-9e205f8d8631.yaml
+    jobid: 2
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:02:45 2022]
+Finished job 2.
+1 of 9 steps (11%) done
+[Tue Jan 18 18:02:46 2022]
+Finished job 1.
+2 of 9 steps (22%) done
+
+[Tue Jan 18 18:02:46 2022]
+rule split_train_val:
+    input: runs/cc10d569-3460-4306-be90-9e205f8d8631.yaml, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test, runs/e81232ad-7f8c-41b6-8cdb-6a273c7610b6.log
+    output: runs/76a3d6b1-f3ce-4921-82c3-874e2f015918.log
+    jobid: 4
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:02:46 2022]
+Finished job 4.
+3 of 9 steps (33%) done
+
+[Tue Jan 18 18:02:46 2022]
+rule train_model:
+    input: /home/gandalf/mia/data/angio, runs/cc10d569-3460-4306-be90-9e205f8d8631.yaml, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test, runs/e81232ad-7f8c-41b6-8cdb-6a273c7610b6.log, runs/76a3d6b1-f3ce-4921-82c3-874e2f015918.log
+    output: /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/model.pt
+    jobid: 3
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:02:56 2022]
+Finished job 3.
+4 of 9 steps (44%) done
+
+[Tue Jan 18 18:02:56 2022]
+rule eval_model_val_set:
+    input: /home/gandalf/mia/data/angio, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/model.pt
+    output: runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log
+    jobid: 5
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:03:04 2022]
+Finished job 5.
+5 of 9 steps (56%) done
+
+[Tue Jan 18 18:03:04 2022]
+rule plot_results_train:
+    input: runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/plots/train
+    output: runs/7f949c28-704e-46d3-835f-04b4f04ce3fb.log
+    jobid: 6
+    resources: tmpdir=/tmp
+
+
+[Tue Jan 18 18:03:04 2022]
+rule plot_results_val:
+    input: runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/plots/val
+    output: runs/5cb67d59-832b-4a7b-9051-e4b3432c9e42.log
+    jobid: 7
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:03:06 2022]
+Finished job 7.
+6 of 9 steps (67%) done
+
+[Tue Jan 18 18:03:06 2022]
+rule plot_results_test:
+    input: runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/plots/test
+    output: runs/546e7ae7-275a-46b7-8b0a-ebabcd141446.log
+    jobid: 8
+    resources: tmpdir=/tmp
+
+[Tue Jan 18 18:03:07 2022]
+Finished job 6.
+7 of 9 steps (78%) done
+[Tue Jan 18 18:03:08 2022]
+Finished job 8.
+8 of 9 steps (89%) done
+
+[Tue Jan 18 18:03:08 2022]
+localrule all:
+    input: runs/e81232ad-7f8c-41b6-8cdb-6a273c7610b6.log, runs/cc10d569-3460-4306-be90-9e205f8d8631.yaml, /home/gandalf/angiography_data/runs/Jan18_18-02-45_gandalf-MS-7845test/model.pt, runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log, runs/7f949c28-704e-46d3-835f-04b4f04ce3fb.log, runs/5cb67d59-832b-4a7b-9051-e4b3432c9e42.log, runs/546e7ae7-275a-46b7-8b0a-ebabcd141446.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+Removing temporary output file runs/e81232ad-7f8c-41b6-8cdb-6a273c7610b6.log.
+Removing temporary output file runs/cc10d569-3460-4306-be90-9e205f8d8631.yaml.
+Removing temporary output file runs/1de5138f-eb2c-41ad-b3ee-a02cf5bff3df.log.
+Removing temporary output file runs/7f949c28-704e-46d3-835f-04b4f04ce3fb.log.
+Removing temporary output file runs/5cb67d59-832b-4a7b-9051-e4b3432c9e42.log.
+Removing temporary output file runs/546e7ae7-275a-46b7-8b0a-ebabcd141446.log.
+[Tue Jan 18 18:03:08 2022]
+Finished job 0.
+9 of 9 steps (100%) done
+Complete log: /home/gandalf/mia/scripts/angiography_classifier/.snakemake/log/2022-01-18T180245.661541.snakemake.log

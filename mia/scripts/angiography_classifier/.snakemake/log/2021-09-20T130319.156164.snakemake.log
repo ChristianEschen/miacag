@@ -1,0 +1,3 @@
+NameError in line 61 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
+name 'director' is not defined
+  File "/home/gandalf/MIA/scripts/angiography_classifier/Snakefile", line 61, in <module>

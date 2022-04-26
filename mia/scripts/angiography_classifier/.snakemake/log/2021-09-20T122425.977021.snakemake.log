@@ -1,0 +1,5 @@
+The flag 'temp' used in rule train_model is only valid for outputs, not inputs.
+Building DAG of jobs...
+MissingInputException in line 114 of /home/gandalf/MIA/scripts/angiography_classifier/Snakefile:
+Missing input files for rule eval_model_val_set:
+SELECT * FROM DICOM_TABLE

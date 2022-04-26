@@ -1,0 +1,60 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Job stats:
+job                   count    min threads    max threads
+------------------  -------  -------------  -------------
+all                       1              1              1
+copy_config               1              1              1
+copy_table                1              1              1
+eval_model_val_set        1              1              1
+plot_results_test         1              1              1
+plot_results_train        1              1              1
+plot_results_val          1              1              1
+split_train_val           1              1              1
+train_model               1              1              1
+total                     9              1              1
+
+
+[Thu Jan 27 16:30:54 2022]
+rule copy_table:
+    input: /home/gandalf/angiography_data/runs/Jan27_16-30-54_gandalf-MS-7845test
+    output: runs/040ce598-7627-4a19-94bc-052d287d3ccc.log
+    jobid: 1
+    resources: tmpdir=/tmp
+
+
+[Thu Jan 27 16:30:54 2022]
+rule copy_config:
+    input: ../../configs/classification/_3D/classification_config_angio.yaml
+    output: runs/5883d23c-c514-4c88-9cc7-1ee05efe709b.yaml
+    jobid: 2
+    resources: tmpdir=/tmp
+
+[Thu Jan 27 16:30:54 2022]
+Finished job 2.
+1 of 9 steps (11%) done
+[Thu Jan 27 16:30:55 2022]
+Finished job 1.
+2 of 9 steps (22%) done
+
+[Thu Jan 27 16:30:55 2022]
+rule split_train_val:
+    input: runs/5883d23c-c514-4c88-9cc7-1ee05efe709b.yaml, /home/gandalf/angiography_data/runs/Jan27_16-30-54_gandalf-MS-7845test, runs/040ce598-7627-4a19-94bc-052d287d3ccc.log
+    output: runs/be55c1a5-5862-4a79-a7c9-4b75341ee675.log
+    jobid: 4
+    resources: tmpdir=/tmp
+
+[Thu Jan 27 16:30:56 2022]
+Finished job 4.
+3 of 9 steps (33%) done
+
+[Thu Jan 27 16:30:56 2022]
+rule train_model:
+    input: /home/gandalf/mia/data/angio, runs/5883d23c-c514-4c88-9cc7-1ee05efe709b.yaml, /home/gandalf/angiography_data/runs/Jan27_16-30-54_gandalf-MS-7845test, runs/040ce598-7627-4a19-94bc-052d287d3ccc.log, runs/be55c1a5-5862-4a79-a7c9-4b75341ee675.log
+    output: /home/gandalf/angiography_data/runs/Jan27_16-30-54_gandalf-MS-7845test/model.pt
+    jobid: 3
+    resources: tmpdir=/tmp
+
+Terminating processes on user request, this might take some time.

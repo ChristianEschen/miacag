@@ -1,10 +1,7 @@
 data
 runs
-miacag/scripts/**
 .vscode
 *.pyc
-miacag/scripts
-**/configs
 miacag.egg-info
 miacag/models/torchhub/3D
 dist

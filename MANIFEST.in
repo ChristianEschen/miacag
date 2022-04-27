@@ -1,0 +1,2 @@
+include miacag/configs/classification/_3D/lca_rca/*.yaml
+include miacag/configs/classification/_3D/stenosis_detection_rca/*.yaml

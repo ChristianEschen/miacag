@@ -1,7 +1,7 @@
 # inputs:
 
 tensorboard_comment: 'test_v1'
-DataSetPath: "/home/gandalf/miacag/miacag/data/angio"
+DataSetPath: "/home/gandalf/miacag/data/angio"
 query: "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test: "SELECT * FROM ?table_name;"
 query_train_plot: "SELECT * FROM ?table_name WHERE (phase = 'train');"

@@ -3,7 +3,10 @@ runs
 .vscode
 *.pyc
 miacag.egg-info
-miacag/models/torchhub/3D
+miacag/models/torchhub/3D/mvit_base_16x4/model.pt
+miacag/models/torchhub/3D/mvit_base_32x3/model.pt
+miacag/models/torchhub/3D/x3d_s/model.pt
+miacag/models/torchhub/3D/r2dplus1_18/model.pt
 dist
 build
 miacag.egg-info

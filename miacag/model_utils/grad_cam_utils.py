@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import cv2
 import os
 import numpy as np
-from miac.metrics.metrics_utils import mkDir
+from miacag.metrics.metrics_utils import mkDir
 import pydicom
 from scipy.ndimage import zoom
 from mpl_toolkits.axes_grid1 import make_axes_locatable

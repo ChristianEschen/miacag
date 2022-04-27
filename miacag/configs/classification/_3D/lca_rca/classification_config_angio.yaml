@@ -1,7 +1,7 @@
 # inputs:
 
 tensorboard_comment: 'test_v1'
-DataSetPath: "/home/gandalf/mia/data/angio"
+DataSetPath: "/home/gandalf/miacag/miacag/data/angio"
 query: "SELECT * FROM ?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test: "SELECT * FROM ?table_name;"
 query_train_plot: "SELECT * FROM ?table_name WHERE (phase = 'train');"
@@ -30,7 +30,7 @@ model:
   in_channels: 1
   backbone: "x3d_s" # "MVIT-16" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
   num_classes: 2
-  pretrained: "/home/gandalf/mia/models/torchhub/3D/x3d_s" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrained: "/home/gandalf/miacag/miacag/models/torchhub/3D/x3d_s" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None"
   pretrain_encoder: "None"
 # Data loader configuration

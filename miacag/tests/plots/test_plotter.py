@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from miac.plots.plotter import plot_roc_curve
+from miacag.plots.plotter import plot_roc_curve
 
 
 def test_plot_roc():

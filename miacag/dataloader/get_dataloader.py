@@ -75,7 +75,7 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
 
 def get_dataloader_train(config):
     if config['task_type'] in ['classification']:
-        from miac.dataloader.Classification.get_dataloader_classification import \
+        from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
         train_loader, val_loader, train_ds, val_ds = \
@@ -112,7 +112,7 @@ def get_dataloader_train(config):
 
 def get_dataloader_test(config):
     if config['task_type'] in ["classification"]:
-        from miac.dataloader.Classification.get_dataloader_classification import \
+        from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
         CL.get_classificationloader_patch_lvl_test(config)
@@ -122,7 +122,7 @@ def get_dataloader_test(config):
         return CL
 
     elif config['task_type'] == 'image2image':
-        from miac.dataloader.get_dataloader_segmentation import \
+        from miacag.dataloader.get_dataloader_segmentation import \
             SegmentationLoader
         SL = SegmentationLoader()
         test_loader = SL.get_segmentationloader_test(config)

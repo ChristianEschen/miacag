@@ -1,13 +1,13 @@
 import torch
 import numpy as np
 import random
-from miac.metrics.metrics_utils import get_metrics, get_losses_metric
-from miac.metrics.metrics_utils import create_loss_dict, get_loss_metric_class
-from miac.metrics.metrics_utils import normalize_metrics, write_tensorboard
-from miac.dataloader.get_dataloader import get_data_from_loader
-from miac.model_utils.eval_utils import get_losses, get_losses_class
-from miac.configs.config import save_config
-from miac.metrics.metrics_utils import flatten, \
+from miacag.metrics.metrics_utils import get_metrics, get_losses_metric
+from miacag.metrics.metrics_utils import create_loss_dict, get_loss_metric_class
+from miacag.metrics.metrics_utils import normalize_metrics, write_tensorboard
+from miacag.dataloader.get_dataloader import get_data_from_loader
+from miacag.model_utils.eval_utils import get_losses, get_losses_class
+from miacag.configs.config import save_config
+from miacag.metrics.metrics_utils import flatten, \
     unroll_list_in_dict
 import os
 

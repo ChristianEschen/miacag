@@ -8,7 +8,7 @@ import psycopg2
 import pandas as pd
 import os
 from monai.data import DistributedWeightedRandomSampler, DistributedSampler
-from miac.preprocessing.utils.sql_utils import getDataFromDatabase
+from miacag.preprocessing.utils.sql_utils import getDataFromDatabase
 import numpy as np
 
 class ClassificationLoader():
@@ -25,20 +25,20 @@ class ClassificationLoader():
  
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] in ['dicom']:
-            from miac.dataloader.Classification._3D.dataloader_monai_classification_3D import \
+            from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                 train_monai_classification_loader
             if config['loaders']['val_method']['type'] == 'patches':
-                from miac.dataloader.Classification._3D.dataloader_monai_classification_3D import \
+                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader
             elif config['loaders']['val_method']['type'] == 'sliding_window':
-                from miac.dataloader.Classification._3D.dataloader_monai_classification_3D import \
+                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader_SW as val_monai_classification_loader
             else:
                 raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
         elif config['loaders']['format'] in ['db']:
             from \
-                miac.dataloader.Classification.tabular.dataloader_monai_classification_tabular import \
+                miacag.dataloader.Classification.tabular.dataloader_monai_classification_tabular import \
                 train_monai_classification_loader, val_monai_classification_loader
         elif config['loaders']['format'] in ['dicom_db']:
             print('NOT implemented')
@@ -90,7 +90,7 @@ class ClassificationLoader():
     def get_classificationloader_patch_lvl_test(self, config):
         if config['loaders']['format'] == 'dicom':
             if config['loaders']['val_method']['type'] == 'patches':
-                from miac.dataloader.Classification._3D. \
+                from miacag.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
                 # nr_repeat = config['loaders']['val_method']['patches']
@@ -101,7 +101,7 @@ class ClassificationLoader():
                     self.val_df,
                     config)
             elif config['loaders']['val_method']['type'] == 'sliding_window':
-                from miac.dataloader.Classification._3D. \
+                from miacag.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader_SW
                 self.val_ds = val_monai_classification_loader_SW(
@@ -109,7 +109,7 @@ class ClassificationLoader():
                     config)
         elif config['loaders']['format'] == 'db':
             if config['loaders']['val_method']['type'] == 'full':
-                from miac.dataloader.Classification.tabular. \
+                from miacag.dataloader.Classification.tabular. \
                     dataloader_monai_classification_tabular import \
                     val_monai_classification_loader
                 self.val_ds = val_monai_classification_loader(

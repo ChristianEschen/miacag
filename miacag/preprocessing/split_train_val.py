@@ -3,8 +3,8 @@ import psycopg2
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from psycopg2.extras import execute_batch
-from miac.configs.config import load_config
-from miac.preprocessing.utils.sql_utils import update_cols, getDataFromDatabase
+from miacag.configs.config import load_config
+from miacag.preprocessing.utils.sql_utils import update_cols, getDataFromDatabase
 
 
 parser = argparse.ArgumentParser(

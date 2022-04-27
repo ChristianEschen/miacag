@@ -3,24 +3,24 @@ import os
 import socket
 from datetime import datetime
 import yaml
-from miac.preprocessing.split_train_val import splitter
-from miac.preprocessing.utils.sql_utils import copy_table, add_columns, \
+from miacag.preprocessing.split_train_val import splitter
+from miacag.preprocessing.utils.sql_utils import copy_table, add_columns, \
     copyCol, changeDtypes
 import pandas as pd
-from miac.postprocessing.append_results import appendDataFrame
+from miacag.postprocessing.append_results import appendDataFrame
 import torch
-from miac.trainer import train
-from miac.tester import test
-from miac.configs.config import load_config, maybe_create_tensorboard_logdir
-from miac.configs.options import TrainOptions
+from miacag.trainer import train
+from miacag.tester import test
+from miacag.configs.config import load_config, maybe_create_tensorboard_logdir
+from miacag.configs.options import TrainOptions
 import argparse
-from miac.preprocessing.labels_map import labelsMap
-from miac.preprocessing.utils.check_experiments import checkExpExists, \
+from miacag.preprocessing.labels_map import labelsMap
+from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
-from miac.plots.plotter import plot_results
+from miacag.plots.plotter import plot_results
 import pandas as pd
-from miac.preprocessing.transform_thresholds import transformThreshold
-from miac.preprocessing.transform_missing_floats import transformMissingFloats
+from miacag.preprocessing.transform_thresholds import transformThreshold
+from miacag.preprocessing.transform_missing_floats import transformMissingFloats
 
 
 parser = argparse.ArgumentParser(
@@ -73,7 +73,7 @@ if __name__ == '__main__':
             backend="nccl" if args.cpu == "False" else "Gloo",
             init_method="env://"
             )
-    config_path = "/home/gandalf/miac/configs/classification/_3D/lca_rca"
+    config_path = "/home/gandalf/miacag/miacag/configs/classification/_3D/lca_rca"
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
     master_addr = os.environ['MASTER_ADDR']
@@ -271,7 +271,7 @@ if __name__ == '__main__':
                 csv_results.to_csv(output_csv_test, index=False, header=True)
 # STAGE 2
 
-    config_path = "/home/gandalf/miac/configs/classification/_3D/stenosis_detection_rca"
+    config_path = "/home/gandalf/miacag/miacag/configs/classification/_3D/stenosis_detection_rca"
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
     master_addr = os.environ['MASTER_ADDR']

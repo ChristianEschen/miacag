@@ -1,4 +1,4 @@
-from miac.preprocessing.utils.sql_utils import getDataFromDatabase
+from miacag.preprocessing.utils.sql_utils import getDataFromDatabase
 import seaborn as sns
 import argparse
 parser = argparse.ArgumentParser(

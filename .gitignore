@@ -1,9 +1,12 @@
-miac/data
+miacag/data
 runs
-miac/scripts/**
+miacag/scripts/**
 .vscode
 *.pyc
-miac/scripts
+miacag/scripts
 **/configs
-miac.egg-info
-miac/models/torchhub/3D
+miacag.egg-info
+miacag/models/torchhub/3D
+dist
+build
+miacag.egg-info

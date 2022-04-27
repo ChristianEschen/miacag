@@ -1,7 +1,7 @@
 import torch.nn as nn
 from monai.losses import DiceLoss
 from monai.losses import DiceCELoss
-from miac.model_utils.siam_loss import SimSiamLoss
+from miacag.model_utils.siam_loss import SimSiamLoss
 import torch
 
 

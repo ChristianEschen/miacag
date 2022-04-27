@@ -8,7 +8,7 @@ from torchvision.transforms import (
     RandomResizedCrop,
 )
 
-from miac.dataloader.transforms import _functional_video as F
+from miacag.dataloader.transforms import _functional_video as F
 import torch
 
 __all__ = [

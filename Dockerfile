@@ -1,4 +1,3 @@
-
 FROM nvcr.io/nvidia/pytorch:21.12-py3
 ARG DEBIAN_FRONTEND=noninteractive
 COPY requirements.txt  /tmp/
@@ -14,6 +13,13 @@ RUN apt-get update -y && \
 RUN pip install --requirement /tmp/requirements.txt
 
 # download pretrained models
-RUN git clone https://github.com/ChristianEschen/miacag
-
-ENV PYTHONPATH "${PYTHONPATH}:$(pwd)/miacag/miacag"
+RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/X3D_S.pyth`
+RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/MVIT_B_16x4.pyth`
+RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/MVIT_B_32x3_f294077834.pyth`
+RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/R2PLUS1D_16x4_R50.pyth`
+# move pretrained models to miacag
+RUN miapath=`python -c "import miacag, os; print(os.path.dirname(miacag.__file__))"` && \
+    mv "X3D_S.pyth" "$miapath/models/torchhub/3D/x3d_s/model.pt" && \
+    mv "MVIT_B_16x4.pyth" "$miapath/models/torchhub/3D/mvit_base_16x4/model.pt" && \
+    mv "MVIT_B_32x3_f294077834.pyth" "$miapath/models/torchhub/3D/mvit_base_32x3/model.pt" && \
+    mv "R2PLUS1D_16x4_R50.pyth" "$miapath/models/torchhub/3D/r2plus1_18/model.pt"

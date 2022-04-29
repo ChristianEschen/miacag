@@ -8,7 +8,7 @@ from miacag.preprocessing.utils.sql_utils import update_cols, getDataFromDatabas
 
 
 parser = argparse.ArgumentParser(
-    description='Define data['inputs'] for building database.')
+    description='Define data inputs for transforming stenosis.')
 parser.add_argument(
             '--query', type=str,
             help='query for retrieving data',

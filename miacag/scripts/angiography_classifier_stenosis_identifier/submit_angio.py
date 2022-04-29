@@ -34,6 +34,12 @@ parser.add_argument(
 parser.add_argument(
             "--num_workers", type=int,
             help="Number of cpu workers for training")    
+parser.add_argument(
+    '--config_path_lca_rca', type=str,
+    help="path to folder with config files")
+parser.add_argument(
+    '--config_path_stenosis', type=str,
+    help="path to folder with config files")
 
 
 def mkFolder(dir):
@@ -73,7 +79,7 @@ if __name__ == '__main__':
             backend="nccl" if args.cpu == "False" else "Gloo",
             init_method="env://"
             )
-    config_path = "/home/gandalf/miacag/miacag/configs/classification/_3D/lca_rca"
+    config_path = args.config_path_lca_rca
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
     master_addr = os.environ['MASTER_ADDR']
@@ -271,7 +277,7 @@ if __name__ == '__main__':
                 csv_results.to_csv(output_csv_test, index=False, header=True)
 # STAGE 2
 
-    config_path = "/home/gandalf/miacag/miacag/configs/classification/_3D/stenosis_detection_rca"
+    config_path = args.config_path_stenosis
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
     master_addr = os.environ['MASTER_ADDR']

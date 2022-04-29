@@ -30,7 +30,10 @@ parser.add_argument(
             help="Local rank: torch.distributed.launch.")    
 parser.add_argument(
             "--num_workers", type=int,
-            help="Number of cpu workers for training")    
+            help="Number of cpu workers for training")
+parser.add_argument(
+    '--config_path', type=str,
+    help="path to folder with config files")
 
 
 def mkFolder(dir):
@@ -70,7 +73,7 @@ if __name__ == '__main__':
             backend="nccl" if args.cpu == "False" else "Gloo",
             init_method="env://"
             )
-    config_path = "/home/gandalf/miacag/miacag/configs/classification/_3D/lca_rca"
+    config_path = args.config_path
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
     master_addr = os.environ['MASTER_ADDR']

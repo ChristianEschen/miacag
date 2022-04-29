@@ -1,3 +1,4 @@
+
 FROM nvcr.io/nvidia/pytorch:21.12-py3
 ARG DEBIAN_FRONTEND=noninteractive
 COPY requirements.txt  /tmp/
@@ -13,3 +14,6 @@ RUN apt-get update -y && \
 RUN pip install --requirement /tmp/requirements.txt
 
 # download pretrained models
+RUN git clone https://github.com/ChristianEschen/miacag
+
+ENV PYTHONPATH "${PYTHONPATH}:$(pwd)/miacag/miacag"

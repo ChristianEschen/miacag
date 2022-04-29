@@ -15,23 +15,30 @@ class Identity(nn.Module):
 def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] != "None":
         if torch.distributed.get_rank() == 0:
+            dirname = os.path.dirname(__file__)
+            model_path = os.path.join(
+                            dirname,
+                            "torchhub",
+                            config['model']['backbone'],
+                            'model.pt')
             if config['cpu'] == 'True':
                 loaded_model = torch.load(
-                        os.path.join(
-                            config['model']['pretrained'], 'model.pt'),
+                        model_path,
                         map_location=device)
             else:
                 loaded_model = torch.load(
-                        os.path.join(
-                            config['model']['pretrained'], 'model.pt'))
+                        model_path, 'model.pt')
 
-            if config['model']['backbone'] in ['x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
+            if config['model']['backbone'] in \
+                    ['x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
+
                 model.load_state_dict(loaded_model['model_state'])
             else:
                 model.load_state_dict(loaded_model)
     else:
         pass
     return model
+
 
 def get_encoder(config, device):
     if config['loaders']['mode'] != 'testing':

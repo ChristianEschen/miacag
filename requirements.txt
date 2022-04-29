@@ -1,5 +1,5 @@
 flake8==3.9.2
-monai==0.7.0
+monai==0.8.1
 imageio==2.9.0
 imageio-ffmpeg==0.4.5
 itk==5.2.1.post1

@@ -19,6 +19,7 @@ def getPretrainedWeights(config, model, device):
             model_path = os.path.join(
                             dirname,
                             "torchhub",
+                            config['model']['dimension'],
                             config['model']['backbone'],
                             'model.pt')
             if config['cpu'] == 'True':

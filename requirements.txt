@@ -24,4 +24,5 @@ pydicom==2.2.1
 pandas==1.2.4
 fvcore==0.1.5.post20211023
 numpy==1.21.6
+seaborn==0.11.2
 miacag

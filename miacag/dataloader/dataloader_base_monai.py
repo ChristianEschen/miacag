@@ -346,7 +346,7 @@ class base_monai_loader(DataloaderBase):
         return deleter
 
     def maybeDeleteMeta(self):
-        if self.config['loaders']['val_method']['saliency'] != 'False':
+        if self.config['loaders']['val_method']['saliency'] == 'False':
             deleter = DeleteItemsd(
                 keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True)
         else:

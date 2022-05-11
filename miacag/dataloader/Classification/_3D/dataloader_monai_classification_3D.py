@@ -112,13 +112,22 @@ class train_monai_classification_loader(base_monai_loader):
         #     fig_train = plt.figure()
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
-
-        self.data_par_train = monai.data.partition_dataset(
-            data=self.data,
-            num_partitions=dist.get_world_size(),
-            shuffle=True,
-            even_divisible=True,
-        )[dist.get_rank()]
+        if len(self.config['labels_names'][0]) == 1:
+            classes = [i[self.config['labels_names'][0]] for i in self.data]
+            self.data_par_train = monai.data.partition_dataset_classes(
+                data=self.data,
+                classes=classes,
+                num_partitions=dist.get_world_size(),
+                shuffle=True,
+                even_divisible=True,
+            )[dist.get_rank()]
+        else:
+            self.data_par_train = monai.data.partition_dataset(
+                data=self.data,
+                num_partitions=dist.get_world_size(),
+                shuffle=True,
+                even_divisible=True,
+            )[dist.get_rank()]
 
         # create a training data loader
         if self.config['cache_num'] != 'None':
@@ -136,8 +145,6 @@ class train_monai_classification_loader(base_monai_loader):
                 transform=train_transforms,
                 copy_cache=True,
                 num_workers=self.config['num_workers'])
-
-
         return train_ds
 
 

@@ -22,13 +22,9 @@ def getPretrainedWeights(config, model, device):
                             config['model']['dimension'],
                             config['model']['backbone'],
                             'model.pt')
-            if config['cpu'] == 'True':
-                loaded_model = torch.load(
-                        model_path,
-                        map_location=device)
-            else:
-                loaded_model = torch.load(
-                        model_path, 'model.pt')
+            loaded_model = torch.load(
+                    model_path,
+                    map_location=device)
 
             if config['model']['backbone'] in \
                     ['x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:

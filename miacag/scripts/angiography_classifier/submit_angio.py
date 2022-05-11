@@ -18,6 +18,7 @@ from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
 from miacag.plots.plotter import plot_results
 import pandas as pd
+from miacag.utils.script_utils import create_empty_csv, mkFolder
 
 
 parser = argparse.ArgumentParser(
@@ -36,48 +37,13 @@ parser.add_argument(
     help="path to folder with config files")
 
 
-def mkFolder(dir):
-    os.makedirs(dir, exist_ok=True)
-
-
-def get_open_port():
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("", 0))
-    s.listen(1)
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def create_empty_csv(output_csv_test, label_names):
-    keys = ['Test F1 score on data labels transformed_',
-            'Test F1 score on three class labels_',
-            'Test acc on three class labels_']
-    keys_ = []
-    for key in keys:
-        for label_name in label_names:
-            keys_.append(key+label_name)
-
-    keys_ = ['Experiment name'] + keys_
-    values = [[] for i in range(0, len(keys_))]
-    df = dict(zip(keys_, values))
-    df_csv = pd.DataFrame.from_dict(df)
-    df_csv.to_csv(output_csv_test)
-    return df_csv
-
-
-if __name__ == '__main__':
-    args = parser.parse_args()
+def angio_classifier(cpu, num_workers, config_path):
     torch.distributed.init_process_group(
-            backend="nccl" if args.cpu == "False" else "Gloo",
+            backend="nccl" if cpu == "False" else "Gloo",
             init_method="env://"
             )
-    config_path = args.config_path
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
-    master_addr = os.environ['MASTER_ADDR']
-    num_workers = args.num_workers
 
     for i in range(0, len(config_path)):
         print('loading config:', config_path[i])
@@ -97,8 +63,7 @@ if __name__ == '__main__':
 
             config['master_port'] = os.environ['MASTER_PORT']
             config['num_workers'] = num_workers
-            config['cpu'] = args.cpu
-            master_addr = os.environ['MASTER_ADDR']
+            config['cpu'] = cpu
             tensorboard_comment = os.path.basename(config_path[i])[:-5]
             torch.distributed.barrier()
             experiment_name = tensorboard_comment + '_' + \
@@ -110,7 +75,6 @@ if __name__ == '__main__':
                         config['output'],
                         experiment_name)
             mkFolder(output_directory)
-            output_model = os.path.join(output_directory, "model.pt")
             output_config = os.path.join(output_directory,
                                          os.path.basename(config_path[i]))
 
@@ -147,25 +111,29 @@ if __name__ == '__main__':
                     "cp {config_path} {config_file_temp}".format(
                         config_path=config_path[i],
                         config_file_temp=output_config))
-                # map labels
-                mapper_obj = labelsMap(
-                    {
-                     'labels_names': config['labels_names'],
-                     'database': config['database'],
-                     'username': config['username'],
-                     'password': config['password'],
-                     'host': config['host'],
-                     'table_name': output_table_name,
-                     'query': config['query_test'],
-                     'TestSize': 1},
-                    config['labels_dict']
-                )
-                trans_labels = mapper_obj()
-                config['labels_names'] = trans_labels
+            # map labels
+            mapper_obj = labelsMap(
+                {
+                    'labels_names': config['labels_names'],
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'query': config['query_test'],
+                    'TestSize': 1},
+                config['labels_dict']
+            )
+            mapper_obj()
+            trans_labels = [i + '_transformed' for i in config['labels_names']]
+            config['labels_names'] = trans_labels
 
-                # add placeholder for confidences
-                conf = [i + '_confidences' for i in config['labels_names']]
-                data_types = ["VARCHAR"] * len(conf)
+            # add placeholder for confidences
+            conf = [i + '_confidences' for i in config['labels_names']]
+
+            # add placeholder for predictions
+            pred = [i + '_predictions' for i in config['labels_names']]
+            if torch.distributed.get_rank() == 0:
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -174,10 +142,8 @@ if __name__ == '__main__':
                     'table_name': output_table_name,
                     'table_name_output': output_table_name},
                             conf,
-                            data_types)
-                # add placeholder for predictions
-                pred = [i + '_predictions' for i in config['labels_names']]
-                data_types = ["float8"] * len(pred)
+                            ["VARCHAR"] * len(conf))
+
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -186,7 +152,8 @@ if __name__ == '__main__':
                     'table_name': output_table_name,
                     'table_name_output': output_table_name},
                             pred,
-                            data_types)
+                            ["float8"] * len(pred)
+                            )
                 # 3. split train and validation , and map labels
                 splitter_obj = splitter(
                     {
@@ -269,4 +236,13 @@ if __name__ == '__main__':
                 print('config files to process in toal:', len(config_path))
                 csv_results = pd.DataFrame(csv_results)
                 csv_results.to_csv(output_csv_test, index=False, header=True)
+        if csv_exists:
+            return None
+        else:
+            return output_table_name
 
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+
+    angio_classifier(args.cpu, args.num_workers, args.config_path)

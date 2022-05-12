@@ -128,6 +128,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
 
+            torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
                 add_columns({
                     'database': config['database'],

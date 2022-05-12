@@ -102,7 +102,7 @@ def plot_results(sql_config, output_plots, num_classes, roc=False):
         f1 = f1_score(df[label_name],
                       df[label_name + '_predictions'], average='macro')
         getNormConfMat(df, label_name, label_name + '_predictions',
-                       'labels_3_classes', f1, output_plots, num_classes)
+                       'labels_3_classes', f1, output_plots, 3)
 
         if roc is True:
             plot_roc_curve(df[label_name], df[label_name + '_confidences'],

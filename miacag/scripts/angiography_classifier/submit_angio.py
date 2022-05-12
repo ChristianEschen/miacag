@@ -111,20 +111,19 @@ def angio_classifier(cpu, num_workers, config_path):
                     "cp {config_path} {config_file_temp}".format(
                         config_path=config_path[i],
                         config_file_temp=output_config))
-            # map labels
-            mapper_obj = labelsMap(
-                {
-                    'labels_names': config['labels_names'],
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'table_name': output_table_name,
-                    'query': config['query_test'],
-                    'TestSize': 1},
-                config['labels_dict']
-            )
-            mapper_obj()
+                # map labels
+                mapper_obj = labelsMap(
+                    {
+                        'labels_names': config['labels_names'],
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'table_name': output_table_name,
+                        'query': config['query_test'],
+                        'TestSize': 1},
+                    config['labels_dict'])
+                mapper_obj()
             trans_labels = [i + '_transformed' for i in config['labels_names']]
             config['labels_names'] = trans_labels
 

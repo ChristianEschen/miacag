@@ -146,19 +146,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'password': config['password'],
                         'host': config['host'],
                         'table_name': output_table_name,
-                        'query': config['query']},
+                        'query': config['query_transform']},
                     labels_names_original,
                     trans_label)
-                # change content of labels
-                changeDtypes(
-                    {'database': config["database"],
-                        'username': config["username"],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'table_name': output_table_name,
-                        'query': config['query']},
-                    trans_label,
-                    ["int8"] * len(trans_label))
 
                 add_columns({
                     'database': config['database'],
@@ -186,7 +176,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'password': config['password'],
                     'host': config['host'],
                     'table_name': output_table_name,
-                    'query': config['query_test'],
+                    'query': config['query_transform'],
                     'TestSize': config['TestSize']})
                 trans()
 
@@ -197,10 +187,20 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'password': config['password'],
                     'host': config['host'],
                     'table_name': output_table_name,
-                    'query': config['query_test'],
+                    'query': config['query_transform'],
                     'TestSize': config['TestSize']})
                 trans_thres()
 
+                # change dtypes for label
+                changeDtypes(
+                    {'database': config["database"],
+                        'username': config["username"],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'table_name': output_table_name,
+                        'query': config['query_transform']},
+                    trans_label,
+                    ["int8"] * len(trans_label))
                 splitter_obj = splitter(
                     {
                         'labels_names': config['labels_names'],
@@ -209,11 +209,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'password': config['password'],
                         'host': config['host'],
                         'table_name': output_table_name,
-                        'query': config['query'],
+                        'query': config['query_split'],
                         'TestSize': config['TestSize']})
                 splitter_obj()
                 # ...and map data['labels'] test
             # 4. Train model
+            torch.distributed.barrier()
             config['output'] = output_directory
             config['output_directory'] = output_directory
             config['table_name'] = output_table_name

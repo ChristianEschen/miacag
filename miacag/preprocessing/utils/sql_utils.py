@@ -131,6 +131,14 @@ def copyCol(sql_config,
     df[destination_column] = df[source_column]
     for dest_col in destination_column:
         df = df.replace({dest_col: {np.nan: None}})
+        df[dest_col] = pd.to_numeric(df[dest_col])
+        # if source_dtype == 'float8':
+        #     df[dest_col] = pd.to_numeric(df[dest_col])
+        # elif source_dtype == 'int8':
+        #     df[dest_col] = pd.to_numeric(df[dest_col])
+        # else:
+        #     raise ValueError(
+        #         f"Not implemented the following dtype:{source_dtype}")
 
     update_cols(connection,
                 df.to_dict('records'),

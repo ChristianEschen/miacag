@@ -132,6 +132,7 @@ def angio_classifier(cpu, num_workers, config_path):
 
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
+            torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
                 add_columns({
                     'database': config['database'],
@@ -167,6 +168,7 @@ def angio_classifier(cpu, num_workers, config_path):
                     config['labels_dict'])
                 splitter_obj()
                 # ...and map data['labels'] test
+            torch.distributed.barrier()
             # 4. Train model
             config['output'] = output_directory
             config['output_directory'] = output_directory

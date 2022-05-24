@@ -156,27 +156,35 @@ def eval_one_step_knn(get_data_from_loader,
     return top1
 
 
-def get_losses(config, outputs, labels, criterion):
+# def get_losses(config, outputs, labels, criterion):
+#     if 'Siam' in config['loss']['name']:
+#         losses = [crit(outputs) for crit in criterion]
+#     else:
+#         losses = [crit(outputs, labels) for crit in criterion]
+#     loss = torch.stack(losses, dim=0).sum(dim=0)
+#     losses = [l.item() for l in losses]
+#     return losses, loss
+
+def get_loss(config, outputs, labels, criterion):
     if 'Siam' in config['loss']['name']:
-        losses = [crit(outputs) for crit in criterion]
+        loss = criterion(outputs)
     else:
-        losses = [crit(outputs, labels) for crit in criterion]
-    loss = torch.stack(losses, dim=0).sum(dim=0)
-    if len(losses) > 1:
-        losses = [loss] + losses
-    losses = [l.item() for l in losses]
-    return losses, loss
+        loss = criterion(outputs, labels)
+    return loss
 
 
 def get_losses_class(config, outputs, data, criterion):
     losses = []
+    loss_tot = torch.tensor([0])
     for count, label_name in enumerate(config['labels_names']):
-        losses_tmp, loss = get_losses(
+
+        loss = get_loss(
             config, outputs[count],
-            data[label_name], criterion)
-        losses.append(losses_tmp[0])
-        loss += loss
-    return losses, loss
+            data[label_name], criterion[count])
+        losses.append(loss)
+        loss_tot = loss_tot + loss
+    losses = [loss_indi.item() for loss_indi in losses]
+    return losses, loss_tot
 
 
 def set_uniform_sample_pct(validation_loader, percentage):

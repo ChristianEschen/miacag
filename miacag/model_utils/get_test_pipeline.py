@@ -1,3 +1,4 @@
+from cProfile import label
 from miacag.model_utils.eval_utils import val_one_epoch
 from miacag.model_utils.eval_utils import eval_one_step
 import os
@@ -10,7 +11,7 @@ import os
 from miacag.preprocessing.pre_process import mkFolder
 import psycopg2
 from psycopg2.extras import execute_batch
-from miacag.preprocessing.utils.sql_utils import update_cols
+from miacag.utils.sql_utils import update_cols
 import torch
 import shutil
 
@@ -55,8 +56,9 @@ class TestPipeline():
             for count, label in enumerate(config['labels_names']):
                 csv_files = self.saveCsvFiles(label, confidences[count],
                                               index, config)
-                torch.distributed.barrier()
-                if torch.distributed.get_rank() == 0:
+            torch.distributed.barrier()
+            if torch.distributed.get_rank() == 0:
+                for count, label in enumerate(config['labels_names']):
                     test_loader.val_df = self.buildPandasResults(
                         label,
                         test_loader.val_df,
@@ -71,7 +73,6 @@ class TestPipeline():
                             test_loader.val_df[
                                 label + '_predictions'].astype(
                                     'float').astype('int'))}
-                    shutil.rmtree(csv_files)
                     print('accuracy_correct', acc)
                     print('metrics (mean of all preds)', metrics)
                     metrics.update(acc)
@@ -80,8 +81,10 @@ class TestPipeline():
                         os.path.join(config['output_directory'], log_name),
                             'w') as file:
                         file.write(json.dumps({**metrics, **config},
-                                   sort_keys=True, indent=4,
-                                   separators=(',', ': ')))
+                                sort_keys=True, indent=4,
+                                separators=(',', ': ')))
+                shutil.rmtree(csv_files)
+
         elif config['loaders']['val_method']['saliency'] == 'True':
             print('done producing saliency maps')
         else:
@@ -105,7 +108,8 @@ class TestPipeline():
         testModule()
 
     def buildPandasResults(self, label_name, val_df, csv_files):
-        df_pred = self.appendDataframes(csv_files)
+        filename = os.path.join(csv_files, label_name)
+        df_pred = self.appendDataframes(filename)
         df_pred['rowid'] = df_pred['rowid'].astype(float).astype(int)
         col_names = [
             i for i in df_pred.columns.to_list() if i.startswith(
@@ -171,6 +175,8 @@ class TestPipeline():
     def saveCsvFiles(self, label_name, confidences, index, config):
         csv_files = os.path.join(config['output_directory'], 'csv_files_pred')
         mkFolder(csv_files)
+        label_name_csv_files = os.path.join(csv_files, label_name)
+        mkFolder(label_name_csv_files)
         array = np.concatenate((confidences.numpy(), np.expand_dims(index.numpy(), 1)), axis=1)
         confidence_col = [
             label_name + '_confidence_' + str(i) for i in range(0, confidences.shape[-1])]
@@ -179,7 +185,7 @@ class TestPipeline():
             array,
             columns=cols)
         df.to_csv(
-            os.path.join(csv_files, str(torch.distributed.get_rank()))+'.csv')
+            os.path.join(label_name_csv_files, str(torch.distributed.get_rank()))+'.csv')
         return csv_files
       #  df.to_csv()
     

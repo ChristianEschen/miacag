@@ -4,7 +4,7 @@ import socket
 from datetime import datetime
 import yaml
 from miacag.preprocessing.split_train_val import splitter
-from miacag.preprocessing.utils.sql_utils import copy_table, add_columns, \
+from miacag.utils.sql_utils import copy_table, add_columns, \
     copyCol, changeDtypes
 
 import pandas as pd
@@ -270,6 +270,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             config['model']['num_classes'],
                             roc=True
                             )
+                # aggregate stenosis for all groups (entryids)
 
                 csv_results = appendDataFrame(sql_config={
                                     'labels_names': config['labels_names'],

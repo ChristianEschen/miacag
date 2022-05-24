@@ -4,7 +4,7 @@ import socket
 from datetime import datetime
 import yaml
 from miacag.preprocessing.split_train_val import splitter
-from miacag.preprocessing.utils.sql_utils import copy_table, add_columns, \
+from miacag.utils.sql_utils import copy_table, add_columns, \
     copyCol, changeDtypes
 
 import pandas as pd

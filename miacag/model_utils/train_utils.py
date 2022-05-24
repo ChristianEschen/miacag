@@ -5,7 +5,7 @@ from miacag.metrics.metrics_utils import get_metrics, get_losses_metric
 from miacag.metrics.metrics_utils import create_loss_dict, get_loss_metric_class
 from miacag.metrics.metrics_utils import normalize_metrics, write_tensorboard
 from miacag.dataloader.get_dataloader import get_data_from_loader
-from miacag.model_utils.eval_utils import get_losses, get_losses_class
+from miacag.model_utils.eval_utils import get_loss, get_losses_class
 from miacag.configs.config import save_config
 from miacag.metrics.metrics_utils import flatten, \
     unroll_list_in_dict

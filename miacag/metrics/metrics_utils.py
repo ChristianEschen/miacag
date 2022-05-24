@@ -73,10 +73,10 @@ def mkDir(directory):
 
 def getMetricForEachLabel(metrics, config, ptype):
     metrics_labels = []
-    for metric in metrics:
-        for label_name in config['labels_names']:
-            if metric != 'total':
-                metrics_labels.append(metric + '_' + label_name)
+   # for metric in metrics:
+    for c, label_name in enumerate(config['labels_names']):
+        #if metric != 'total':
+        metrics_labels.append(metrics[c] + '_' + label_name)
     if ptype == 'loss':
         metrics_labels = metrics_labels + ['total']
     return metrics_labels
@@ -235,15 +235,10 @@ def normalize_metrics(running_metrics):
 
 
 def create_loss_dict(config, losses, loss):
-    #if len(config['labels_names']) == 1:
-    #    losses = dict(zip(config['loss']['name'], losses))
-    #else:
-    #config['loss_classes'] = 0
     loss_list = []
-    for loss_name in config['loss']['name']:
-        if loss_name != 'total':
-            for label_name in config['labels_names']:
-                loss_list.append(loss_name + '_' + label_name)
+    for c, label_name in enumerate(config['labels_names']):
+        loss_name = config['loss']['name'][c]
+        loss_list.append(loss_name + '_' + label_name)
     loss_list = loss_list + ['total']
     losses = losses + [loss.item()]
     losses = dict(zip(loss_list, losses))

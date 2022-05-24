@@ -1,4 +1,4 @@
-from miacag.preprocessing.utils.sql_utils import getDataFromDatabase
+from miacag.utils.sql_utils import getDataFromDatabase
 from sklearn.metrics import f1_score, accuracy_score
 import pandas as pd
 

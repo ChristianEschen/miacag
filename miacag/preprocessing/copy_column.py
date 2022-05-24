@@ -1,6 +1,6 @@
 import psycopg2
 import argparse
-from preprocessing.utils.sql_utils import copyCol
+from miacag.utils.sql_utils import copyCol
 
 parser = argparse.ArgumentParser(
     description='Define data inputs for copy table')

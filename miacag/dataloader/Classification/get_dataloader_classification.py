@@ -8,7 +8,7 @@ import psycopg2
 import pandas as pd
 import os
 from monai.data import DistributedWeightedRandomSampler, DistributedSampler
-from miacag.preprocessing.utils.sql_utils import getDataFromDatabase
+from miacag.utils.sql_utils import getDataFromDatabase
 import numpy as np
 
 class ClassificationLoader():

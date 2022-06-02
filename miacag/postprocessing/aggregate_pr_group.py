@@ -19,6 +19,10 @@ class Aggregator:
     sql_config: dict
     fields_to_aggregate: list
 
+    def __post_init__(self):
+        self.aggregated_cols_list = [
+            i + "_aggregated" for i in self.fields_to_aggregate]
+
     def get_df_from_query(self) -> None:
         # return df with data
         self.df, self.conn = getDataFromDatabase(self.sql_config)
@@ -61,12 +65,12 @@ class Aggregator:
 
     def __call__(self):
         self.get_df_from_query()
-        aggregated_cols_list = [
-            i + "_aggregated" for i in self.fields_to_aggregate]
-        data_types = ["float8"] * len(aggregated_cols_list)
-        add_columns(self.sql_config, aggregated_cols_list, data_types)
-        records = self.compute_mean_confidence(aggregated_cols_list)
-        self.update_colum_wrap(records, aggregated_cols_list)
+        # aggregated_cols_list = [
+        #     i + "_aggregated" for i in self.fields_to_aggregate]
+        data_types = ["float8"] * len(self.aggregated_cols_list)
+        add_columns(self.sql_config, self.aggregated_cols_list, data_types)
+        records = self.compute_mean_confidence(self.aggregated_cols_list)
+        self.update_colum_wrap(records, self.aggregated_cols_list)
 
 
 if __name__ == '__main__':

@@ -53,15 +53,15 @@ def eval_one_step(model, data, device, criterion,
     model.eval()
     with torch.no_grad():
         # forward
-        for label_name in config['labels_names']:
-            outputs = maybe_sliding_window(data['inputs'], model, config)
-            losses, loss = get_losses_class(config, outputs, data, criterion)
-            losses = create_loss_dict(config, losses, loss)
-            metrics, losses_metric = get_loss_metric_class(config, outputs,
-                                                           data, losses,
-                                                           running_metric_val,
-                                                           running_loss_val,
-                                                           criterion)
+        outputs = maybe_sliding_window(data['inputs'], model, config)
+        losses, loss = get_losses_class(config, outputs,
+                                        data, criterion, device)
+        losses = create_loss_dict(config, losses, loss)
+        metrics, losses_metric = get_loss_metric_class(config, outputs,
+                                                        data, losses,
+                                                        running_metric_val,
+                                                        running_loss_val,
+                                                        criterion)
  
     
     if config['loaders']['val_method']['saliency'] == 'True':
@@ -173,9 +173,10 @@ def get_loss(config, outputs, labels, criterion):
     return loss
 
 
-def get_losses_class(config, outputs, data, criterion):
+def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0])
+    loss_tot = loss_tot.to(device)
     for count, label_name in enumerate(config['labels_names']):
 
         loss = get_loss(

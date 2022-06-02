@@ -10,6 +10,9 @@ from matplotlib import ticker
 import matplotlib
 matplotlib.use('Agg')
 from sklearn import metrics
+import scipy
+from sklearn.metrics import r2_score
+import statsmodels.api as sm
 
 
 def map_1abels_to_0neTohree():
@@ -83,24 +86,26 @@ def getNormConfMat(df, labels_col, preds_col,
     return None
 
 
-def plot_results(sql_config, output_plots, num_classes, roc=False):
+def plot_results(sql_config, label_names, prediction_names, output_plots,
+                 num_classes, confidence_names=False):
     df, _ = getDataFromDatabase(sql_config)
-    for label_name in sql_config['labels_names']:
+    for c, label_name in enumerate(label_names):
         df_label = df[df[label_name].notna()]
-        df_label[label_name + '_predictions'] = \
-            df_label[label_name + '_predictions'].astype(float).astype(int)
+        prediction_name = prediction_names[c]
+        df_label[prediction_name] = \
+            df_label[prediction_name].astype(float).astype(int)
         df_label[label_name] = df_label[label_name] \
             .astype(float).astype(int)
         f1_transformed = f1_score(
             df_label[label_name],
-            df_label[label_name + '_predictions'],
+            df_label[prediction_name],
             average='macro')
         support = len(df_label)
 
         getNormConfMat(
             df_label,
             label_name,
-            label_name + '_predictions',
+            prediction_name,
             label_name,
             f1_transformed,
             output_plots,
@@ -109,14 +114,15 @@ def plot_results(sql_config, output_plots, num_classes, roc=False):
         df = df.replace(
             {label_name: map_1abels_to_0neTohree()})
         df = df.replace(
-            {label_name + '_predictions': map_1abels_to_0neTohree()})
+            {prediction_name: map_1abels_to_0neTohree()})
         f1 = f1_score(df[label_name],
-                      df[label_name + '_predictions'], average='macro')
-        getNormConfMat(df, label_name, label_name + '_predictions',
+                      df[prediction_name], average='macro')
+        getNormConfMat(df, label_name, prediction_name,
                        'labels_3_classes', f1, output_plots, 3, support)
 
-        if roc is True:
-            plot_roc_curve(df[label_name], df[label_name + '_confidences'],
+        if confidence_names is not False:
+            confidence_name = confidence_names[c]
+            plot_roc_curve(df[label_name], df[confidence_name],
                            output_plots, label_name, support)
     return None
 
@@ -164,3 +170,48 @@ def plot_roc_curve(labels, confidences, output_plots, plot_name, support):
                 bbox_inches='tight')
     plt.close()
 
+
+def annotate(data, label_name, prediction_name, **kws):
+    #r, p = scipy.stats.pearsonr(data[label_name], data[prediction_name])
+    #r2_score(df[label_name], df[prediction_name])
+    X2 = sm.add_constant(data[label_name])
+    est = sm.OLS(data[prediction_name], X2)
+    est2 = est.fit()
+    ax = plt.gca()
+    ax.text(.05, .8, 'r-squared={:.2f}, p={:.2g}'.format(r, p),
+            transform=ax.transAxes)
+
+
+def plotStenoserTrueVsPred(sql_config, label_names,
+                           prediction_names, output_folder):
+    df, _ = getDataFromDatabase(sql_config)
+    df = df.drop_duplicates(
+            ['PatientID',
+             'StudyInstanceUID'])
+    for c, label_name in enumerate(label_names):
+        prediction_name = prediction_names[c]
+        g = sns.lmplot(x=label_name, y=prediction_name, data=df)
+        X2 = sm.add_constant(df[label_name])
+        est = sm.OLS(df[prediction_name], X2)
+        est2 = est.fit()
+        r = est2.rsquared
+        p = est2.pvalues[label_name]
+
+        for ax, title in zip(g.axes.flat, [label_name]):
+            ax.set_title(title)
+            ax.text(0.05, 0.85,
+                    f'R-squared = {r:.3f}',
+                    fontsize=9, transform=ax.transAxes)
+            ax.text(0.05, 0.9,
+                    f'p-value = {p:.3f}',
+                    fontsize=9,
+                    transform=ax.transAxes)
+
+        plt.title('Number of reported significant stenoses vs predicted')
+        plt.savefig(
+            os.path.join(output_folder, label_name + '_scatter.png'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        return None
+
+        

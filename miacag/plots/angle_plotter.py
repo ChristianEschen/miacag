@@ -2,7 +2,7 @@ from miacag.utils.sql_utils import getDataFromDatabase
 import seaborn as sns
 import argparse
 parser = argparse.ArgumentParser(
-    description='Define data['inputs'] for building database.')
+    description='Define argparse inputs')
 parser.add_argument(
             '--query', type=str,
             help='query for retrieving data',

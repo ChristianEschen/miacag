@@ -24,7 +24,7 @@ def train_one_step(model, data, criterion,
                    optimizer, lr_scheduler, writer, config,
                    running_loss_train,
                    running_metric_train,
-                   tb_step_writer, scaler):
+                   tb_step_writer, scaler, device):
     model.train()
     # zero the parameter gradients
     optimizer.zero_grad()
@@ -36,7 +36,8 @@ def train_one_step(model, data, criterion,
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
-                                            criterion)
+                                            criterion,
+                                            device)
             # losses, loss = get_losses(config, outputs,
             #                           data[config['labels_names']],
             #                           criterion)
@@ -48,7 +49,8 @@ def train_one_step(model, data, criterion,
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
-                                        criterion)
+                                        criterion,
+                                        device)
         loss.backward()
         optimizer.step()
 
@@ -78,7 +80,8 @@ def train_one_epoch(model, criterion,
             running_loss_train,
             running_metric_train,
             tb_step_writer=i,
-            scaler=scaler)
+            scaler=scaler,
+            device=device)
         # running_metric_train = increment_metrics(running_metric_train,
         #                                          metrics)
        # running_loss_train = increment_metrics(running_loss_train, loss)
@@ -124,14 +127,9 @@ def early_stopping(best_val_loss, best_val_epoch,
 
     return early_stop, best_val_loss, best_val_epoch
 
-
-
 def get_device(config):
     if config["cpu"] == "False":
-        #if config['loaders']['mode'] == 'training':
         device = "cuda:{}".format(os.environ['LOCAL_RANK'])
-       # else:
-       #     device = "cuda:0"
     else:
         device = 'cpu'
     device = torch.device(device)

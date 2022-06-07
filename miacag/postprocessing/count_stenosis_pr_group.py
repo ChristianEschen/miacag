@@ -34,29 +34,29 @@ class CountSignificantStenoses(Aggregator):
     fields_to_aggregate: list
     output_dir: str
 
-    def __post_init__(self):
-        self.thresholded_cols_list = [
-            i[:i.find('_confidences')] + "_thres"
-            for i in self.fields_to_aggregate]
+    # def __post_init__(self):
+    #     self.thresholded_cols_list = [
+    #         i[:i.find('_confidences')] + "_thres"
+    #         for i in self.fields_to_aggregate]
 
     def threshold_segments(self):
         for c, agg_col in enumerate(self.fields_to_aggregate):
-            tresh_col = self.thresholded_cols_list[c]
+           # tresh_col = self.thresholded_cols_list[c]
             thresholds = dict(zip([agg_col], [0.5]))
-            self.df[tresh_col] = self.df.apply(
+            self.df[agg_col] = self.df.apply(
                 lambda x: within_threshold(x, thresholds), axis=1)
-            self.df[tresh_col] = self.df[tresh_col].astype(int)
-        df = self.df[self.thresholded_cols_list + ['rowid']]
+            self.df[agg_col] = self.df[agg_col].astype(int)
+        df = self.df[self.fields_to_aggregate + ['rowid']]
         records = df.to_records()
         return records
 
-    def compute_nr_stenosis(self, thresholded_cols_list, sum_col):
+    def compute_nr_stenosis(self, sum_col):
         # return records from dataframe to update
         sum_sten = self.df.groupby(
-                ['PatientID', 'StudyInstanceUID'])[thresholded_cols_list].sum()
+                ['PatientID', 'StudyInstanceUID'])[self.fields_to_aggregate].sum()
         self.df[sum_col] = self.df.drop_duplicates(
             ['PatientID',
-             'StudyInstanceUID'])[thresholded_cols_list].sum(axis=1)
+             'StudyInstanceUID'])[self.fields_to_aggregate].sum(axis=1)
         sum_sten = self.df.drop_duplicates(['PatientID', 'StudyInstanceUID'])
         sum_sten = sum_sten[["PatientID", "StudyInstanceUID", sum_col]]
         self.df = self.df.drop(sum_col, axis=1)
@@ -69,13 +69,13 @@ class CountSignificantStenoses(Aggregator):
 
     def __call__(self):
         self.get_df_from_query()
-        data_types = ["int8"] * len(self.thresholded_cols_list)
-        add_columns(self.sql_config, self.thresholded_cols_list, data_types)
+       # data_types = ["int8"] * len(self.self.fields_to_aggregate)
+        # add_columns(self.sql_config, self.self.fields_to_aggregate, data_types)
         records = self.threshold_segments()
-        self.update_colum_wrap(records, self.thresholded_cols_list)
-        add_columns(self.sql_config, ["antalsignifikantestenoser_pred"],
-                    ["int8"])
-        records = self.compute_nr_stenosis(self.thresholded_cols_list,
+        self.update_colum_wrap(records, self.fields_to_aggregate)
+        # add_columns(self.sql_config, ["antalsignifikantestenoser_pred"],
+        #            ["int8"])
+        records = self.compute_nr_stenosis(
                                            "antalsignifikantestenoser_pred")
         self.update_colum_wrap(records, ["antalsignifikantestenoser_pred"])
         plotStenoserTrueVsPred(self.sql_config, ["antalsignifikantestenoser"],

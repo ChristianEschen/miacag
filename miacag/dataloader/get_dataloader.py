@@ -2,9 +2,14 @@ import torch
 import os
 
 
-def to_long(data, config):
-    for label_name in config['labels_names']:
-        data[label_name] = data[label_name].long()
+def to_dtype(data, config):
+    for c, label_name in enumerate(config['labels_names']):
+        if config['loss']['name'][c] in ['CE']:
+            data[label_name] = data[label_name].long()
+        elif config['loss']['name'][c] in ['MSE']:
+            data[label_name] = data[label_name].float()
+        else:
+            raise ValueError("model dimension not implemented")
     return data
 
 
@@ -20,9 +25,9 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 'inputs': data[0],
                 config['labels_names']: data[1]
                 }
-    if config['task_type'] in ['classification', 'segmentation']:
+    if config['task_type'] in ['image2scalar']:
         data = to_device(data, device, ['inputs'])
-        data = to_long(data, config)
+        data = to_dtype(data, config)
         data = to_device(data, device, config['labels_names'])
     elif config['task_type'] == "representation_learning":
         if val_phase is False:
@@ -74,7 +79,7 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
 
 
 def get_dataloader_train(config):
-    if config['task_type'] in ['classification']:
+    if config['task_type'] in ['image2scalar']:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
@@ -111,7 +116,7 @@ def get_dataloader_train(config):
 
 
 def get_dataloader_test(config):
-    if config['task_type'] in ["classification"]:
+    if config['task_type'] in ["image2scalar"]:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)

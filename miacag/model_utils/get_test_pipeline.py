@@ -22,7 +22,7 @@ class TestPipeline():
                           normalize_metrics,
                           running_metric_test, running_loss_test):
 
-        if config['task_type'] in ["classification"]:
+        if config['task_type'] in ['image2scalar']:
             self.get_test_classification_pipeline(model, criterion,
                                                   config, test_loader,
                                                   device, init_metrics,
@@ -66,16 +66,17 @@ class TestPipeline():
                         )
                     #self.resetDataPaths(test_loader, config)
                     self.insert_data_to_db(test_loader, label, config)
-
-                    acc = {
-                        'accuracy ensemble_' + label: accuracy_score(
-                            test_loader.val_df[label].astype('float').astype('int'),
-                            test_loader.val_df[
-                                label + '_predictions'].astype(
-                                    'float').astype('int'))}
-                    print('accuracy_correct', acc)
+                    if config['loss']['name'] == 'CE':
+                        acc = {
+                            'accuracy ensemble_' + label: accuracy_score(
+                                test_loader.val_df[label].astype('float').astype('int'),
+                                test_loader.val_df[
+                                    label + '_predictions'].astype(
+                                        'float').astype('int'))}
+                        print('accuracy_correct', acc)
+                        metrics.update(acc)
                     print('metrics (mean of all preds)', metrics)
-                    metrics.update(acc)
+                    
                     log_name = config["table_name"] + '_' + label + '_log.txt'
                     with open(
                         os.path.join(config['output_directory'], log_name),

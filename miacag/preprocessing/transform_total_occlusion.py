@@ -37,35 +37,31 @@ parser.add_argument(
     help="table_name in database")
 
 
-class transformThreshold():
+class transformTotalOcclusion_right():
     def __init__(self, sql_config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
 
     def __call__(self):
-        for label_name in self.sql_config['labels_names']:
-            self.df[label_name][self.df[label_name] < 70] = 0
-            self.df[label_name][self.df[label_name] >= 70] = 1
+        self.df.loc[
+            self.df['sten_procent_1_prox_rca_transformed'] == 100,
+            'sten_procent_2_mid_rca_transformed'] = 100
+
+        self.df.loc[
+            self.df['sten_procent_1_prox_rca_transformed'] == 100,
+            'sten_procent_3_dist_rca_transformed'] = 100
+
+        self.df.loc[
+            self.df['sten_procent_2_mid_rca_transformed'] == 100,
+            'sten_procent_3_dist_rca_transformed'] = 100
+
+
         update_cols(self.connection,
                     self.df.to_dict('records'),
                     self.sql_config,
                     self.sql_config['labels_names'],)
 
 
-class transformThresholdRegression():
-    def __init__(self, sql_config):
-        self.sql_config = sql_config
-        self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
-
-    def __call__(self):
-        for label_name in self.sql_config['labels_names']:
-            self.df[label_name][self.df[label_name] < 0] = 0
-            self.df[label_name][self.df[label_name] >= 100] = 100
-            self.df[label_name] = self.df[label_name] / 100
-        update_cols(self.connection,
-                    self.df.to_dict('records'),
-                    self.sql_config,
-                    self.sql_config['labels_names'],)
 if __name__ == '__main__':
     args = parser.parse_args()
 

@@ -129,8 +129,7 @@ class base_monai_loader(DataloaderBase):
 
     def getMaybePad(self):
         if self.config['loaders']['mode'] == 'training':
-            if self.config['task_type'] in ['representation_learning',
-                                            "classification"]:
+            if self.config['task_type'] in ['image2scalar']:
                 keys_ = self.features
             elif self.config['task_type'] == "segmentation":
                 keys_ = self.features + [self.config["labels_names"]]
@@ -142,7 +141,7 @@ class base_monai_loader(DataloaderBase):
                               self.config['loaders']['Crop_width'],
                               self.config['loaders']['Crop_depth']])
         elif self.config['loaders']['mode'] == 'testing':
-            if self.config['task_type'] == "classification":
+            if self.config['task_type'] in ['image2scalar']:
                 keys_ = self.features
                 pad = SpatialPadd(
                     keys=keys_,
@@ -179,8 +178,7 @@ class base_monai_loader(DataloaderBase):
         return permute
 
     def resampleORresize(self):
-        if self.config['task_type'] in [
-            'representation_learning', "classification"]:
+        if self.config['task_type'] in ['image2scalar']:
             keys_ = self.features
             mode_ = tuple([
                          'bilinear' for i in
@@ -212,8 +210,7 @@ class base_monai_loader(DataloaderBase):
 
     def maybeToGpu(self, keys):
         if self.config['cpu'] == 'True':
-            if self.config['task_type'] in ['representation_learning',
-                                            "classification"]:
+            if self.config['task_type'] in ['image2scalar']:
                 device = ToDeviced(keys=keys, device="cpu")
             else:
                 device = ToDeviced(
@@ -311,7 +308,7 @@ class base_monai_loader(DataloaderBase):
 
     def maybeNormalize(self):
         if self.config['model']['backbone'] in [
-            'x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
+            'x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32', 'debug_3d']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),

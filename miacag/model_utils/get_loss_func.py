@@ -11,6 +11,9 @@ def get_loss_func(config):
         if loss == 'CE':
             criterion = nn.CrossEntropyLoss(reduction='mean')
             criterions.append(criterion)
+        elif loss == 'MSE':
+            criterion = torch.nn.MSELoss(reduce=True, reduction='mean')
+            criterions.append(criterion)
         elif loss == 'dice_loss':
             criterion = DiceLoss(
                 include_background=False,

@@ -8,6 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 import matplotlib
+from matplotlib.ticker import MaxNLocator
 matplotlib.use('Agg')
 from sklearn import metrics
 import scipy
@@ -91,52 +92,62 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     df, _ = getDataFromDatabase(sql_config)
     for c, label_name in enumerate(label_names):
         df_label = df[df[label_name].notna()]
-        prediction_name = prediction_names[c]
-        df_label[prediction_name] = \
-            df_label[prediction_name].astype(float).astype(int)
-        df_label[label_name] = df_label[label_name] \
-            .astype(float).astype(int)
-        f1_transformed = f1_score(
-            df_label[label_name],
-            df_label[prediction_name],
-            average='macro')
         support = len(df_label)
+        if num_classes != 1:
+            prediction_name = prediction_names[c]
+            df_label[prediction_name] = \
+                df_label[prediction_name].astype(float).astype(int)
+            df_label[label_name] = df_label[label_name] \
+                .astype(float).astype(int)
+            f1_transformed = f1_score(
+                df_label[label_name],
+                df_label[prediction_name],
+                average='macro')
 
-        getNormConfMat(
-            df_label,
-            label_name,
-            prediction_name,
-            label_name,
-            f1_transformed,
-            output_plots,
-            num_classes,
-            support)
-        df = df.replace(
-            {label_name: map_1abels_to_0neTohree()})
-        df = df.replace(
-            {prediction_name: map_1abels_to_0neTohree()})
-        f1 = f1_score(df[label_name],
-                      df[prediction_name], average='macro')
-        getNormConfMat(df, label_name, prediction_name,
-                       'labels_3_classes', f1, output_plots, 3, support)
+            getNormConfMat(
+                df_label,
+                label_name,
+                prediction_name,
+                label_name,
+                f1_transformed,
+                output_plots,
+                num_classes,
+                support)
+            df = df.replace(
+                {label_name: map_1abels_to_0neTohree()})
+            df = df.replace(
+                {prediction_name: map_1abels_to_0neTohree()})
+            f1 = f1_score(df[label_name],
+                        df[prediction_name], average='macro')
+            getNormConfMat(df, label_name, prediction_name,
+                        'labels_3_classes', f1, output_plots, 3, support)
 
         if confidence_names is not False:
             confidence_name = confidence_names[c]
             plot_roc_curve(df[label_name], df[confidence_name],
-                           output_plots, label_name, support)
+                           output_plots, label_name, support, num_classes)
     return None
 
 
-def convertConfFloats(confidences):
+def convertConfFloats(confidences, num_classes):
     confidences_conv = []
     for conf in confidences:
-        confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
+        if num_classes == 1:
+            confidences_conv.append(float(conf.split("0:")[-1][:-1]))
+        elif num_classes == 2:
+            confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
+        else:
+            raise ValueError('not implemented')
     return np.array(confidences_conv)
 
 
-def plot_roc_curve(labels, confidences, output_plots, plot_name, support):
+def plot_roc_curve(labels, confidences, output_plots,
+                   plot_name, support, num_classes):
     labels = labels.to_numpy()
-    confidences = convertConfFloats(confidences)
+    confidences = convertConfFloats(confidences, num_classes)
+    if num_classes == 1:
+        labels[labels >= 0.7] = 1
+        labels[labels < 0.7] = 0
     fpr, tpr, thresholds = metrics.roc_curve(labels, confidences, pos_label=1)
     roc_auc = metrics.auc(fpr, tpr)
     plt.clf()
@@ -189,7 +200,9 @@ def plotStenoserTrueVsPred(sql_config, label_names,
             ['PatientID',
              'StudyInstanceUID'])
     for c, label_name in enumerate(label_names):
+        df = df.astype({label_name: int})
         prediction_name = prediction_names[c]
+        df = df.astype({prediction_name: int})
         g = sns.lmplot(x=label_name, y=prediction_name, data=df)
         X2 = sm.add_constant(df[label_name])
         est = sm.OLS(df[prediction_name], X2)
@@ -199,6 +212,9 @@ def plotStenoserTrueVsPred(sql_config, label_names,
 
         for ax, title in zip(g.axes.flat, [label_name]):
             ax.set_title(title)
+            #ax.ticklabel_format(useOffset=False)
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.set_ylim(bottom=0.)
             ax.text(0.05, 0.85,
                     f'R-squared = {r:.3f}',
                     fontsize=9, transform=ax.transAxes)
@@ -206,7 +222,7 @@ def plotStenoserTrueVsPred(sql_config, label_names,
                     f'p-value = {p:.3f}',
                     fontsize=9,
                     transform=ax.transAxes)
-
+            plt.show()
         plt.title('Number of reported significant stenoses vs predicted')
         plt.savefig(
             os.path.join(output_folder, label_name + '_scatter.png'), dpi=100,

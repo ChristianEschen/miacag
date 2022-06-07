@@ -127,6 +127,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['labels_names'] = trans_label
             # add placeholder for confidences
             conf = [i + '_confidences' for i in config['labels_names']]
+            conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
 
@@ -170,6 +171,28 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             pred,
                             ["float8"] * len(pred))
+
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            conf_agg,
+                            ["float8"] * len(conf))
+                
+
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            ["antalsignifikantestenoser_pred"],
+                            ["float8"])
+
                 # 3. split train and validation , and map labels
                 trans = transformMissingFloats({
                     'labels_names': config['labels_names'],
@@ -261,7 +284,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'host': config['host'],
                                     'table_name': output_table_name,
                                     'query':
-                                    config['query_train_plot']},
+                                    config['query_train_plot'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
@@ -331,7 +356,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'host': config['host'],
                                     'table_name': output_table_name,
                                     'query':
-                                    config['query_val_plot']},
+                                    config['query_val_plot'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
@@ -402,7 +429,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'host': config['host'],
                                     'table_name': output_table_name,
                                     'query':
-                                    config['query_train_test']},
+                                    config['query_train_test'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()

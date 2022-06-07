@@ -96,16 +96,21 @@ def get_encoder(config, device):
         model.head.proj = Identity()
 
     elif config['model']['backbone'] == 'linear':
-        from models.backbone_encoders.tabular.base_encoders \
+        from miacag.models.backbone_encoders.tabular.base_encoders \
             import LinearEncoder
         model = LinearEncoder(config['model']['incomming_features'])
         in_features = config['model']['incomming_features']
 
     elif config['model']['backbone'] == 'mlp':
-        from models.mlps import projection_MLP
+        from miacag.models.mlps import projection_MLP
         in_features = 128
         model = projection_MLP(config['model']['incomming_features'],
                                in_features)
+    elif config['model']['backbone'] == 'debug_3d':
+        from miacag.models.cnns import debug_3d
+        in_features = 16
+        model = debug_3d(in_features)
+
     else:
         raise ValueError('not implemented')
     return model, in_features

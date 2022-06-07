@@ -20,10 +20,12 @@ from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
 from miacag.plots.plotter import plot_results
 import pandas as pd
-from miacag.preprocessing.transform_thresholds import transformThreshold
+from miacag.preprocessing.transform_thresholds import transformThresholdRegression
 from miacag.preprocessing.transform_missing_floats import transformMissingFloats
 from miacag.utils.script_utils import create_empty_csv, mkFolder
-
+from miacag.postprocessing.aggregate_pr_group import Aggregator
+from miacag.postprocessing.count_stenosis_pr_group \
+    import CountSignificantStenoses
 
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -125,9 +127,13 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['labels_names'] = trans_label
             # add placeholder for confidences
             conf = [i + '_confidences' for i in config['labels_names']]
+            conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
+            conf_agg_t = [i + '_confidences_aggregated_thres' for i in config['labels_names']]
+
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
 
+            torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
                 add_columns({
                     'database': config['database'],
@@ -145,9 +151,19 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'password': config['password'],
                         'host': config['host'],
                         'table_name': output_table_name,
-                        'query': config['query']},
+                        'query': config['query_transform']},
                     labels_names_original,
                     trans_label)
+
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            conf,
+                            ["VARCHAR"] * len(conf))
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -157,6 +173,36 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             pred,
                             ["float8"] * len(pred))
+                
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            conf_agg,
+                            ["float8"] * len(conf))
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            conf_agg_t,
+                            ["float8"] * len(conf))
+                
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            ["antalsignifikantestenoser_pred"],
+                            ["float8"])
+
                 # 3. split train and validation , and map labels
                 trans = transformMissingFloats({
                     'labels_names': config['labels_names'],
@@ -165,9 +211,31 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'password': config['password'],
                     'host': config['host'],
                     'table_name': output_table_name,
-                    'query': config['query_test'],
+                    'query': config['query_transform'],
                     'TestSize': config['TestSize']})
                 trans()
+
+                trans_thres = transformThresholdRegression({
+                    'labels_names': config['labels_names'],
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'table_name': output_table_name,
+                    'query': config['query_transform'],
+                    'TestSize': config['TestSize']})
+                trans_thres()
+
+                # change dtypes for label
+                changeDtypes(
+                    {'database': config["database"],
+                        'username': config["username"],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'table_name': output_table_name,
+                        'query': config['query_transform']},
+                    trans_label,
+                    ["float8"] * len(trans_label))
                 splitter_obj = splitter(
                     {
                         'labels_names': config['labels_names'],
@@ -176,23 +244,24 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'password': config['password'],
                         'host': config['host'],
                         'table_name': output_table_name,
-                        'query': config['query'],
+                        'query': config['query_split'],
                         'TestSize': config['TestSize']})
                 splitter_obj()
                 # ...and map data['labels'] test
             # 4. Train model
+            torch.distributed.barrier()
             config['output'] = output_directory
             config['output_directory'] = output_directory
             config['table_name'] = output_table_name
             config['use_DDP'] = 'True'
             config['datasetFingerprintFile'] = None
-            ## TODO: implement a regression model
             train(config)
 
             # 5 eval model
 
             config['model']['pretrain_model'] = output_directory
             test({**config, 'query': config["query_test"], 'TestSize': 1})
+
 
             # plotting results
             torch.distributed.barrier()
@@ -207,10 +276,69 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_train_plot']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
                             output_plots_train,
                             config['model']['num_classes'],
-                            roc=True
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
+
+                # aggregate stenosis for all groups :
+                # entryids or (PatientID, StudyInstanceUID)
+                agg = Aggregator({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_train_plot'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
+                                 [i + "_confidences" for i in
+                                  config['labels_names']])
+                agg()
+                # count stenosis
+                sten_path_train = os.path.join(
+                    output_plots_train, 'cag_stenosis_count')
+                mkFolder(sten_path_train)
+                count = CountSignificantStenoses({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_train_plot']},
+                                 [i + "_confidences_aggregated" for i in
+                                  config['labels_names']],
+                                 sten_path_train)
+                count()
+                # plot results for entire cag
+                cag_segment = os.path.join(output_plots_train, 'cag_segment')
+                mkFolder(cag_segment)
+
+                plot_results({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_train']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
+                            cag_segment,
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
+                            )
+
                 # val
                 plot_results({
                             'database': config['database'],
@@ -220,10 +348,69 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_val_plot']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
                             output_plots_val,
                             config['model']['num_classes'],
-                            roc=True
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
+
+                # aggregate stenosis for all groups :
+                # entryids or (PatientID, StudyInstanceUID)
+                agg = Aggregator({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_val_plot'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
+                                 [i + "_confidences" for i in
+                                  config['labels_names']])
+                agg()
+                # count stenosis
+                sten_path_val = os.path.join(
+                    output_plots_val, 'cag_stenosis_count')
+                mkFolder(sten_path_val)
+                count = CountSignificantStenoses({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_val_plot']},
+                                 [i + "_confidences_aggregated" for i in
+                                  config['labels_names']],
+                                 sten_path_val)
+                count()
+                # plot results for entire cag
+                cag_segment = os.path.join(output_plots_val, 'cag_segment')
+                mkFolder(cag_segment)
+
+                plot_results({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_val']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
+                            cag_segment,
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
+                            )
+
                 # test
                 plot_results({
                             'database': config['database'],
@@ -233,11 +420,72 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_test_plot']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
                             output_plots_test,
                             config['model']['num_classes'],
-                            roc=True
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
 
+                # aggregate stenosis for all groups :
+                # entryids or (PatientID, StudyInstanceUID)
+
+                agg = Aggregator({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_train_test'],
+                                    "num_classes":
+                                    config["model"]["num_classes"]},
+                                 [i + "_confidences" for i in
+                                  config['labels_names']])
+                agg()
+                # count stenosis
+                sten_path_test = os.path.join(
+                    output_plots_test, 'cag_stenosis_count')
+                mkFolder(sten_path_test)
+                count = CountSignificantStenoses({
+                                    'labels_names': config['labels_names'],
+                                    'database': config['database'],
+                                    'username': config['username'],
+                                    'password': config['password'],
+                                    'host': config['host'],
+                                    'table_name': output_table_name,
+                                    'query':
+                                    config['query_train_plot']},
+                                 [i + "_confidences_aggregated" for i in
+                                  config['labels_names']],
+                                 sten_path_test)
+                count()
+                # plot results for entire cag
+                cag_segment = os.path.join(output_plots_test, 'cag_segment')
+                mkFolder(cag_segment)
+
+                plot_results({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_test']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
+                            cag_segment,
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
+                            )
+
+
+                # append results 
                 csv_results = appendDataFrame(sql_config={
                                     'labels_names': config['labels_names'],
                                     'database': config['database'],

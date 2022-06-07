@@ -12,7 +12,7 @@ from monai.data import decollate_batch
 import torch.nn.functional as F
 import monai
 import torch
-from monai.metrics import CumulativeAverage, CumulativeIterationMetric
+from monai.metrics import CumulativeAverage, CumulativeIterationMetric, RMSEMetric
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -90,6 +90,10 @@ def init_metrics(metrics, config, ptype=None):
     for i in idx:
         if metrics[i].startswith('CE'):
             dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('MSE'):
+            dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('RMSE'):
+            dicts[metrics[i]] = RMSEMetric(reduction='mean')
         elif metrics[i].startswith('total'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('acc_top_1'):
@@ -136,6 +140,10 @@ def get_metrics(outputs,
                     labels,
                     num_classes=config['model']['num_classes'])
                 metrics[metric](y_pred=outputs, y=labels)
+                dicts[metric] = metrics[metric]
+            elif metric.startswith('RMSE'):
+                metrics[metric](y_pred=outputs, y=torch.unsqueeze(labels, -1))
+                
                 dicts[metric] = metrics[metric]
             elif metric.startswith('acc_top_5'):
                 dicts[metric] = \
@@ -186,6 +194,9 @@ def get_losses_metric(outputs,
         if loss.startswith('CE'):
             running_losses[loss].append(losses[loss])
             dicts[loss] = running_losses[loss]
+        elif loss.startswith('MSE'):
+            running_losses[loss].append(losses[loss])
+            dicts[loss] = running_losses[loss]
         elif loss.startswith('total'):
             running_losses[loss].append(losses[loss])
             dicts[loss] = running_losses[loss]
@@ -226,7 +237,10 @@ def normalize_metrics(running_metrics):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('total'):
             metric_tb = running_metrics[running_metric].aggregate().item()
-
+        elif running_metric.startswith('RMSE'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('MSE'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
         else:
             metric_tb = running_metrics[running_metric].aggregate()[0].item()
         metric_dict[running_metric] = metric_tb

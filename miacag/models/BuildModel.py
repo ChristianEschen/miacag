@@ -47,13 +47,17 @@ class ModelBuilder():
             model = torch.nn.parallel.DistributedDataParallel(
                     model,
                     device_ids=[self.device] if self.config["cpu"] == "False" else None,
-                    find_unused_parameters=False)
+                    find_unused_parameters=True)
         return model
 
-    def get_classification_model(self):
+    def get_ImageToScalar_model(self):
         path_model = self.config['model']['pretrain_model']
         path_encoder = self.config['model']['pretrain_encoder']
-        from miacag.models.modules import ClassificationModel as m
+        # if self.config['task_type'] == "regression":
+        #     from miacag.models.modules import RegressionModel as m
+        # elif self.config['task_type'] == "classification":
+        #     from miacag.models.modules import ClassificationModel as m
+        from miacag.models.modules import ImageToScalarModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':
@@ -118,8 +122,8 @@ class ModelBuilder():
     def get_model(self):
         if self.config['task_type'] == "representation_learning":
             model = self.get_representation_learning_model()
-        elif self.config['task_type'] == "classification":
-            model = self.get_classification_model()
+        elif self.config['task_type'] in ["image2scalar"]:
+            model = self.get_ImageToScalar_model()
         elif self.config['task_type'] == "segmentation":
             model = self.get_segmentation_model()
         return model

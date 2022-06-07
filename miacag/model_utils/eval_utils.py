@@ -172,10 +172,19 @@ def get_loss(config, outputs, labels, criterion):
         loss = criterion(outputs, labels)
     return loss
 
+# def init_loss(config):
+#     for c, label_name in enumerate(config['labels_names']):
+#         if config['loss']['name'][c] in ['CE']:
+#             data = to_long(data, label_name)
+#         elif config['loss']['name'][c] in ['MSE']:
+#             data = to_float(data, label_name)
+#         else:
+#             raise ValueError("model dimension not implemented")
+#         return data
 
 def get_losses_class(config, outputs, data, criterion, device):
     losses = []
-    loss_tot = torch.tensor([0])
+    loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
     for count, label_name in enumerate(config['labels_names']):
 
@@ -326,9 +335,19 @@ def val_one_epoch_test(
 
     running_loss_val, loss_tb = normalize_metrics(
         running_loss_val)
-    confidences = [softmax_transform(logits.float()) for logits in logitsS]
+    #confidences = [softmax_transform(logits.float()) for logits in logitsS]
+    confidences = maybe_softmax_transform(logitsS, config)
     return metric_tb, confidences, rowids
 
+
+def maybe_softmax_transform(logits, config):
+    logits_return = []
+    for c, logit in enumerate(logits):
+        if config['loss']['name'][c] == 'CE':
+            logits_return.append(softmax_transform(logit.float()))
+        elif config['loss']['name'][c] == 'MSE':
+            logits_return.append(logit.float())
+    return logits_return
 
 def getListOfLogits(logits, label_names, data_len):
     '''

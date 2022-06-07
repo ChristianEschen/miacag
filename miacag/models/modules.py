@@ -43,15 +43,25 @@ class EncoderModel(nn.Module):
         return z
 
 
-class ClassificationModel(EncoderModel):
+class ImageToScalarModel(EncoderModel):
     def __init__(self, config, device):
-        super(ClassificationModel, self).__init__(config, device)
+        super(ImageToScalarModel, self).__init__(config, device)
         self.config = config
         self.fcs = []
+        c = 0
         for head in range(0, len(self.config['labels_names'])):
-            self.fcs.append(
-                nn.Linear(self.in_features,
-                          config['model']['num_classes']).to(device))
+            if self.config['loss']['name'][c] in ['CE']:
+                self.fcs.append(
+                    nn.Linear(
+                        self.in_features,
+                        config['model']['num_classes']).to(device))
+            elif self.config['loss']['name'][c] in ['MSE']:
+                self.fcs.append(
+                    nn.Linear(
+                        self.in_features, 1).to(device))
+            else:
+                raise ValueError('loss not implemented')
+            c += 1
         self.dimension = config['model']['dimension']
 
     def forward(self, x):

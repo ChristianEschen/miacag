@@ -195,8 +195,13 @@ def angio_classifier(cpu, num_workers, config_path):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_train_plot']},
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
                             output_plots_train,
-                            config['model']['num_classes']
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
                 # val
                 plot_results({
@@ -207,8 +212,13 @@ def angio_classifier(cpu, num_workers, config_path):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_val_plot']},
-                            output_plots_val,
-                            config['model']['num_classes']
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
+                            output_plots_train,
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
                 # test
                 plot_results({
@@ -219,8 +229,13 @@ def angio_classifier(cpu, num_workers, config_path):
                             'labels_names': config['labels_names'],
                             'table_name': output_table_name,
                             'query': config['query_test_plot']},
-                            output_plots_test,
-                            config['model']['num_classes']
+                            config['labels_names'],
+                            [i + "_predictions" for i in
+                             config['labels_names']],
+                            output_plots_train,
+                            config['model']['num_classes'],
+                            [i + "_confidences" for i in
+                             config['labels_names']]
                             )
 
                 csv_results = appendDataFrame(sql_config={

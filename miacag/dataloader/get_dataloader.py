@@ -25,7 +25,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 'inputs': data[0],
                 config['labels_names']: data[1]
                 }
-    if config['task_type'] in ['image2scalar']:
+    if config['task_type'] in ["classification", "regression"]:
         data = to_device(data, device, ['inputs'])
         data = to_dtype(data, config)
         data = to_device(data, device, config['labels_names'])
@@ -79,7 +79,7 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
 
 
 def get_dataloader_train(config):
-    if config['task_type'] in ['image2scalar']:
+    if config['task_type'] in ["classification", "regression"]:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)
@@ -116,7 +116,7 @@ def get_dataloader_train(config):
 
 
 def get_dataloader_test(config):
-    if config['task_type'] in ["image2scalar"]:
+    if config['task_type'] in ["classification", "regression"]:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)

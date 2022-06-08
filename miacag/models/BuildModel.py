@@ -122,7 +122,7 @@ class ModelBuilder():
     def get_model(self):
         if self.config['task_type'] == "representation_learning":
             model = self.get_representation_learning_model()
-        elif self.config['task_type'] in ["image2scalar"]:
+        elif self.config['task_type'] in ["classification", "regression"]:
             model = self.get_ImageToScalar_model()
         elif self.config['task_type'] == "segmentation":
             model = self.get_segmentation_model()

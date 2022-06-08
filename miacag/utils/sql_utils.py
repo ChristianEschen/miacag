@@ -13,6 +13,8 @@ def getDataFromDatabase(sql_config):
     sql = sql_config['query'].replace(
         "?table_name", "\"" + sql_config['table_name'] + "\"")
     sql = sql.replace(
+        "?schema_name", "\"" + sql_config['schema_name'] + "\"")
+    sql = sql.replace(
         "??", "\"")
     df = pd.read_sql_query(sql, connection)
     if len(df) == 0:
@@ -44,10 +46,11 @@ def update_cols(con, records, sql_config, cols, page_size=2):
     values = tuple(values)
     string = cols_to_set(cols)
     update_query = """
-    UPDATE "{table_name}" AS t
+    UPDATE "{schema_name}"."{table_name}" AS t
     SET {cols_to_set}
     FROM (VALUES %s) AS e({cols})
     WHERE e.rowid = t.rowid;""".format(
+        schema_name=sql_config['schema_name'],
         table_name=sql_config['table_name'],
         cols=', '.join(cols+['rowid']),
         cols_to_set=string)
@@ -60,10 +63,12 @@ def update_cols(con, records, sql_config, cols, page_size=2):
 
 def copy_table(sql_config):
     sql = """
-        CREATE TABLE "{}" as
-        (SELECT * FROM "{}");
-        """.format(sql_config['table_name_output'],
-                   sql_config['table_name_input'])
+        CREATE TABLE {schema_name}."{table_name_in}" as
+        (SELECT * FROM {schema_name}."{table_name_out}");
+        """.format(
+            schema_name=sql_config['schema_name'],
+            table_name_in=sql_config['table_name_output'],
+            table_name_out=sql_config['table_name_input'])
 
     connection = psycopg2.connect(
             host=sql_config['host'],
@@ -82,11 +87,12 @@ def add_columns(sql_config, column_names, data_types):
     for count, column_name in enumerate(column_names):
         data_type = data_types[count]
         sql = """
-        ALTER TABLE "{}"
-        ADD COLUMN "{}" {};
-        """.format(sql_config['table_name'],
-                   column_name,
-                   data_type)
+        ALTER TABLE "{schema_name}"."{table_name}"
+        ADD COLUMN "{col_name}" {d_type};
+        """.format(schema_name=sql_config['schema_name'],
+                   table_name=sql_config['table_name'],
+                   col_name=column_name,
+                   d_type=data_type)
 
         connection = psycopg2.connect(
                 host=sql_config['host'],
@@ -109,11 +115,12 @@ def changeDtypes(sql_config, columnm_names, data_types):
         _, connection = getDataFromDatabase(sql_config)
         data_type = data_types[count]
         sql = """
-        ALTER TABLE "{}"
-        ALTER COLUMN "{}" TYPE {};""".format(
-            sql_config["table_name"],
-            columnm_name,
-            data_type
+        ALTER TABLE "{schema_name}"."{table_name}"
+        ALTER COLUMN "{col_name}" TYPE {dtype};""".format(
+            schema_name=sql_config['schema_name'],
+            table_name=sql_config["table_name"],
+            col_name=columnm_name,
+            dtype=data_type
             )
         cursor = connection.cursor()
 

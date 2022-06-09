@@ -95,6 +95,10 @@ def angio_classifier(cpu, num_workers, config_path):
             # 1. copy table
             os.system("mkdir -p {output_dir}".format(
                 output_dir=output_directory))
+
+            
+            trans_labels = [i + '_transformed' for i in config['labels_names']]
+
             torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
 
@@ -112,6 +116,17 @@ def angio_classifier(cpu, num_workers, config_path):
                     "cp {config_path} {config_file_temp}".format(
                         config_path=config_path[i],
                         config_file_temp=output_config))
+
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'schema_name': config['schema_name'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            trans_labels,
+                            ["int8"] * len(trans_labels))
                 # map labels
                 mapper_obj = labelsMap(
                     {

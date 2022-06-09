@@ -18,7 +18,7 @@ import argparse
 from miacag.preprocessing.labels_map import labelsMap
 from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
-from miacag.plots.plotter import plot_results
+from miacag.plots.plotter import plot_results, plotRegression
 import pandas as pd
 from miacag.preprocessing.transform_thresholds import transformThresholdRegression
 from miacag.preprocessing.transform_missing_floats import transformMissingFloats
@@ -27,17 +27,18 @@ from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
 
+
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
     '--cpu', type=str,
     help="if cpu 'True' else 'False'")
 parser.add_argument(
-            "--local_rank", type=int,
-            help="Local rank: torch.distributed.launch.")    
+    "--local_rank", type=int,
+    help="Local rank: torch.distributed.launch.")
 parser.add_argument(
-            "--num_workers", type=int,
-            help="Number of cpu workers for training")    
+    "--num_workers", type=int,
+    help="Number of cpu workers for training")
 parser.add_argument(
     '--config_path', type=str,
     help="path to folder with config files")
@@ -178,7 +179,6 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             pred,
                             ["float8"] * len(pred))
-                
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -315,24 +315,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
-                # count stenosis
-                sten_path_train = os.path.join(
-                    output_plots_train, 'cag_stenosis_count')
-                mkFolder(sten_path_train)
-                count = CountSignificantStenoses({
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query':
-                                    config['query_train_plot']},
-                                 [i + "_confidences_aggregated" for i in
-                                  config['labels_names']],
-                                 sten_path_train)
-                count()
+ 
                 # plot results for entire cag
                 cag_segment = os.path.join(output_plots_train, 'cag_segment')
                 mkFolder(cag_segment)
@@ -354,7 +337,19 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
-
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_train']},
+                            config['labels_names'],
+                            conf_agg,
+                            cag_segment)
+                   
                 # val
                 plot_results({
                             'database': config['database'],
@@ -391,24 +386,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
-                # count stenosis
-                sten_path_val = os.path.join(
-                    output_plots_val, 'cag_stenosis_count')
-                mkFolder(sten_path_val)
-                count = CountSignificantStenoses({
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query':
-                                    config['query_val_plot']},
-                                 [i + "_confidences_aggregated" for i in
-                                  config['labels_names']],
-                                 sten_path_val)
-                count()
+            
                 # plot results for entire cag
                 cag_segment = os.path.join(output_plots_val, 'cag_segment')
                 mkFolder(cag_segment)
@@ -430,6 +408,19 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
+
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_val']},
+                            config['labels_names'],
+                            conf_agg,
+                            cag_segment)
 
                 # test
                 plot_results({
@@ -462,30 +453,13 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'schema_name': config['schema_name'],
                                     'table_name': output_table_name,
                                     'query':
-                                    config['query_train_test'],
+                                    config['query_test_plot'],
                                     "num_classes":
                                     config["model"]["num_classes"]},
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
-                # count stenosis
-                sten_path_test = os.path.join(
-                    output_plots_test, 'cag_stenosis_count')
-                mkFolder(sten_path_test)
-                count = CountSignificantStenoses({
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query':
-                                    config['query_train_plot']},
-                                 [i + "_confidences_aggregated" for i in
-                                  config['labels_names']],
-                                 sten_path_test)
-                count()
+
                 # plot results for entire cag
                 cag_segment = os.path.join(output_plots_test, 'cag_segment')
                 mkFolder(cag_segment)
@@ -507,24 +481,21 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_count_stenosis_test']},
+                            config['labels_names'],
+                            conf_agg,
+                            cag_segment)
 
-
-                # append results 
-                csv_results = appendDataFrame(sql_config={
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query': config['query_test_plot']},
-                                df_results=df_results,
-                                experiment_name=experiment_name)
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))
-                csv_results = pd.DataFrame(csv_results)
-                csv_results.to_csv(output_csv_test, index=False, header=True)
 
 
 if __name__ == '__main__':

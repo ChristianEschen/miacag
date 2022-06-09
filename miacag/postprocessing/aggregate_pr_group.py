@@ -67,10 +67,7 @@ class Aggregator:
 
     def __call__(self):
         self.get_df_from_query()
-        # aggregated_cols_list = [
-        #     i + "_aggregated" for i in self.fields_to_aggregate]
         data_types = ["float8"] * len(self.aggregated_cols_list)
-       # add_columns(self.sql_config, self.aggregated_cols_list, data_types)
         records = self.compute_mean_confidence(self.aggregated_cols_list)
         self.update_colum_wrap(records, self.aggregated_cols_list)
 

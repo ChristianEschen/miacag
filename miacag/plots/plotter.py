@@ -123,9 +123,11 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                         'labels_3_classes', f1, output_plots, 3, support)
 
         if confidence_names is not False:
-            confidence_name = confidence_names[c]
-            plot_roc_curve(df[label_name], df[confidence_name],
-                           output_plots, label_name, support, num_classes)
+            if num_classes <= 2:
+                confidence_name = confidence_names[c]
+                plot_roc_curve(df[label_name], df[confidence_name],
+                            output_plots, label_name, support, num_classes)
+
     return None
 
 
@@ -199,7 +201,11 @@ def plotStenoserTrueVsPred(sql_config, label_names,
     df = df.drop_duplicates(
             ['PatientID',
              'StudyInstanceUID'])
+
     for c, label_name in enumerate(label_names):
+        df = df.dropna(
+            subset=[label_name],
+            how='any')
         df = df.astype({label_name: int})
         prediction_name = prediction_names[c]
         df = df.astype({prediction_name: int})
@@ -230,4 +236,87 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         plt.close()
         return None
 
-        
+
+def plotRegression(sql_config, label_names,
+                   prediction_names, output_folder):
+    df, _ = getDataFromDatabase(sql_config)
+    df = df.drop_duplicates(
+            ['PatientID',
+             'StudyInstanceUID'])
+
+    for c, label_name in enumerate(label_names):
+        label_name_ori = label_name
+        df = df.dropna(
+            subset=[label_name],
+            how='any')
+        df, label_name = rename_columns(df, label_name)
+        df = df.astype({label_name: float})
+        prediction_name = prediction_names[c]
+        df = df.astype({prediction_name: float})
+        g = sns.lmplot(x=label_name, y=prediction_name, data=df)
+        X2 = sm.add_constant(df[label_name])
+        est = sm.OLS(df[prediction_name], X2)
+        est2 = est.fit()
+        r = est2.rsquared
+        p = est2.pvalues[label_name]
+
+        for ax, title in zip(g.axes.flat, [label_name]):
+            ax.set_title(title)
+            ax.set_ylim(bottom=0.)
+            ax.text(0.05, 0.85,
+                    f'R-squared = {r:.3f}',
+                    fontsize=9, transform=ax.transAxes)
+            ax.text(0.05, 0.9,
+                    f'p-value = {p:.3f}',
+                    fontsize=9,
+                    transform=ax.transAxes)
+            plt.xlabel("True")
+            plt.ylabel("Predicted")
+            plt.show()
+
+        plt.title(label_name)
+        plt.savefig(
+            os.path.join(
+                output_folder, label_name_ori + '_scatter.png'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+    return None
+
+
+def rename_columns(df, label_name):
+    if '_1_prox' in label_name:
+        value = '1: Proximal RCA'
+    elif '_2_mi' in label_name:
+        value = '2: Mid RCA'
+    elif '_3_dist' in label_name:
+        value = '3: Distale RCA'
+    elif '_4_pda' in label_name:
+        value = '4: PDA'
+    elif '_5_lm' in label_name:
+        value = '5: LM'
+    elif '_6_prox' in label_name:
+        value = '6: Proximal LAD'
+    elif '_7_mi' in label_name:
+        value = '7: Mid LAD'
+    elif '_8_dist' in label_name:
+        value = '8: Distale LAD'
+    elif '_9_d1' in label_name:
+        value = '9: Diagonal 1'
+    elif '_10_d2' in label_name:
+        value = '10: Diagonal 2'
+    elif '_11_prox' in label_name:
+        value = '11: Proximal LCX'
+    elif '_12_om' in label_name:
+        value = '12: Marginal 1'
+    elif '_13_midt' in label_name:
+        value = '13: Mid LCX'
+    elif '_14_om' in label_name:
+        value = '14: Marginal 2'
+    elif '_15_dist' in label_name:
+        value = '15: Distale LCX'
+    elif '_16_pla' in label_name:
+        value = '16: PLA'
+    key = label_name
+    dictionary = {key: value}
+    df = df.rename(columns=dictionary)
+    return df, value

@@ -1,5 +1,32 @@
+from distutils import text_file
 import os
 import pandas as pd
+import time
+
+
+def read_file(filename):
+    with open(filename) as f:
+        lines = f.readlines()
+    return lines
+
+
+def write_file(filename, table_name):
+    text_file = open(filename, 'w')
+    text_file.write(table_name)
+    text_file.close()
+    return
+
+
+def maybe_remove(filename):
+    if os.path.exists(filename):
+        os.remove(filename)
+    return
+
+
+def test_for_file(filename):
+    time.sleep(2)
+    lines = read_file(filename)
+    return lines
 
 
 def mkFolder(dir):

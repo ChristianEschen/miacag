@@ -88,7 +88,7 @@ def add_columns(sql_config, column_names, data_types):
         data_type = data_types[count]
         sql = """
         ALTER TABLE "{schema_name}"."{table_name}"
-        ADD COLUMN "{col_name}" {d_type};
+        ADD COLUMN IF NOT EXISTS "{col_name}" {d_type};
         """.format(schema_name=sql_config['schema_name'],
                    table_name=sql_config['table_name'],
                    col_name=column_name,

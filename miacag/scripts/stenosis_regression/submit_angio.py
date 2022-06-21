@@ -22,7 +22,7 @@ from miacag.plots.plotter import plot_results, plotRegression
 import pandas as pd
 from miacag.preprocessing.transform_thresholds import transformThresholdRegression
 from miacag.preprocessing.transform_missing_floats import transformMissingFloats
-from miacag.utils.script_utils import create_empty_csv, mkFolder
+from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, write_file, test_for_file
 from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
@@ -73,12 +73,16 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['num_workers'] = num_workers
             config['cpu'] = cpu
             tensorboard_comment = os.path.basename(config_path[i])[:-5]
+            temp_file = os.path.join(config['output'], 'temp.txt')
             torch.distributed.barrier()
-            experiment_name = tensorboard_comment + '_' + \
-                "SEP_" + \
-                datetime.now().strftime('%b%d_%H-%M-%S') \
-                + '_' + socket.gethostname()
+            if torch.distributed.get_rank() == 0:
+                maybe_remove(temp_file)
+                experiment_name = tensorboard_comment + '_' + \
+                    "SEP_" + \
+                    datetime.now().strftime('%b%d_%H-%M-%S')
+                write_file(temp_file, experiment_name)
             torch.distributed.barrier()
+            experiment_name = test_for_file(temp_file)[0]
             output_directory = os.path.join(
                         config['output'],
                         experiment_name)

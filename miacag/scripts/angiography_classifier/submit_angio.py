@@ -18,7 +18,7 @@ from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
 from miacag.plots.plotter import plot_results
 import pandas as pd
-from miacag.utils.script_utils import create_empty_csv, mkFolder
+from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, write_file, test_for_file
 
 
 parser = argparse.ArgumentParser(
@@ -65,12 +65,16 @@ def angio_classifier(cpu, num_workers, config_path):
             config['num_workers'] = num_workers
             config['cpu'] = cpu
             tensorboard_comment = os.path.basename(config_path[i])[:-5]
+            temp_file = os.path.join(config['output'], 'temp.txt')
             torch.distributed.barrier()
-            experiment_name = tensorboard_comment + '_' + \
-                "SEP_" + \
-                datetime.now().strftime('%b%d_%H-%M-%S') \
-                + '_' + socket.gethostname()
+            if torch.distributed.get_rank() == 0:
+                maybe_remove(temp_file)
+                experiment_name = tensorboard_comment + '_' + \
+                    "SEP_" + \
+                    datetime.now().strftime('%b%d_%H-%M-%S')
+                write_file(temp_file, experiment_name)
             torch.distributed.barrier()
+            experiment_name = test_for_file(temp_file)[0]
             output_directory = os.path.join(
                         config['output'],
                         experiment_name)

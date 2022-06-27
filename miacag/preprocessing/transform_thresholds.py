@@ -5,7 +5,9 @@ from sklearn.model_selection import GroupShuffleSplit
 from psycopg2.extras import execute_batch
 from miacag.configs.config import load_config
 from miacag.utils.sql_utils import update_cols, getDataFromDatabase
-
+import numpy as np
+from miacag.preprocessing.process_labels.process_total_occ \
+    import ProcessLabelsOCC
 
 parser = argparse.ArgumentParser(
     description='Define inputs.')
@@ -38,14 +40,23 @@ parser.add_argument(
 
 
 class transformThreshold():
-    def __init__(self, sql_config):
+    def __init__(self, sql_config, config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
+        self.config = config
 
     def __call__(self):
         for label_name in self.sql_config['labels_names']:
-            self.df[label_name][self.df[label_name] < 70] = 0
-            self.df[label_name][self.df[label_name] >= 70] = 1
+            if 'ffr' in label_name:
+                thres = self.config['loaders']['val_method']['threshold_ffr']
+                self.df[label_name][self.df[label_name] <= thres] = 1
+                self.df[label_name][self.df[label_name] > thres] = 0
+            elif 'sten' in label_name:
+                thres = self.config['loaders']['val_method']['threshold_sten']
+                self.df[label_name][self.df[label_name] >= thres] = 1
+                self.df[label_name][self.df[label_name] < thres] = 0
+            else:
+                raise ValueError('Not implemented')
         update_cols(self.connection,
                     self.df.to_dict('records'),
                     self.sql_config,
@@ -53,15 +64,29 @@ class transformThreshold():
 
 
 class transformThresholdRegression():
-    def __init__(self, sql_config):
+    def __init__(self, sql_config, config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
+        self.config = config
 
     def __call__(self):
         for label_name in self.sql_config['labels_names']:
             self.df[label_name][self.df[label_name] < 0] = 0
-            self.df[label_name][self.df[label_name] >= 100] = 100
-            self.df[label_name] = self.df[label_name] / 100
+            self.df[label_name] = \
+                np.where((
+                    (self.df[label_name] >= 100) &
+                    (~np.isnan(self.df[label_name]))),
+                    100, self.df[label_name])
+            self.df[label_name] = \
+                np.where((
+                    (~np.isnan(self.df[label_name]))),
+                    self.df[label_name]/100, self.df[label_name])
+
+        if self.config['process_labels'] == 'True':
+            proccoessor = ProcessLabelsOCC(self.df,
+                                           self.sql_config['labels_names'],
+                                           self.config)
+            self.df = proccoessor()
         update_cols(self.connection,
                     self.df.to_dict('records'),
                     self.sql_config,

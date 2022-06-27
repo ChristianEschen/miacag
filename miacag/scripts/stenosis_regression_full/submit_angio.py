@@ -22,7 +22,8 @@ import pandas as pd
 from miacag.preprocessing.transform_thresholds import transformThreshold
 from miacag.preprocessing.transform_missing_floats import transformMissingFloats
 from miacag.scripts.angiography_classifier.submit_angio import angio_classifier
-from miacag.scripts.stenosis_identifier.submit_angio import stenosis_identifier
+#from miacag.scripts.stenosis_identifier.submit_angio import stenosis_identifier
+#from miacag.scripts.stenosis_regression.submit_angio import stenosis_identifier
 from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, write_file
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
@@ -56,6 +57,9 @@ parser.add_argument(
 parser.add_argument(
     '--config_path_stenosis_lca_co_dom', type=str,
     help="path to folder with config files")
+parser.add_argument(
+    '--model_type', type=str,
+    help="regression | identification")
 
 
 def combine_results(config_paths_list, table_name):
@@ -70,6 +74,7 @@ def combine_results(config_paths_list, table_name):
     for i in configs:
         label_names += i['labels_names']
     label_names = [i + "_transformed" for i in label_names]
+    label_names = [x for x in label_names if "ffr" not in x]
 
     sten_path_train = os.path.join(
         config['output'], 'cag_stenosis_count_train')
@@ -86,7 +91,8 @@ def combine_results(config_paths_list, table_name):
                         config['query_train_plot']},
                         [i + "_confidences_aggregated" for i in
                         label_names],
-                        sten_path_train)
+                        sten_path_train,
+                        config)
     count()
 
     sten_path_val = os.path.join(
@@ -121,16 +127,22 @@ def combine_results(config_paths_list, table_name):
                         'query':
                         config['query_test_plot']},
                         [i + "_confidences_aggregated" for i in
-                        label_names],
+                         label_names],
                         sten_path_test)
     count()
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
-
+    if args.model_type == 'classification':
+        from miacag.scripts.stenosis_identifier.submit_angio import stenosis_identifier
+    elif args.model_type == 'regression':
+        from miacag.scripts.stenosis_regression.submit_angio import stenosis_identifier
+    else:
+        raise ValueError('this type is not implemented')
     table_name = stenosis_identifier(
         args.cpu, args.num_workers,
         args.config_path_stenosis_rca_r_dom)
-
     stenosis_identifier(
         args.cpu, args.num_workers,
         args.config_path_stenosis_rca_l_dom, table_name)
@@ -157,7 +169,16 @@ if __name__ == '__main__':
         args.config_path_stenosis_rca_co_dom,
         args.config_path_stenosis_lca_r_dom,
         args.config_path_stenosis_lca_l_dom,
+        args.config_path_stenosis_lca_co_dom]
+
+    config_path_list = [
+        args.config_path_stenosis_rca_r_dom,
+        args.config_path_stenosis_rca_l_dom,
+        args.config_path_stenosis_rca_co_dom,
+        args.config_path_stenosis_lca_r_dom,
+        args.config_path_stenosis_lca_l_dom,
         args.config_path_stenosis_lca_co_dom
     ]
+
     if torch.distributed.get_rank() == 0:
         combine_results(config_path_list, table_name)

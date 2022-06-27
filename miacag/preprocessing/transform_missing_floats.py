@@ -41,10 +41,14 @@ class transformMissingFloats():
     def __init__(self, sql_config):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
+      #  self.t_type = t_type
+
+
 
     def __call__(self):
         for label_name in self.sql_config['labels_names']:
-            self.df[label_name] = self.df[label_name].fillna(0)
+            if 'sten' in label_name:
+                self.df[label_name] = self.df[label_name].fillna(0)
 
         update_cols(self.connection,
                     self.df.to_dict('records'),

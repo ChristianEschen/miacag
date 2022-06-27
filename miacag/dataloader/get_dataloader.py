@@ -5,6 +5,7 @@ import os
 def to_dtype(data, config):
     for c, label_name in enumerate(config['labels_names']):
         if config['loss']['name'][c] in ['CE']:
+            data[label_name] = torch.nan_to_num(data[label_name], nan=99998)
             data[label_name] = data[label_name].long()
         elif config['loss']['name'][c] in ['MSE']:
             data[label_name] = data[label_name].float()

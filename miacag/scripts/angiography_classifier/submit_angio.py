@@ -225,6 +225,7 @@ def angio_classifier(cpu, num_workers, config_path):
                              config['labels_names']],
                             output_plots_train,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -243,6 +244,7 @@ def angio_classifier(cpu, num_workers, config_path):
                              config['labels_names']],
                             output_plots_train,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -261,6 +263,7 @@ def angio_classifier(cpu, num_workers, config_path):
                              config['labels_names']],
                             output_plots_train,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )

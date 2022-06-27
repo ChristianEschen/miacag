@@ -88,10 +88,14 @@ def getNormConfMat(df, labels_col, preds_col,
 
 
 def plot_results(sql_config, label_names, prediction_names, output_plots,
-                 num_classes, confidence_names=False):
+                 num_classes, config, confidence_names=False):
     df, _ = getDataFromDatabase(sql_config)
     for c, label_name in enumerate(label_names):
+        confidence_name = confidence_names[c]
+        prediction_name = prediction_names[c]
         df_label = df[df[label_name].notna()]
+        df_label = df_label[df_label[confidence_name].notna()]
+        df_label = df_label[df_label[prediction_name].notna()]
         support = len(df_label)
         if num_classes != 1:
             prediction_name = prediction_names[c]
@@ -113,20 +117,21 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                 output_plots,
                 num_classes,
                 support)
-            df = df.replace(
+            df_label = df_label.replace(
                 {label_name: map_1abels_to_0neTohree()})
-            df = df.replace(
+            df_label = df_label.replace(
                 {prediction_name: map_1abels_to_0neTohree()})
-            f1 = f1_score(df[label_name],
-                        df[prediction_name], average='macro')
-            getNormConfMat(df, label_name, prediction_name,
+            f1 = f1_score(df_label[label_name],
+                        df_label[prediction_name], average='macro')
+            getNormConfMat(df_label, label_name, prediction_name,
                         'labels_3_classes', f1, output_plots, 3, support)
 
         if confidence_names is not False:
             if num_classes <= 2:
-                confidence_name = confidence_names[c]
-                plot_roc_curve(df[label_name], df[confidence_name],
-                            output_plots, label_name, support, num_classes)
+                
+                plot_roc_curve(
+                    df_label[label_name], df_label[confidence_name],
+                    output_plots, label_name, support, num_classes, config)
 
     return None
 
@@ -144,12 +149,20 @@ def convertConfFloats(confidences, num_classes):
 
 
 def plot_roc_curve(labels, confidences, output_plots,
-                   plot_name, support, num_classes):
+                   plot_name, support, num_classes, config):
     labels = labels.to_numpy()
     confidences = convertConfFloats(confidences, num_classes)
     if num_classes == 1:
-        labels[labels >= 0.7] = 1
-        labels[labels < 0.7] = 0
+        if 'ffr' in plot_name:
+            thres = config['loaders']['val_method']['threshold_ffr']
+            labels[labels <= thres] = 1
+            labels[labels > thres] = 0
+        elif 'sten' in plot_name:
+            thres = config['loaders']['val_method']['threshold_sten']
+            labels[labels >= thres] = 1
+            labels[labels < thres] = 0
+        else:
+            raise ValueError('Not implemented')
     fpr, tpr, thresholds = metrics.roc_curve(labels, confidences, pos_label=1)
     roc_auc = metrics.auc(fpr, tpr)
     plt.clf()
@@ -246,16 +259,16 @@ def plotRegression(sql_config, label_names,
 
     for c, label_name in enumerate(label_names):
         label_name_ori = label_name
-        df = df.dropna(
+        df_plot = df.dropna(
             subset=[label_name],
             how='any')
-        df, label_name = rename_columns(df, label_name)
-        df = df.astype({label_name: float})
+        df_plot, label_name = rename_columns(df_plot, label_name)
+        df_plot = df_plot.astype({label_name: float})
         prediction_name = prediction_names[c]
-        df = df.astype({prediction_name: float})
-        g = sns.lmplot(x=label_name, y=prediction_name, data=df)
-        X2 = sm.add_constant(df[label_name])
-        est = sm.OLS(df[prediction_name], X2)
+        df_plot = df_plot.astype({prediction_name: float})
+        g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)
+        X2 = sm.add_constant(df_plot[label_name])
+        est = sm.OLS(df_plot[prediction_name], X2)
         est2 = est.fit()
         r = est2.rsquared
         p = est2.pvalues[label_name]

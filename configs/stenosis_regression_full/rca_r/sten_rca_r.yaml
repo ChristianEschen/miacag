@@ -1,27 +1,49 @@
 # inputs:
 
 tensorboard_comment: 'test_v1'
-DataSetPath: "/home/gandalf/miacag/data/angio"
+DataSetPath: "/home/sauroman/DicomAnnotation/sample_data/test"
 query: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+query_transform: "SELECT * FROM ?schema_name.?table_name;"
+query_split: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+
 query_test: "SELECT * FROM ?schema_name.?table_name;"
 query_train_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'train');"
 query_val_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'val');"
 query_test_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'test');"
-query_pred: "SELECT * FROM ?schema_name.?table_name;"
 
-
-table_name: "dicom_table2x"
 schema_name: "cag"
+table_name: "dicom_table_test"
 TestSize: 0.2
+
+query_count_stenosis_train:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'train')
+  order by "PatientID", "StudyInstanceUID";
+
+query_count_stenosis_val:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'val')
+  order by "PatientID", "StudyInstanceUID";
+
+query_count_stenosis_test:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'test')
+  order by "PatientID", "StudyInstanceUID";
 
 
 # postgres configs
-username: 'gandalf'
+username: 'sauroman'
 password: '123qweasd'
 database: 'mydb'
 host: "localhost"
 # outputs
-output: "/home/gandalf/angiography_data/runs/testing_"
+output: "/home/sauroman/test_miacag_pypi/outputs/stenosis"
 # use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
 manual_seed: 0
 
@@ -31,60 +53,19 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "debug_3d" # "MVIT-16" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
-  num_classes: 3
-  pretrained: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
-  pretrain_model: "None"
+  backbone: "debug_3d" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  num_classes: 1
+  pretrained: "None" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_encoder: "None"
 # Data loader configuration
-task_type: "classification"
-labels_names: ["labels"]
-weighted_sampler: "True"
-labels_dict: {0: 0,
-          1: 1,
-          2: 1,
-          3: 2,
-          4: 2,
-          5: 1,
-          6: 0,
-          7: 1,
-          8: 0,
-          9: 1,
-          10: 2,
-          11: 0,
-          12: 1,
-          13: 0,
-          14: 2,
-          15: 15,
-          16: 16,
-          17: 17,
-          18: 18,
-          19: 19,
-          20: 20}
-# labels_dict: {0: 0,
-#           1: 1,
-#           2: 2,
-#           3: 3,
-#           4: 4,
-#           5: 5,
-#           6: 6,
-#           7: 7,
-#           8: 8,
-#           9: 9,
-#           10: 10,
-#           11: 11,
-#           12: 12,
-#           13: 13,
-#           14: 14,
-#           15: 15,
-#           16: 16,
-#           17: 17,
-#           18: 18,
-#           19: 19,
-#           20: 20}
-cache_num: 3
-cache_test: "False"
-cache_rate: 1 #0.25
+task_type: "regression" #"classification"
+#labels_names: ["sten_procent_2_midt_rca"]
+labels_names: ["sten_proc_2_midt_rca"]
+weighted_sampler: "False"
+cache_num: 'None'
+cache_rate: 0.001 #0.25
+cache_test: 'False'
 loaders:
   #dimension order
   format: 'dicom'
@@ -101,8 +82,8 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 130 #130 #312 #130 #130 # 130
-  Resize_width: 130 #130 #312 #130 #130 # 130
+  Resize_height: 130 #224 #312 #224 #224 # 224
+  Resize_width: 130 #224 #312 #224 #224 # 224
   Resize_depth: -1 #-1
 
   spatial_scaling: "False"
@@ -110,8 +91,8 @@ loaders:
   translate: "False"
   rotate: "False"
 
-  Crop_height: 130 #130 #312 #130 #130 # 130
-  Crop_width: 130 #130 #312 #224 #224 # 224
+  Crop_height: 130 #224 #312 #224 #224 # 224
+  Crop_width: 130 #224 #312 #224 #224 # 224
   Crop_depth: 16
   batchSize: 1
 
@@ -128,7 +109,7 @@ trainer:
   # how many iterations between validations
   validate_frequency: 2
   # max number of epochs
-  epochs: 50
+  epochs: 1
   # number of epochs before use early stopping
   max_stagnation: 100
 
@@ -149,11 +130,11 @@ lr_scheduler:
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: ['CE'] #CE_pixel CE_pixel
+  name: ['MSE', 'MSE'] #CE_pixel CE_pixel
 # evaluation metric configuration
 eval_metric_train:
-  name: ['acc_top_1']
+  name: ['RMSE', 'RMSE']
 eval_metric_val:
-  name: ['acc_top_1']
+  name: ['RMSE', 'RMSE']
 # learning rate scheduler configuration
 

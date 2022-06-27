@@ -202,10 +202,10 @@ class val_monai_classification_loader(base_monai_loader):
                 data=self.data,
                 num_partitions=dist.get_world_size(),
                 shuffle=False,
-                even_divisible=True if self.config['loaders']['mode'] != 'testing' else False,
+                even_divisible=True if self.config['loaders']['mode'] not in ['testing', 'prediction'] else False,
             )[dist.get_rank()]
             rowids = [i["rowid"] for i in self.data_par_val]
-            if self.config['loaders']['mode'] != 'testing':
+            if self.config['loaders']['mode'] not in ['prediction', 'testing']:
                 if self.config['cache_num'] != 'None':
                     val_ds = monai.data.SmartCacheDataset(
                         data=self.data_par_val,
@@ -229,9 +229,15 @@ class val_monai_classification_loader(base_monai_loader):
                             copy_cache=True,
                             num_workers=self.config['num_workers'])
                 else:
-                    val_ds = monai.data.Dataset(
-                            data=self.data_par_val,
-                            transform=val_transforms)
+                    val_ds = monai.data.PersistentDataset(
+                            data=self.data_par_val, transform=val_transforms,
+                            cache_dir='persistent_cache'
+                        )
+                    # val_ds = monai.data.LMDBDataset(
+                    #         data=self.data_par_val, transform=val_transforms,
+                    #         cache_dir='persistent_cache'
+                    #     )
+
 
         else:
             val_ds = monai.data.Dataset(

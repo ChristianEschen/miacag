@@ -64,7 +64,10 @@ class TestOptions():
             default="True")
         self.parser.add_argument(
             "--local_rank", type=int,
-            help="Local rank: torch.distributed.launch.")    
+            help="Local rank: torch.distributed.launch.")
+        self.parser.add_argument(
+            "--model_path", type=str,
+            help="model path (not the final model.pt), (only used for predictions")
 
     def parse(self):
         """ Parse Arguments.

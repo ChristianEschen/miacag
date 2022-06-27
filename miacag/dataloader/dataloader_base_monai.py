@@ -140,7 +140,7 @@ class base_monai_loader(DataloaderBase):
                 spatial_size=[self.config['loaders']['Crop_height'],
                               self.config['loaders']['Crop_width'],
                               self.config['loaders']['Crop_depth']])
-        elif self.config['loaders']['mode'] == 'testing':
+        elif self.config['loaders']['mode'] in ['testing', 'prediction']:
             if self.config['task_type'] in ["classification", "regression"]:
                 keys_ = self.features
                 pad = SpatialPadd(

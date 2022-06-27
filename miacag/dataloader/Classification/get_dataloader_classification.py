@@ -11,12 +11,18 @@ from monai.data import DistributedWeightedRandomSampler, DistributedSampler
 from miacag.utils.sql_utils import getDataFromDatabase
 import numpy as np
 
+
 class ClassificationLoader():
     def __init__(self, config) -> None:
         self.config = config
         self.df, self.connection = getDataFromDatabase(self.config)
-        self.df = self.df.dropna(subset=config["labels_names"], how='any')
-        if self.config['loaders']['mode'] == 'testing':
+        # if self.config['loaders']['mode'] != 'prediction':
+        #     self.df = self.df.dropna(subset=config["labels_names"], how='any')
+        if self.config['loaders']['mode'] == 'prediction':
+            for col in self.config['labels_names']:
+                self.df[col].values[:] = 0
+
+        if self.config['loaders']['mode'] in ['prediction', 'testing']:
             self.val_df = self.df
         else:
             self.train_df = self.df[self.df['phase'] == 'train']
@@ -131,8 +137,8 @@ class ClassificationLoader():
                 num_workers=0,
                 collate_fn=list_data_collate if
                         config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
-                pin_memory=False if config['cpu'] == "False" else True,)
-
+               # pin_memory=False if config['cpu'] == "False" else True,)
+                pin_memory=False)
             # self.val_loader = ThreadDataLoader(
             #                 self.val_ds,
             #                 batch_size=config['loaders']['batchSize'],

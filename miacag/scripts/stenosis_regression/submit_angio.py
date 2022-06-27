@@ -237,7 +237,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'schema_name': config['schema_name'],
                     'table_name': output_table_name,
                     'query': config['query_transform'],
-                    'TestSize': config['TestSize']})
+                    'TestSize': config['TestSize']},
+                    config)
                 trans_thres()
 
                 # change dtypes for label
@@ -298,6 +299,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             output_plots_train,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -338,6 +340,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             cag_segment,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -369,6 +372,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             output_plots_val,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -409,6 +413,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             cag_segment,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -441,6 +446,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             output_plots_test,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -482,6 +488,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']],
                             cag_segment,
                             config['model']['num_classes'],
+                            config,
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
@@ -500,6 +507,11 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
 
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))
+
+        if csv_exists:
+            return None
+        else:
+            return output_table_name
 
 
 if __name__ == '__main__':

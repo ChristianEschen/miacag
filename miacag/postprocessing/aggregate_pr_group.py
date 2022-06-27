@@ -33,19 +33,21 @@ class Aggregator:
         count = 0
         df_frames = []
         for field in self.fields_to_aggregate:
+            df_field = self.df.copy()
+            df_field = df_field[df_field[field].notna()]
             agg_field = aggregated_cols_list[count]
-            confidences = self.df[field]
+            confidences = df_field[field]
             confidences = convertConfFloats(confidences,
                                             self.sql_config["num_classes"])
-            df_new = self.df.copy()
+            df_new = df_field.copy()
            # self.df[agg_field] = confidences
             df_new[agg_field] = confidences
             df_new = df_new.groupby(
                 ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
             df_new = df_new.to_frame()
             df_new.reset_index(inplace=True)
-            self.df.drop(columns=[agg_field], inplace=True)
-            df2 = self.df.merge(df_new, left_on=['PatientID', 'StudyInstanceUID'],
+            df_field.drop(columns=[agg_field], inplace=True)
+            df2 = df_field.merge(df_new, left_on=['PatientID', 'StudyInstanceUID'],
                           right_on=['PatientID', 'StudyInstanceUID'],
                           how='right')[['rowid', agg_field]]
             df_frames.append(df2)

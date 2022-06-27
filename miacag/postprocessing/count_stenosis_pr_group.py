@@ -33,16 +33,13 @@ class CountSignificantStenoses(Aggregator):
     sql_config: dict
     fields_to_aggregate: list
     output_dir: str
-
-    # def __post_init__(self):
-    #     self.thresholded_cols_list = [
-    #         i[:i.find('_confidences')] + "_thres"
-    #         for i in self.fields_to_aggregate]
+    config: dict
 
     def threshold_segments(self):
         for c, agg_col in enumerate(self.fields_to_aggregate):
-           # tresh_col = self.thresholded_cols_list[c]
-            thresholds = dict(zip([agg_col], [0.5]))
+            tresh = self.config['loaders']['val_method']['threshold_sten']
+            thresholds = dict(zip([agg_col], [tresh]))
+  
             self.df[agg_col] = self.df.apply(
                 lambda x: within_threshold(x, thresholds), axis=1)
             self.df[agg_col] = self.df[agg_col].astype(int)

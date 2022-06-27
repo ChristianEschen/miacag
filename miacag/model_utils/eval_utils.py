@@ -156,43 +156,41 @@ def eval_one_step_knn(get_data_from_loader,
     return top1
 
 
-# def get_losses(config, outputs, labels, criterion):
-#     if 'Siam' in config['loss']['name']:
-#         losses = [crit(outputs) for crit in criterion]
-#     else:
-#         losses = [crit(outputs, labels) for crit in criterion]
-#     loss = torch.stack(losses, dim=0).sum(dim=0)
-#     losses = [l.item() for l in losses]
-#     return losses, loss
-
 def get_loss(config, outputs, labels, criterion):
     if 'Siam' in config['loss']['name']:
         loss = criterion(outputs)
+   # elif 'CE' in config['loss']['name']:
+       #labels = torch.nan_to_num(labels, nan=99998)
+       # loss = criterion(outputs, labels)
     else:
         loss = criterion(outputs, labels)
     return loss
 
-# def init_loss(config):
-#     for c, label_name in enumerate(config['labels_names']):
-#         if config['loss']['name'][c] in ['CE']:
-#             data = to_long(data, label_name)
-#         elif config['loss']['name'][c] in ['MSE']:
-#             data = to_float(data, label_name)
-#         else:
-#             raise ValueError("model dimension not implemented")
-#         return data
 
 def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
+    loss_tot = loss_tot.requires_grad_()
     for count, label_name in enumerate(config['labels_names']):
 
         loss = get_loss(
             config, outputs[count],
             data[label_name], criterion[count])
-        losses.append(loss)
-        loss_tot = loss_tot + loss
+        if torch.isnan(loss) == torch.tensor(True, device=device):
+            # ugly hack
+            if count == 0:
+                t = torch.tensor([1]).float()
+                
+              #  t.requires_grad_()
+                losses.append(t)
+            else:
+                losses.append(losses[-1])
+            loss_tot = loss_tot
+
+        else:
+            losses.append(loss)
+            loss_tot = loss_tot + loss
     losses = [loss_indi.item() for loss_indi in losses]
     return losses, loss_tot
 
@@ -348,6 +346,7 @@ def maybe_softmax_transform(logits, config):
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
     return logits_return
+
 
 def getListOfLogits(logits, label_names, data_len):
     '''

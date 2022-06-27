@@ -14,6 +14,7 @@ from psycopg2.extras import execute_batch
 from miacag.utils.sql_utils import update_cols
 import torch
 import shutil
+import time
 
 
 class TestPipeline():
@@ -45,13 +46,16 @@ class TestPipeline():
                                          normalize_metrics,
                                          running_metric_test,
                                          running_loss_test):
-
+        start = time.time()
+        print('starting inference:')
         metrics, confidences, index = val_one_epoch(
             model, criterion, config,
             test_loader.val_loader, device,
             running_metric_val=running_metric_test,
             running_loss_val=running_loss_test,
             saliency_maps=False)
+        stop = time.time()
+        print('time for testing:', stop-start)
         if config['loaders']['val_method']['saliency'] == 'False':
             for count, label in enumerate(config['labels_names']):
                 csv_files = self.saveCsvFiles(label, confidences[count],

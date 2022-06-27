@@ -119,17 +119,29 @@ def write_tensorboard(losses, metrics, writer, tb_step_writer, phase):
     return losses, metrics
 
 
+def remove_nans(labels, outputs):
+    mask = labels == 99998
+    labels = labels[~mask]
+    outputs = outputs[~mask]
+    mask_nan = torch.isnan(labels)
+    labels = labels[~mask_nan]
+    outputs = outputs[~mask_nan]
+    return labels, outputs
+
+
 def get_metrics(outputs,
                 labels,
                 label_name,
                 metrics,
                 criterion,
                 config):
+    
     dicts = {}
     for metric in metrics:
         if metric.endswith(label_name):
             c = 0
             if metric.startswith('acc_top_1'):
+                labels, outputs = remove_nans(labels, outputs)
                 post_trans = Compose(
                     [EnsureType(),
                     Activations(softmax=True),

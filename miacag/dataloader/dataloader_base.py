@@ -47,9 +47,14 @@ class DataloaderBase(data.Dataset):
         self.transform = transform
         self.df = df
         self.num_samples = len(self.df)
-        if config['task_type'] in ['classification']:
-            self.df[config['labels_names']] = self.df[config['labels_names']].astype(int)
-            self.class_counts = self.df[config['labels_names']].value_counts().to_list()
+        if self.config['loaders']['mode'] != 'prediction':
+            if config['model']['num_classes'] != 1:
+                if config['weighted_sampler'] == 'True':
+                #if self.df[config['labels_names']].isnull().sum().sum() > 1:
+                    self.df[config['labels_names']] = \
+                        self.df[config['labels_names']].astype(int)
+                    self.class_counts = \
+                        self.df[config['labels_names']].value_counts().to_list()
 
     def __len__(self):
         return self.num_samples

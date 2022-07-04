@@ -55,10 +55,12 @@ class ImageToScalarModel(EncoderModel):
                     nn.Linear(
                         self.in_features,
                         config['model']['num_classes']).to(device))
-            elif self.config['loss']['name'][c] in ['MSE']:
+            elif self.config['loss']['name'][c] in ['MSE', 'L1']:
                 self.fcs.append(
-                    nn.Linear(
-                        self.in_features, 1).to(device))
+                    nn.Sequential(
+                        nn.Linear(
+                            self.in_features, 1).to(device),
+                        nn.ReLU()))
             else:
                 raise ValueError('loss not implemented')
             c += 1

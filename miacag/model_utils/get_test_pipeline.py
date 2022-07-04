@@ -1,4 +1,3 @@
-from cProfile import label
 from miacag.model_utils.eval_utils import val_one_epoch
 from miacag.model_utils.eval_utils import eval_one_step
 import os
@@ -89,6 +88,10 @@ class TestPipeline():
                                 sort_keys=True, indent=4,
                                 separators=(',', ': ')))
                 shutil.rmtree(csv_files)
+                cacheDir = os.path.join(config['output'],
+                                        'persistent_cache')
+                if os.path.exists(cacheDir):
+                    shutil.rmtree(cacheDir)
 
         elif config['loaders']['val_method']['saliency'] == 'True':
             print('done producing saliency maps')

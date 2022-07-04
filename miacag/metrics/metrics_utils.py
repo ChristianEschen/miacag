@@ -90,6 +90,8 @@ def init_metrics(metrics, config, ptype=None):
     for i in idx:
         if metrics[i].startswith('CE'):
             dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('L1'):
+            dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('MSE'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('RMSE'):
@@ -142,20 +144,26 @@ def get_metrics(outputs,
             c = 0
             if metric.startswith('acc_top_1'):
                 labels, outputs = remove_nans(labels, outputs)
-                post_trans = Compose(
-                    [EnsureType(),
-                    Activations(softmax=True),
-                    AsDiscrete(threshold=0.5)]
-                    )
-                outputs = [post_trans(i) for i in decollate_batch(outputs)]
-                labels = F.one_hot(
-                    labels,
-                    num_classes=config['model']['num_classes'])
-                metrics[metric](y_pred=outputs, y=labels)
-                dicts[metric] = metrics[metric]
+                if outputs.nelement() != 0:
+                    post_trans = Compose(
+                        [EnsureType(),
+                        Activations(softmax=True),
+                        AsDiscrete(threshold=0.5)]
+                        )
+                    outputs = [post_trans(i) for i in decollate_batch(outputs)]
+                    labels = F.one_hot(
+                        labels,
+                        num_classes=config['model']['num_classes'])
+                    metrics[metric](y_pred=outputs, y=labels)
+                    dicts[metric] = metrics[metric]
+                else:
+                    # this is wrong, but it does not break the pipeline
+                    metrics[metric](
+                        y_pred=torch.tensor((1, 1)).unsqueeze(1),
+                        y=torch.tensor((1, 1)).unsqueeze(1))
+                    dicts[metric] = metrics[metric]
             elif metric.startswith('RMSE'):
                 metrics[metric](y_pred=outputs, y=torch.unsqueeze(labels, -1))
-                
                 dicts[metric] = metrics[metric]
             elif metric.startswith('acc_top_5'):
                 dicts[metric] = \
@@ -209,6 +217,9 @@ def get_losses_metric(outputs,
         elif loss.startswith('MSE'):
             running_losses[loss].append(losses[loss])
             dicts[loss] = running_losses[loss]
+        elif loss.startswith('L1'):
+            running_losses[loss].append(losses[loss])
+            dicts[loss] = running_losses[loss]
         elif loss.startswith('total'):
             running_losses[loss].append(losses[loss])
             dicts[loss] = running_losses[loss]
@@ -252,6 +263,8 @@ def normalize_metrics(running_metrics):
         elif running_metric.startswith('RMSE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('MSE'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('L1'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         else:
             metric_tb = running_metrics[running_metric].aggregate()[0].item()

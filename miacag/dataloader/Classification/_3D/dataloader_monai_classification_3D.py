@@ -44,7 +44,7 @@ from monai.transforms import (
     Lambdad,
     RandSpatialCropSamplesd)
 from miacag.dataloader.dataloader_base_monai import base_monai_loader
-
+import os
 
 # class base_monai_classification_loader(base_monai_loader):
 #     def __init__(self, df, config):
@@ -229,9 +229,11 @@ class val_monai_classification_loader(base_monai_loader):
                             copy_cache=True,
                             num_workers=self.config['num_workers'])
                 else:
+                    cachDir = os.path.join(self.config['output'],
+                                           'persistent_cache')
                     val_ds = monai.data.PersistentDataset(
                             data=self.data_par_val, transform=val_transforms,
-                            cache_dir='persistent_cache'
+                            cache_dir=cachDir
                         )
                     # val_ds = monai.data.LMDBDataset(
                     #         data=self.data_par_val, transform=val_transforms,

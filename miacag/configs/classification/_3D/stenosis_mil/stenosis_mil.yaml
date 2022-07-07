@@ -1,0 +1,319 @@
+# inputs:
+
+tensorboard_comment: 'test_v1'
+DataSetPath: "/home/gandalf/miacag/data/angio"
+query: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+query_test: "SELECT * FROM ?schema_name.?table_name;"
+query_transform: "SELECT * FROM ?schema_name.?table_name;"
+
+query_split: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+# query: 
+# |
+#   -- 1 exclude all pr group non postives 
+#   CREATE TEMPORARY TABLE temp_table_1 AS
+#   SELECT * FROM ?schema_name.?table_name WHERE rowid IN (
+#           with possibilities as (
+#           select distinct entryid
+#           from ?schema_name.?table_name
+#           where labels in (1)
+#           )
+#           select
+#           t.rowid
+#           from
+#           ?schema_name.?table_name t
+#           Left join possibilities p on t.entryid = p.entryid
+#           WHERE p.entryid IS NOT NULL);
+
+
+#   -- 2 select all rows from groups not starting with the positive
+#   CREATE TEMPORARY TABLE temp_table_2 AS
+#   select ee.*
+#   from temp_table_1 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_1 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels =1
+#                   );
+#   --  3 and remove from temp_table_1
+#   CREATE TEMPORARY TABLE temp_table_3 AS
+#   SELECT * FROM temp_table_1 WHERE rowid NOT IN 
+#     (SELECT rowid FROM temp_table_2);
+
+
+#   -- 4 select all paired positives pr group from 1
+#   CREATE TEMPORARY TABLE temp_table_4 AS
+#   select ee.*
+#   from temp_table_1 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_1 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels !=1
+#                   );
+
+
+#   -- 5 select all paired positives pr group from 3
+#   CREATE TEMPORARY TABLE temp_table_5 AS
+#   select ee.*
+#   from temp_table_3 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_3 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels !=1
+#                   );
+
+#   -- 6 select groups with all positives from 1
+#   CREATE TEMPORARY TABLE temp_table_6_0 AS
+#   SELECT entryid FROM (
+#   SELECT entryid, count(distinct(labels))
+#   FROM temp_table_1
+#   GROUP BY entryid) as dd WHERE count=1;
+
+#   CREATE TEMPORARY TABLE temp_table_6 AS
+#   SELECT * FROM temp_table_1 WHERE entryid IN (SELECT entryid FROM temp_table_6_0);
+
+#   -- 7 select groups with all positives from 3
+#   CREATE TEMPORARY TABLE temp_table_7_0 AS
+#   SELECT entryid FROM (
+#   SELECT entryid, count(distinct(labels))
+#   FROM temp_table_3
+#   GROUP BY entryid) as dd WHERE count=1;
+
+#   CREATE TEMPORARY TABLE temp_table_7 AS
+#   SELECT * FROM temp_table_3 WHERE entryid IN (SELECT entryid FROM temp_table_7_0);
+
+
+#   -- 8 Union from 4 5 6 7
+#   CREATE TEMPORARY TABLE temp_table_8 AS
+#   SELECT * FROM temp_table_4
+#   UNION
+#   SELECT * FROM temp_table_5
+#   UNION
+#   SELECT * FROM temp_table_6
+#   UNION
+#   SELECT * FROM temp_table_7;
+
+
+#   SELECT * FROM temp_table_8 WHERE (phase IS DISTINCT FROM 'test') ORDER BY "rowid", "PatientID";
+
+# query_test:
+# |
+#   -- 1 exclude all pr group non postives 
+#   CREATE TEMPORARY TABLE temp_table_1 AS
+#   SELECT * FROM ?schema_name.?table_name WHERE rowid IN (
+#           with possibilities as (
+#           select distinct entryid
+#           from ?schema_name.?table_name
+#           where labels in (1)
+#           )
+#           select
+#           t.rowid
+#           from
+#           ?schema_name.?table_name t
+#           Left join possibilities p on t.entryid = p.entryid
+#           WHERE p.entryid IS NOT NULL);
+
+
+#   -- 2 select all rows from groups not starting with the positive
+#   CREATE TEMPORARY TABLE temp_table_2 AS
+#   select ee.*
+#   from temp_table_1 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_1 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels =1
+#                   );
+#   --  3 and remove from temp_table_1
+#   CREATE TEMPORARY TABLE temp_table_3 AS
+#   SELECT * FROM temp_table_1 WHERE rowid NOT IN 
+#     (SELECT rowid FROM temp_table_2);
+
+
+#   -- 4 select all paired positives pr group from 1
+#   CREATE TEMPORARY TABLE temp_table_4 AS
+#   select ee.*
+#   from temp_table_1 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_1 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels !=1
+#                   );
+
+
+#   -- 5 select all paired positives pr group from 3
+#   CREATE TEMPORARY TABLE temp_table_5 AS
+#   select ee.*
+#   from temp_table_3 ee
+#   where ee."TimeStamp" < (select min(ee2."TimeStamp")
+#                   from temp_table_3 ee2
+#                   where ee2.entryid = ee.entryid and
+#                         ee2.labels !=1
+#                   );
+
+#   -- 6 select groups with all positives from 1
+#   CREATE TEMPORARY TABLE temp_table_6_0 AS
+#   SELECT entryid FROM (
+#   SELECT entryid, count(distinct(labels))
+#   FROM temp_table_1
+#   GROUP BY entryid) as dd WHERE count=1;
+
+#   CREATE TEMPORARY TABLE temp_table_6 AS
+#   SELECT * FROM temp_table_1 WHERE entryid IN (SELECT entryid FROM temp_table_6_0);
+
+#   -- 7 select groups with all positives from 3
+#   CREATE TEMPORARY TABLE temp_table_7_0 AS
+#   SELECT entryid FROM (
+#   SELECT entryid, count(distinct(labels))
+#   FROM temp_table_3
+#   GROUP BY entryid) as dd WHERE count=1;
+
+#   CREATE TEMPORARY TABLE temp_table_7 AS
+#   SELECT * FROM temp_table_3 WHERE entryid IN (SELECT entryid FROM temp_table_7_0);
+
+
+#   -- 8 Union from 4 5 6 7
+#   CREATE TEMPORARY TABLE temp_table_8 AS
+#   SELECT * FROM temp_table_4
+#   UNION
+#   SELECT * FROM temp_table_5
+#   UNION
+#   SELECT * FROM temp_table_6
+#   UNION
+#   SELECT * FROM temp_table_7;
+
+#   SELECT * FROM temp_table_8 ORDER BY "rowid", "PatientID";
+
+query_train_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'train');"
+query_val_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'val');"
+query_test_plot: "SELECT * FROM ?schema_name.?table_name WHERE (phase = 'test');"
+query_count_stenosis_train:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'train')
+  order by "PatientID", "StudyInstanceUID";
+
+query_count_stenosis_val:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'val')
+  order by "PatientID", "StudyInstanceUID";
+
+query_count_stenosis_test:
+|
+  select distinct on ("PatientID", "StudyInstanceUID") ?schema_name.?table_name.*
+  from ?schema_name.?table_name
+  WHERE (phase = 'test')
+  order by "PatientID", "StudyInstanceUID";
+
+
+table_name: "dicom_table2x"
+schema_name: "cag"
+
+TestSize: 0.2
+
+
+
+# postgres configs
+username: 'gandalf'
+password: '123qweasd'
+database: 'mydb'
+host: "localhost"
+# outputs
+output: "/home/gandalf/angiography_data/runs/stenosis_rca"
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+
+# model configuration
+model:
+# model class, e.g. UNet
+  dimension: 2D+T
+  encoder_depth: 4
+  in_channels: 1
+  backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  num_classes: 2
+  pretrained: "/home/gandalf/miacag/miacag/models/torchhub/3D/x3d_s" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrain_encoder: "None"
+# Data loader configuration
+task_type: "mil_classification"
+#labels_names: ["sten_procent_2_midt_rca"]
+labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
+weighted_sampler: "False"
+cache_num: 'None'
+cache_rate: 0.001 #0.25
+cache_test: 'False'
+loaders:
+  #dimension order
+  format: 'dicom'
+  store_memory: False
+
+  use_amp: False
+  
+
+  CropForeGround: False
+  isCT: False
+
+  spatial_resize: False
+
+  pixdim_height: 4 # 0.213828125
+  pixdim_width: 4 # 0.213828125
+  pixdim_depth: 66 # 0.33 # 1/66.673
+  Resize_height: 224 #224 #312 #224 #224 # 224
+  Resize_width: 224 #224 #312 #224 #224 # 224
+  Resize_depth: -1 #-1
+
+  spatial_scaling: "False"
+  temporal_scaling: "False"
+  translate: "False"
+  rotate: "False"
+
+  Crop_height: 224 #224 #312 #224 #224 # 224
+  Crop_width: 224 #224 #312 #224 #224 # 224
+  Crop_depth: 16
+  batchSize: 1
+
+
+  # validation method 
+  val_method:
+    type: patches #'sliding_window' # patches | sliding_window
+    samples: 1
+    saliency: 'False'
+    misprediction: 'False'
+    threshold_sten: 0.70
+    threshold_ffr: 0.80
+
+# trainer configuration
+trainer:
+  # how many iterations between validations
+  validate_frequency: 2
+  # max number of epochs
+  epochs: 1
+  # number of epochs before use early stopping
+  max_stagnation: 100
+
+# optimizer configuration
+optimizer:
+  type: "sgd" # 
+  # initial learning rate
+  learning_rate: 0.10 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
+  # weight decay
+  weight_decay: 0.0005 #5e-4 
+  momentum: 0.9
+
+lr_scheduler:
+  type: None #
+  lr_warmup_epochs: 10
+  steps_for_drop: 1
+  gamma: 0.2
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: ['CE', 'CE'] #CE_pixel CE_pixel
+# evaluation metric configuration
+eval_metric_train:
+  name: ['acc_top_1', 'acc_top_1']
+eval_metric_val:
+  name: ['acc_top_1', 'acc_top_1']
+# learning rate scheduler configuration
+

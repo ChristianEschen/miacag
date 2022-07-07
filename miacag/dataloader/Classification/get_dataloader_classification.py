@@ -31,8 +31,13 @@ class ClassificationLoader():
  
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] in ['dicom']:
-            from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
-                train_monai_classification_loader
+            if config['task_type'] in ['classification', 'regression']:
+                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
+                    train_monai_classification_loader
+            elif config['task_type'] in ["mil_classification"]:
+                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                    train_monai_classification_loader
+
             if config['loaders']['val_method']['type'] == 'patches':
                 from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     val_monai_classification_loader
@@ -54,6 +59,7 @@ class ClassificationLoader():
         train_ds = train_monai_classification_loader(
             self.train_df,
             config)
+
 
         if config['weighted_sampler'] == 'True':
             weights = train_ds.weights

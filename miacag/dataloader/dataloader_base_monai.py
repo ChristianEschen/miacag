@@ -129,7 +129,9 @@ class base_monai_loader(DataloaderBase):
 
     def getMaybePad(self):
         if self.config['loaders']['mode'] == 'training':
-            if self.config['task_type'] in ["classification", "regression"]:
+            if self.config['task_type'] in ["classification",
+                                            "regression",
+                                             "mil_classification"]:
                 keys_ = self.features
             elif self.config['task_type'] == "segmentation":
                 keys_ = self.features + [self.config["labels_names"]]
@@ -178,7 +180,7 @@ class base_monai_loader(DataloaderBase):
         return permute
 
     def resampleORresize(self):
-        if self.config['task_type'] in ["classification", "regression"]:
+        if self.config['task_type'] in ["classification", "regression", "mil_classification"]:
             keys_ = self.features
             mode_ = tuple([
                          'bilinear' for i in
@@ -329,6 +331,7 @@ class base_monai_loader(DataloaderBase):
         crop = RandSpatialCropd(
             keys=self.features,
             roi_size=[
+                -1,
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
                 self.config['loaders']['Crop_depth']],

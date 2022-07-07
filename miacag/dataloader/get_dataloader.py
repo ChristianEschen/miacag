@@ -80,7 +80,9 @@ def get_data_from_standard_Datasets(data, config, device, val_phase):
 
 
 def get_dataloader_train(config):
-    if config['task_type'] in ["classification", "regression"]:
+    if config['task_type'] in ["classification",
+                               "regression",
+                               "mil_classification"]:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)

@@ -43,20 +43,27 @@ from monai.transforms import (
     Resized,
     Lambdad,
     RandSpatialCropSamplesd)
-from miacag.dataloader.dataloader_base_monai import base_monai_loader
+from miacag.dataloader.dataloader_base_monai import \
+    base_monai_loader, LabelEncodeIntegerGraded
 from monai.data import GridPatchDataset, PatchDataset, PatchIter
 import os
+from miacag.dataloader.Classification._3D.dataset_mil import \
+    Dataset, CacheDataset, SmartCacheDataset, PersistentDataset
+    #artition_dataset_classes, partition_dataset
 
-# class base_monai_classification_loader(base_monai_loader):
-#     def __init__(self, df, config):
-#         super(base_monai_classification_loader, self).__init__(
-#             df,
-#             config)
 
-#         self.features = self.get_input_features(self.df)
-#         self.set_data_path(self.features)
-#         self.data = self.df[self.features + [config['labels_names'], 'rowid']]
-#         self.data = self.data.to_dict('records')
+def reorder_rows(df):
+    temp = pd.pivot_table(
+        df, index=['StudyInstanceUID', 'PatientID'],
+        values='DcmPathFlatten',
+        aggfunc=lambda x: list(x))
+    temp = temp.reset_index(level=[0, 1])
+    df = df.drop(columns='DcmPathFlatten')
+    df = temp.merge(
+        df, on=["PatientID", "StudyInstanceUID"],
+        how="inner")
+    df = df.drop_duplicates(['StudyInstanceUID', 'PatientID'])
+    return df
 
 
 class train_monai_classification_loader(base_monai_loader):
@@ -68,48 +75,22 @@ class train_monai_classification_loader(base_monai_loader):
             self.getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        temp = pd.pivot_table(self.df, index=['StudyInstanceUID', 'PatientID'], values='DcmPathFlatten',
-                      aggfunc=lambda x:list(x))
-        temp = temp.reset_index(level=[0,1])
-        self.df = self.df.drop(columns='DcmPathFlatten')
-        self.df = temp.merge(
-            self.df, on=["PatientID", "StudyInstanceUID"],
-            how="inner")
-        self.df = self.df.drop_duplicates(['StudyInstanceUID','PatientID'])
-       # self.df['DcmPathFlatten'].iloc[0] = ['/home/gandalf/miacag/data/angio/sample_data/6_extra/0009.DCM','/home/gandalf/miacag/data/angio/sample_data/3_extra_v2/0003.dcm', '/home/gandalf/miacag/data/angio/sample_data/3_extra_v2/0003.dcm']
-        self.df['DcmPathFlatten'].iloc[0] = \
-            ['/home/gandalf/miacag/data/angio/sample_data/6_extra/0009.DCM']*4
-        # self.df_dcm = self.df.copy()
-        # self.df_dcm = pd.DataFrame(
-        #     self.df_dcm['DcmPathFlatten'].to_list(),
-        #     )
-        # self.df_dcm = self.df_dcm.add_prefix('DcmPathFlatten_')
-        # self.list = pd.DataFrame(
-        #     self.df.index.to_list())
-        # self.list = self.list.rename(columns={0: "indicator"})
-        # self.list.reset_index(drop=True, inplace=True)
-        # self.df_dcm.reset_index(drop=True, inplace=True)
-        # self.df_dcm = pd.concat([self.list, self.df_dcm], axis=1)
-        # self.df['indicator'] = self.df.index
-        # self.df = self.df.drop(columns='DcmPathFlatten')
-        # self.df = self.df_dcm.merge(
-        #     self.df, on=["indicator"],
-        #     how="inner")
-        # self.features = self.get_input_features(self.df)
+        self.df = reorder_rows(self.df)
         self.data = self.df[self.features + config['labels_names'] + ['rowid']]
         self.data = self.data.to_dict('records')
 
-
     def __call__(self):
         # define transforms for image
+
         train_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
+                # LabelEncodeIntegerGraded(
+                #     keys=self.config['labels_names'],
+                #     num_classes=self.config['model']['num_classes']),
                 self.resampleORresize(),
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
-                AddChanneld(keys=self.features),
-                EnsureChannelFirstD(keys=self.features),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(),
@@ -119,10 +100,41 @@ class train_monai_classification_loader(base_monai_loader):
                 self.maybeSpatialScaling(),
                 self.maybeTemporalScaling(),
                 self.maybeRotate(),
-                self.CropTemporal(),
+                self.CropTemporalMIL(),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
                 ]
+        # train_transforms = [
+        #         LoadImaged(keys=self.features),
+                # LabelEncodeIntegerGraded(
+                #     keys=self.config['labels_names'],
+                #     num_classes=self.config['model']['num_classes']),
+        #         EnsureChannelFirstD(keys=self.features),
+        #         self.resampleORresize(),
+        #         DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+        #         self.CropTemporalMIL(),
+        #         self.getMaybePad(),
+        #         self.getCopy1to3Channels(),
+        #         DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+        #         EnsureTyped(keys=self.features, data_type='tensor'),
+        #         ConcatItemsd(keys=self.features, name='inputs'),
+        #         DeleteItemsd(keys=self.features)
+        #         # self.getMaybePad(),
+        #         # AddChanneld(keys=self.features),
+        #         # EnsureChannelFirstD(keys=self.features),
+        #         # self.getCopy1to3Channels(),
+        #         # ScaleIntensityd(keys=self.features),
+        #         # self.maybeNormalize(),
+        #         # EnsureTyped(keys=self.features, data_type='tensor'),
+        #         # self.maybeToGpu(self.features),
+        #         # self.maybeTranslate(),
+        #         # self.maybeSpatialScaling(),
+        #         # self.maybeTemporalScaling(),
+        #         # self.maybeRotate(),
+        #         # self.CropTemporal(),
+        #         # ConcatItemsd(keys=self.features, name='inputs'),
+        #         # DeleteItemsd(keys=self.features),
+        #         ]
         # train_transforms = [
         #         LoadImaged(keys=self.features, allow_missing_keys=True),
         #        # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
@@ -132,16 +144,18 @@ class train_monai_classification_loader(base_monai_loader):
         train_transforms.set_random_state(seed=0)
         # CHECK: for debug ###
       
-        check_ds = monai.data.Dataset(data=self.data,
-                                      transform=train_transforms)
-        check_loader = DataLoader(
-            check_ds,
-            batch_size=self.config['loaders']['batchSize'],
-            num_workers=0,
-            collate_fn=list_data_collate
-            )
-        check_data = monai.utils.misc.first(check_loader)
-        img = check_data['inputs'].cpu().numpy()
+        # check_ds = Dataset(config=self.config,
+        #                    features=self.features,
+        #                    data=self.data,
+        #                    transform=train_transforms)
+        # check_loader = DataLoader(
+        #     check_ds,
+        #     batch_size=self.config['loaders']['batchSize'],
+        #     num_workers=0,
+        #     collate_fn=list_data_collate
+        #     )
+        # check_data = monai.utils.misc.first(check_loader)
+        # img = check_data['inputs'].cpu().numpy()
         # import matplotlib.pyplot as plt
         # import numpy as np
         # for i in range(9, img.shape[-1]):
@@ -168,7 +182,9 @@ class train_monai_classification_loader(base_monai_loader):
 
         # create a training data loader
         if self.config['cache_num'] != 'None':
-            train_ds = monai.data.SmartCacheDataset(
+            train_ds = SmartCacheDataset(
+                config=self.config,
+                features=self.features,
                 data=self.data_par_train,
                 transform=train_transforms,
                 copy_cache=True,
@@ -177,7 +193,9 @@ class train_monai_classification_loader(base_monai_loader):
                 replace_rate=0.1,
                 num_replace_workers=int(self.config['num_workers']/2))
         else:
-            train_ds = monai.data.CacheDataset(
+            train_ds = CacheDataset(
+                config=self.config,
+                features=self.features,
                 data=self.data_par_train,
                 transform=train_transforms,
                 copy_cache=True,
@@ -192,15 +210,15 @@ class val_monai_classification_loader(base_monai_loader):
 
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        
-        temp = pd.pivot_table(self.df, index=['StudyInstanceUID', 'PatientID'], values='DcmPathFlatten',
-                      aggfunc=lambda x:list(x))
-        temp = temp.reset_index(level=[0,1])
-        self.df = self.df.drop(columns='DcmPathFlatten')
-        self.df = temp.merge(
-            self.df, on=["PatientID", "StudyInstanceUID"],
-            how="inner")
-        self.df = self.drop_duplicates(['StudyInstanceUID','PatientID'])
+        self.df = reorder_rows(self.df)
+        # temp = pd.pivot_table(self.df, index=['StudyInstanceUID', 'PatientID'], values='DcmPathFlatten',
+        #               aggfunc=lambda x:list(x))
+        # temp = temp.reset_index(level=[0,1])
+        # self.df = self.df.drop(columns='DcmPathFlatten')
+        # self.df = temp.merge(
+        #     self.df, on=["PatientID", "StudyInstanceUID"],
+        #     how="inner")
+        # self.df = self.drop_duplicates(['StudyInstanceUID','PatientID'])
         self.data = self.df[self.features + config['labels_names'] + ['rowid']]
         self.data = self.data.to_dict('records')
 
@@ -209,23 +227,25 @@ class val_monai_classification_loader(base_monai_loader):
         val_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
+                # LabelEncodeIntegerGraded(
+                #     keys=self.config['labels_names'],
+                #     num_classes=self.config['model']['num_classes']),
                 self.resampleORresize(),
-                self.maybeDeleteMeta(),
+                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                self.maybeCenterCrop(self.features),
+                self.maybeCenterCropMIL(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                self.maybeDeleteFeatures()
+              #  DeleteItemsd(keys=self.features),
                 ]
-       # if self.config['loaders']['mode'] != 'testing':
-        
-        #CHECK: for debug ###
-        # check_ds = monai.data.Dataset(data=self.data,
-        #                              transform=val_transforms)
+        # check_ds = Dataset(config=self.config,
+        #                    features=self.features,
+        #                    data=self.data,
+        #                    transform=val_transforms)
         # check_loader = DataLoader(
         #     check_ds,
         #     batch_size=self.config['loaders']['batchSize'],
@@ -234,13 +254,6 @@ class val_monai_classification_loader(base_monai_loader):
         #     )
         # check_data = monai.utils.misc.first(check_loader)
         # img = check_data['inputs'].cpu().numpy()
-        # import matplotlib.pyplot as plt
-        # import numpy as np
-        # for i in range(9, img.shape[-1]):
-        #     img2d = img[0,0,:,:,i]
-        #     fig_train = plt.figure()
-        #     plt.imshow(img2d, cmap="gray", interpolation="None")
-        #     plt.show()
         val_transforms = Compose(val_transforms)
         val_transforms.set_random_state(seed=0)
         if self.config['use_DDP'] == 'True':
@@ -253,7 +266,9 @@ class val_monai_classification_loader(base_monai_loader):
             rowids = [i["rowid"] for i in self.data_par_val]
             if self.config['loaders']['mode'] not in ['prediction', 'testing']:
                 if self.config['cache_num'] != 'None':
-                    val_ds = monai.data.SmartCacheDataset(
+                    val_ds = SmartCacheDataset(
+                        config=self.config,
+                        features=self.features,
                         data=self.data_par_val,
                         transform=val_transforms,
                         copy_cache=True,
@@ -262,14 +277,18 @@ class val_monai_classification_loader(base_monai_loader):
                         replace_rate=self.config['cache_rate'],
                         num_replace_workers=int(self.config['num_workers']/2))
                 else:
-                    val_ds = monai.data.CacheDataset(
+                    val_ds = CacheDataset(
+                        config=self.config,
+                        features=self.features,
                         data=self.data_par_val,
                         transform=val_transforms,
                         copy_cache=True,
                         num_workers=self.config['num_workers'])
             else:
                 if self.config['cache_test'] != "False":
-                    val_ds = monai.data.CacheDataset(
+                    val_ds = CacheDataset(
+                            config=self.config,
+                            features=self.features,
                             data=self.data_par_val,
                             transform=val_transforms,
                             copy_cache=True,
@@ -277,18 +296,25 @@ class val_monai_classification_loader(base_monai_loader):
                 else:
                     cachDir = os.path.join(self.config['output'],
                                            'persistent_cache')
-                    val_ds = monai.data.PersistentDataset(
-                            data=self.data_par_val, transform=val_transforms,
-                            cache_dir=cachDir
+                    # val_ds = PersistentDataset(
+                    #         config=self.config,
+                    #         features=self.features,
+                    #         data=self.data_par_val, transform=val_transforms,
+                    #         cache_dir=cachDir
+                    #     )
+                    val_ds = Dataset(
+                            config=self.config,
+                            features=self.features,
+                            data=self.data_par_val, transform=val_transforms
                         )
-                    # val_ds = monai.data.LMDBDataset(
+                    # val_ds = LMDBDataset(
                     #         data=self.data_par_val, transform=val_transforms,
                     #         cache_dir='persistent_cache'
                     #     )
 
 
         else:
-            val_ds = monai.data.Dataset(
+            val_ds = Dataset(
                 data=self.data,
                 transform=val_transforms)
 
@@ -320,14 +346,16 @@ class val_monai_classification_loader_SW(base_monai_loader):
                 ]
         val_transforms = Compose(val_transforms)
         if self.config['use_DDP'] == 'True':
-            self.data_par_val = monai.data.partition_dataset(
+            self.data_par_val = partition_dataset(
                 data=self.data,
                 num_partitions=dist.get_world_size(),
                 shuffle=True,
                 even_divisible=True,
             )[dist.get_rank()]
             if self.config['cache_num'] != 'None':
-                val_ds = monai.data.SmartCacheDataset(
+                val_ds = SmartCacheDataset(
+                    self.config,
+                    self.features,
                     data=self.data_par_val,
                     transform=val_transforms,
                     copy_cache=True,
@@ -336,23 +364,29 @@ class val_monai_classification_loader_SW(base_monai_loader):
                     replace_rate=self.config['cache_rate'],
                     num_replace_workers=int(self.config['num_workers']/2))
             else:
-                val_ds = monai.data.CacheDataset(
+                val_ds = CacheDataset(
+                    self.config,
+                    self.features,
                     data=self.data_par_val,
                     transform=val_transforms,
                     copy_cache=True,
                     num_workers=self.config['num_workers'])
         else:
-            val_ds = monai.data.Dataset(
+            val_ds = Dataset(
+                config=self.config,
+                features=self.features,
                 data=self.data,
                 transform=val_transforms)
 
-            self.data = monai.data.partition_dataset(
+            self.data = partition_dataset(
                 data=self.data,
                 num_partitions=dist.get_world_size(),
                 shuffle=False,
                 even_divisible=True,
             )[dist.get_rank()]
-        val_ds = monai.data.Dataset(
+        val_ds = Dataset(
+            config=self.config,
+            features=self.features,  
             data=self.data,
             transform=val_transforms)
         return val_ds

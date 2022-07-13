@@ -7,7 +7,7 @@ def to_dtype(data, config):
         if config['loss']['name'][c] in ['CE']:
             data[label_name] = torch.nan_to_num(data[label_name], nan=99998)
             data[label_name] = data[label_name].long()
-        elif config['loss']['name'][c] in ['MSE', 'L1']:
+        elif config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
             data[label_name] = data[label_name].float()
         else:
             raise ValueError("model dimension not implemented")
@@ -26,7 +26,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 'inputs': data[0],
                 config['labels_names']: data[1]
                 }
-    if config['task_type'] in ["classification", "regression"]:
+    if config['task_type'] in ["classification", "regression", "mil_classification"]:
         data = to_device(data, device, ['inputs'])
         data = to_dtype(data, config)
         data = to_device(data, device, config['labels_names'])
@@ -119,7 +119,7 @@ def get_dataloader_train(config):
 
 
 def get_dataloader_test(config):
-    if config['task_type'] in ["classification", "regression"]:
+    if config['task_type'] in ["classification", "regression", "mil_classification"]:
         from miacag.dataloader.Classification.get_dataloader_classification import \
             ClassificationLoader
         CL = ClassificationLoader(config)

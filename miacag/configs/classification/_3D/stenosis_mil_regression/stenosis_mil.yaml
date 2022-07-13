@@ -224,7 +224,9 @@ output: "/home/gandalf/angiography_data/runs/stenosis_rca"
 # use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
 manual_seed: 0
 
+
 process_labels: 'False'
+
 # model configuration
 model:
 # model class, e.g. UNet
@@ -232,7 +234,7 @@ model:
   encoder_depth: 4
   in_channels: 1
   backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
-  num_classes: 2
+  num_classes: 1
   mil_mode: "att"
   trans_blocks: 4
   trans_dropout: 0.0
@@ -313,11 +315,11 @@ lr_scheduler:
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: ['CE', 'CE'] #CE_pixel CE_pixel
+  name: ['MSE', 'MSE'] #CE_pixel CE_pixel
 # evaluation metric configuration
 eval_metric_train:
-  name: ['acc_top_1', 'acc_top_1']
+  name: ['RMSE', 'RMSE']
 eval_metric_val:
-  name: ['acc_top_1', 'acc_top_1']
+  name: ['RMSE', 'RMSE']
 # learning rate scheduler configuration
 

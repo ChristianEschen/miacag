@@ -26,6 +26,35 @@ def mse_loss_with_nans(input, target):
     return loss
 
 
+def l1_loss_smooth(predictions, targets, beta=1):
+    mask = torch.isnan(targets)
+    loss = 0
+    predictions = predictions[~mask]
+    targets = targets[~mask]
+    for x, y in zip(predictions, targets):
+        if abs(x-y) < beta:
+            loss += (0.5*(x-y)**2 / beta).mean()
+        else:
+            loss += (abs(x-y) - 0.5 * beta).mean()
+
+    loss = loss/predictions.shape[0]
+    return loss
+
+
+def mae_loss_with_nans(input, target):
+
+    # Missing data are nan's
+    mask = torch.isnan(target)
+
+    # Missing data are 0's
+   # mask = target == 99998
+
+    out = torch.abs(input[~mask]-target[~mask])
+    loss = out.mean()
+
+    return loss
+
+
 def get_loss_func(config):
     criterions = []
     for loss in config['loss']['name']:
@@ -37,6 +66,13 @@ def get_loss_func(config):
 
             #criterion = torch.nn.MSELoss(reduce=True, reduction='mean')
             criterion = mse_loss_with_nans  # (input, target)
+            criterions.append(criterion)
+        elif loss == 'L1':
+            criterion = mae_loss_with_nans  # (input, target)
+            criterions.append(criterion)
+        elif loss == 'L1smooth':
+            criterion = l1_loss_smooth
+            l1_loss_smooth.__defaults__=(config['loss']['beta'],)
             criterions.append(criterion)
         elif loss == 'dice_loss':
             criterion = DiceLoss(

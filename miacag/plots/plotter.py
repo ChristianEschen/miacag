@@ -14,6 +14,8 @@ from sklearn import metrics
 import scipy
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
+from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil \
+    import reorder_rows
 
 
 def map_1abels_to_0neTohree():
@@ -159,6 +161,8 @@ def plot_roc_curve(labels, confidences, output_plots,
             labels[labels > thres] = 0
         elif 'sten' in plot_name:
             thres = config['loaders']['val_method']['threshold_sten']
+            if 'lm' in plot_name:
+                thres = 0.5
             labels[labels >= thres] = 1
             labels[labels < thres] = 0
         else:
@@ -251,20 +255,38 @@ def plotStenoserTrueVsPred(sql_config, label_names,
 
 
 def plotRegression(sql_config, label_names,
-                   prediction_names, output_folder):
+                   prediction_names, output_folder, conv_conf=False):
     df, _ = getDataFromDatabase(sql_config)
-    df = df.drop_duplicates(
-            ['PatientID',
-             'StudyInstanceUID'])
+    if conv_conf == False:
+        df = df.drop_duplicates(
+                ['PatientID',
+                'StudyInstanceUID'])
+    
 
     for c, label_name in enumerate(label_names):
         label_name_ori = label_name
+        prediction_name = prediction_names[c]
         df_plot = df.dropna(
             subset=[label_name],
             how='any')
+        df_plot = df.dropna(
+            subset=[prediction_name],
+            how='any')
+        # proably wrong
+        # df_plot = df.dropna(
+        #     subset=[prediction_name],
+        #     how='any')
+        # if conv_conf == True:
+        #     df_plot = df_plot.drop_duplicates(
+        #             ['PatientID',
+        #             'StudyInstanceUID'])
+        ###
         df_plot, label_name = rename_columns(df_plot, label_name)
         df_plot = df_plot.astype({label_name: float})
-        prediction_name = prediction_names[c]
+        
+        if conv_conf == True:
+            df_plot[prediction_name] = \
+                convertConfFloats(df_plot[prediction_name], 1)
         df_plot = df_plot.astype({prediction_name: float})
         g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)
         X2 = sm.add_constant(df_plot[label_name])

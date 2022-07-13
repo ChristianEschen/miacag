@@ -31,6 +31,27 @@ def maybePackPathway(frames, config):
         return frames
 
 
+def get_final_layer(config,  device, in_features):
+    fcs = []
+    c = 0
+    for head in range(0, len(config['labels_names'])):
+        if config['loss']['name'][c] in ['CE']:
+            fcs.append(
+                nn.Linear(
+                    in_features,
+                    config['model']['num_classes']).to(device))
+        elif config['loss']['name'][c] in ['MSE', 'L1']:
+            fcs.append(
+                nn.Sequential(
+                    nn.Linear(
+                        in_features, 1).to(device),
+                    nn.ReLU()))
+        else:
+            raise ValueError('loss not implemented')
+        c += 1
+    return fcs
+
+
 class EncoderModel(nn.Module):
     def __init__(self, config, device):
         super(EncoderModel, self).__init__()
@@ -55,7 +76,7 @@ class ImageToScalarModel(EncoderModel):
                     nn.Linear(
                         self.in_features,
                         config['model']['num_classes']).to(device))
-            elif self.config['loss']['name'][c] in ['MSE', 'L1']:
+            elif self.config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
                 self.fcs.append(
                     nn.Sequential(
                         nn.Linear(

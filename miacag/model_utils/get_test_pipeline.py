@@ -22,7 +22,7 @@ class TestPipeline():
                           normalize_metrics,
                           running_metric_test, running_loss_test):
 
-        if config['task_type'] in ["classification", "regression"]:
+        if config['task_type'] in ["classification", "regression", "mil_classification"]:
             self.get_test_classification_pipeline(model, criterion,
                                                   config, test_loader,
                                                   device, init_metrics,

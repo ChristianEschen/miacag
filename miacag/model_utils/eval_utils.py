@@ -345,7 +345,7 @@ def maybe_softmax_transform(logits, config):
             logits_return.append(softmax_transform(logit.float()))
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
-        elif config['loss']['name'][c] == 'L1':
+        elif config['loss']['name'][c] in ['L1', 'L1smooth']:
             logits_return.append(logit.float())
     return logits_return
 

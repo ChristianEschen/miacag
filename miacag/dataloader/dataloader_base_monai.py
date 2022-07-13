@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from miacag.dataloader.dataloader_base import DataloaderBase
+from monai.transforms import Transform
 from monai.transforms import (
     AddChanneld,
     Compose,
@@ -143,7 +144,9 @@ class base_monai_loader(DataloaderBase):
                               self.config['loaders']['Crop_width'],
                               self.config['loaders']['Crop_depth']])
         elif self.config['loaders']['mode'] in ['testing', 'prediction']:
-            if self.config['task_type'] in ["classification", "regression"]:
+            if self.config['task_type'] in ["classification",
+                                            "regression",
+                                            "mil_classification"]:
                 keys_ = self.features
                 pad = SpatialPadd(
                     keys=keys_,
@@ -246,6 +249,43 @@ class base_monai_loader(DataloaderBase):
                 random_size=False)
         return crop
 
+    def maybeCenterCropMIL(self, features):
+        if self.config['loaders']['mode'] == 'training':
+            # temp = RandSpatialCropd(
+            #     keys=features,
+            #     roi_size=[
+            #         -1,
+            #         self.config['loaders']['Crop_height'],
+            #         self.config['loaders']['Crop_width'],
+            #         self.config['loaders']['Crop_depth']],
+            #     random_size=False)
+            crop = MyCenterCropd(
+                keys=features,
+                roi_size=[
+                    -1,
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']])
+            # crop.Randomizable = True
+            # crop.R = temp.R
+            # crop.hack = True
+        else:
+            crop = MyCenterCropd(
+                keys=features,
+                roi_size=[
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']])
+        #     crop = RandSpatialCropd(
+        #         keys=features,
+        #         roi_size=[
+        #             -1,
+        #             self.config['loaders']['Crop_height'],
+        #             self.config['loaders']['Crop_width'],
+        #             self.config['loaders']['Crop_depth']],
+        #         random_size=False)
+        return crop
+
     def maybeTranslate(self):
         if self.config['loaders']['translate'] == 'True':
             translation = RandAffined(
@@ -331,6 +371,17 @@ class base_monai_loader(DataloaderBase):
         crop = RandSpatialCropd(
             keys=self.features,
             roi_size=[
+               # -1,
+                self.config['loaders']['Crop_height'],
+                self.config['loaders']['Crop_width'],
+                self.config['loaders']['Crop_depth']],
+            random_size=False)
+        return crop
+
+    def CropTemporalMIL(self):
+        crop = RandSpatialCropd(
+            keys=self.features,
+            roi_size=[
                 -1,
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
@@ -352,3 +403,175 @@ class base_monai_loader(DataloaderBase):
         else:
             deleter = Identityd(keys=self.features)
         return deleter
+
+
+class LabelEncodeIntegerGraded(Transform):
+    """
+    Convert an integer label to encoded array representation of length num_classes,
+    with 1 filled in up to label index, and 0 otherwise. For example for num_classes=5,
+    embedding of 2 -> (1,1,0,0,0)
+    Args:
+        num_classes: the number of classes to convert to encoded format.
+        keys: keys of the corresponding items to be transformed
+            Defaults to ``['label']``.
+    """
+
+    def __init__(self, num_classes, keys=["label"]):
+        super().__init__()
+        self.keys = keys
+        self.num_classes = num_classes
+
+    def __call__(self, data):
+
+        d = dict(data)
+        for key in self.keys:
+            label = int(d[key])
+
+            lz = np.zeros(self.num_classes, dtype=np.float32)
+            lz[:label] = 1.0
+            # alternative oneliner lz=(np.arange(self.num_classes)<int(label)).astype(np.float32) #same oneliner
+            d[key] = lz
+
+        return d
+
+import contextlib
+from copy import deepcopy
+from enum import Enum
+from itertools import chain
+from math import ceil, floor
+from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Sequence, Tuple, Union
+
+import numpy as np
+
+from monai.config import IndexSelection, KeysCollection
+from monai.config.type_definitions import NdarrayOrTensor
+from monai.data.utils import get_random_patch, get_valid_patch_size
+from monai.transforms.croppad.array import (
+    BorderPad,
+    BoundingRect,
+    CenterSpatialCrop,
+    CropForeground,
+    DivisiblePad,
+    RandCropByLabelClasses,
+    RandCropByPosNegLabel,
+    ResizeWithPadOrCrop,
+    SpatialCrop,
+    SpatialPad,
+)
+from monai.transforms.inverse import InvertibleTransform
+from monai.transforms.transform import MapTransform, Randomizable
+from monai.transforms.utils import (
+    allow_missing_keys_mode,
+    generate_label_classes_crop_centers,
+    generate_pos_neg_label_crop_centers,
+    is_positive,
+    map_binary_to_indices,
+    map_classes_to_indices,
+    weighted_patch_samples,
+)
+from monai.utils import ImageMetaKey as Key
+from monai.utils import Method, NumpyPadMode, PytorchPadMode, ensure_tuple, ensure_tuple_rep, fall_back_tuple
+from monai.utils.enums import PostFix, TraceKeys
+
+__all__ = [
+    "PadModeSequence",
+    "SpatialPadd",
+    "BorderPadd",
+    "DivisiblePadd",
+    "SpatialCropd",
+    "CenterSpatialCropd",
+    "CenterScaleCropd",
+    "RandScaleCropd",
+    "RandSpatialCropd",
+    "RandSpatialCropSamplesd",
+    "CropForegroundd",
+    "RandWeightedCropd",
+    "RandCropByPosNegLabeld",
+    "ResizeWithPadOrCropd",
+    "BoundingRectd",
+    "RandCropByLabelClassesd",
+    "SpatialPadD",
+    "SpatialPadDict",
+    "BorderPadD",
+    "BorderPadDict",
+    "DivisiblePadD",
+    "DivisiblePadDict",
+    "SpatialCropD",
+    "SpatialCropDict",
+    "CenterSpatialCropD",
+    "CenterSpatialCropDict",
+    "CenterScaleCropD",
+    "CenterScaleCropDict",
+    "RandScaleCropD",
+    "RandScaleCropDict",
+    "RandSpatialCropD",
+    "RandSpatialCropDict",
+    "RandSpatialCropSamplesD",
+    "RandSpatialCropSamplesDict",
+    "CropForegroundD",
+    "CropForegroundDict",
+    "RandWeightedCropD",
+    "RandWeightedCropDict",
+    "RandCropByPosNegLabelD",
+    "RandCropByPosNegLabelDict",
+    "ResizeWithPadOrCropD",
+    "ResizeWithPadOrCropDict",
+    "BoundingRectD",
+    "BoundingRectDict",
+    "RandCropByLabelClassesD",
+    "RandCropByLabelClassesDict",
+]
+
+PadModeSequence = Union[Sequence[Union[NumpyPadMode, PytorchPadMode, str]], NumpyPadMode, PytorchPadMode, str]
+DEFAULT_POST_FIX = PostFix.meta()
+
+class MyCenterCropd(Randomizable, MapTransform, InvertibleTransform):
+    backend = CenterSpatialCrop.backend
+
+    def __init__(
+        self, keys: KeysCollection, roi_size: Union[Sequence[int], int], allow_missing_keys: bool = False
+    ) -> None:
+        super().__init__(keys, allow_missing_keys)
+        self.cropper = CenterSpatialCrop(roi_size)
+    
+    def randomize(self, img_size: Sequence[int]) -> None:
+        self._size = fall_back_tuple(self.roi_size, img_size)
+        if self.random_size:
+            max_size = img_size if self.max_roi_size is None else fall_back_tuple(self.max_roi_size, img_size)
+            if any(i > j for i, j in zip(self._size, max_size)):
+                raise ValueError(f"min ROI size: {self._size} is bigger than max ROI size: {max_size}.")
+            self._size = [self.R.randint(low=self._size[i], high=max_size[i] + 1) for i in range(len(img_size))]
+        if self.random_center:
+            valid_size = get_valid_patch_size(img_size, self._size)
+            self._slices = (slice(None),) + get_random_patch(img_size, valid_size, self.R)
+
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            orig_size = d[key].shape[1:]
+            d[key] = self.cropper(d[key])
+            self.push_transform(d, key, orig_size=orig_size)
+        return d
+
+
+    def inverse(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = deepcopy(dict(data))
+
+        for key in self.key_iterator(d):
+            transform = self.get_most_recent_transform(d, key)
+            # Create inverse transform
+            orig_size = np.array(transform[TraceKeys.ORIG_SIZE])
+            current_size = np.array(d[key].shape[1:])
+            pad_to_start = np.floor((orig_size - current_size) / 2).astype(int)
+            # in each direction, if original size is even and current size is odd, += 1
+            pad_to_start[np.logical_and(orig_size % 2 == 0, current_size % 2 == 1)] += 1
+            pad_to_end = orig_size - current_size - pad_to_start
+            pad = list(chain(*zip(pad_to_start.tolist(), pad_to_end.tolist())))
+            inverse_transform = BorderPad(pad)
+            # Apply inverse transform
+            d[key] = inverse_transform(d[key])
+            # Remove the applied transform
+            self.pop_transform(d, key)
+
+        return d

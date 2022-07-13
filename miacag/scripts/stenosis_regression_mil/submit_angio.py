@@ -20,12 +20,13 @@ from miacag.preprocessing.utils.check_experiments import checkExpExists, \
     checkCsvExists
 from miacag.plots.plotter import plot_results, plotRegression
 import pandas as pd
-from miacag.preprocessing.transform_thresholds import transformThreshold
+from miacag.preprocessing.transform_thresholds import transformThresholdRegression
 from miacag.preprocessing.transform_missing_floats import transformMissingFloats
-from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, test_for_file, write_file
+from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, write_file, test_for_file
 from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
+
 
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -33,11 +34,11 @@ parser.add_argument(
     '--cpu', type=str,
     help="if cpu 'True' else 'False'")
 parser.add_argument(
-            "--local_rank", type=int,
-            help="Local rank: torch.distributed.launch.")    
+    "--local_rank", type=int,
+    help="Local rank: torch.distributed.launch.")
 parser.add_argument(
-            "--num_workers", type=int,
-            help="Number of cpu workers for training")    
+    "--num_workers", type=int,
+    help="Number of cpu workers for training")
 parser.add_argument(
     '--config_path', type=str,
     help="path to folder with config files")
@@ -133,6 +134,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             # add placeholder for confidences
             conf = [i + '_confidences' for i in config['labels_names']]
             conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
+            conf_agg_t = [i + '_confidences_aggregated_thres' for i in config['labels_names']]
+
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
 
@@ -180,7 +183,6 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             pred,
                             ["float8"] * len(pred))
-
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -191,8 +193,17 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             conf_agg,
                             ["float8"] * len(conf))
+                add_columns({
+                    'database': config['database'],
+                    'username': config['username'],
+                    'password': config['password'],
+                    'host': config['host'],
+                    'schema_name': config['schema_name'],
+                    'table_name': output_table_name,
+                    'table_name_output': output_table_name},
+                            conf_agg_t,
+                            ["float8"] * len(conf))
                 
-
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -217,7 +228,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'TestSize': config['TestSize']})
                 trans()
 
-                trans_thres = transformThreshold({
+                trans_thres = transformThresholdRegression({
                     'labels_names': config['labels_names'],
                     'database': config['database'],
                     'username': config['username'],
@@ -240,7 +251,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'table_name': output_table_name,
                         'query': config['query_transform']},
                     trans_label,
-                    ["int8"] * len(trans_label))
+                    ["float8"] * len(trans_label))
                 splitter_obj = splitter(
                     {
                         'labels_names': config['labels_names'],
@@ -268,6 +279,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['model']['pretrain_model'] = output_directory
             test({**config, 'query': config["query_test"], 'TestSize': 1})
 
+
             # plotting results
             torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
@@ -279,8 +291,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'password': config['password'],
                             'host': config['host'],
                             'labels_names': config['labels_names'],
-                            'table_name': output_table_name,
                             'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
                             'query': config['query_train_plot']},
                             config['labels_names'],
                             [i + "_predictions" for i in
@@ -292,15 +304,28 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']]
                             )
 
-
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_train_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_train,
+                            conv_conf=True)
+                   
                 # val
                 plot_results({
                             'database': config['database'],
                             'username': config['username'],
                             'password': config['password'],
                             'host': config['host'],
-                            'schema_name': config['schema_name'],
                             'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
                             'table_name': output_table_name,
                             'query': config['query_val_plot']},
                             config['labels_names'],
@@ -312,6 +337,20 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
+
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_val_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_val,
+                            conv_conf=True)
 
                 # test
                 plot_results({
@@ -333,22 +372,22 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                              config['labels_names']]
                             )
 
-                # append results 
-                csv_results = appendDataFrame(sql_config={
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query': config['query_test_plot']},
-                                df_results=df_results,
-                                experiment_name=experiment_name)
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_test_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_test,
+                            conv_conf=True)
+
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))
-                csv_results = pd.DataFrame(csv_results)
-                csv_results.to_csv(output_csv_test, index=False, header=True)
 
         if csv_exists:
             return None

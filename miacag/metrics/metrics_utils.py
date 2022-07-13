@@ -92,6 +92,8 @@ def init_metrics(metrics, config, ptype=None):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('L1'):
             dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('L1smooth'):
+            dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('MSE'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('RMSE'):
@@ -263,6 +265,8 @@ def normalize_metrics(running_metrics):
         elif running_metric.startswith('RMSE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('MSE'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('L1smooth'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('L1'):
             metric_tb = running_metrics[running_metric].aggregate().item()

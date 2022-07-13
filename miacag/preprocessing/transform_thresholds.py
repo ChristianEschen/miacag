@@ -52,7 +52,10 @@ class transformThreshold():
                 self.df[label_name][self.df[label_name] <= thres] = 1
                 self.df[label_name][self.df[label_name] > thres] = 0
             elif 'sten' in label_name:
+
                 thres = self.config['loaders']['val_method']['threshold_sten']
+                if '5_lm' in label_name:
+                    thres = 0.5
                 self.df[label_name][self.df[label_name] >= thres] = 1
                 self.df[label_name][self.df[label_name] < thres] = 0
             else:

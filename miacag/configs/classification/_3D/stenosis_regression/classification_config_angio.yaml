@@ -43,7 +43,7 @@ password: '123qweasd'
 database: 'mydb'
 host: "localhost"
 # outputs
-output: "/home/gandalf/angiography_data/runs/stenosis_regression_rca"
+output: "/home/gandalf/angiography_data/runs/stenosis_regression_rca_v22_l1smooth_lr0p02_beta_1p0"
 # use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
 manual_seed: 0
 
@@ -55,15 +55,15 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "debug_3d" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
   num_classes: 1
-  pretrained: "None" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrained: "True" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_encoder: "None"
 # Data loader configuration
 task_type: "regression" #"classification"
-#labels_names: ["sten_procent_2_midt_rca"]
-labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
+labels_names: ["sten_proc_2_midt_rca"]
+#labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
 weighted_sampler: "False"
 cache_num: 'None'
 cache_rate: 0.001 #0.25
@@ -86,7 +86,7 @@ loaders:
   pixdim_depth: 66 # 0.33 # 1/66.673
   Resize_height: 130 #224 #312 #224 #224 # 224
   Resize_width: 130 #224 #312 #224 #224 # 224
-  Resize_depth: -1 #-1
+  Resize_depth: 64 #-1
 
   spatial_scaling: "False"
   temporal_scaling: "False"
@@ -95,8 +95,8 @@ loaders:
 
   Crop_height: 130 #224 #312 #224 #224 # 224
   Crop_width: 130 #224 #312 #224 #224 # 224
-  Crop_depth: 16
-  batchSize: 1
+  Crop_depth: 64
+  batchSize: 4
 
 
   # validation method 
@@ -110,17 +110,17 @@ loaders:
 # trainer configuration
 trainer:
   # how many iterations between validations
-  validate_frequency: 2
+  validate_frequency: 10
   # max number of epochs
-  epochs: 50
+  epochs: 1
   # number of epochs before use early stopping
-  max_stagnation: 100
+  max_stagnation: 1000000000000000000
 
 # optimizer configuration
 optimizer:
   type: "sgd" # 
   # initial learning rate
-  learning_rate: 0.10 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
+  learning_rate: 0.020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
   # weight decay
   weight_decay: 0.0005 #5e-4 
   momentum: 0.9
@@ -128,16 +128,17 @@ optimizer:
 lr_scheduler:
   type: None #
   lr_warmup_epochs: 10
-  steps_for_drop: 1
+  steps_for_drop: 500
   gamma: 0.2
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: ['MSE', 'MSE'] #CE_pixel CE_pixel
+  beta: 1 # maybe 0.5
+  name: ['L1smooth'] #CE_pixel CE_pixel
 # evaluation metric configuration
 eval_metric_train:
-  name: ['RMSE', 'RMSE']
+  name: ['RMSE']
 eval_metric_val:
-  name: ['RMSE', 'RMSE']
+  name: ['RMSE']
 # learning rate scheduler configuration
 

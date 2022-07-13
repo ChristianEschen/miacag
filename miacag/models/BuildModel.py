@@ -57,7 +57,10 @@ class ModelBuilder():
         #     from miacag.models.modules import RegressionModel as m
         # elif self.config['task_type'] == "classification":
         #     from miacag.models.modules import ClassificationModel as m
-        from miacag.models.modules import ImageToScalarModel as m
+        if self.config['task_type'] in ["classification", "regression"]:
+            from miacag.models.modules import ImageToScalarModel as m
+        elif self.config['task_type'] in ["mil_classification"]:
+            from miacag.models.milmodel3d import MILModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
         if path_encoder != 'None':

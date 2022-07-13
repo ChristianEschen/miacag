@@ -303,7 +303,20 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
-
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_train_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_train,
+                            conv_conf=True)
+                
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
                 agg = Aggregator({
@@ -376,7 +389,19 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
-
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_val_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_val,
+                            conv_conf=True)
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
                 agg = Aggregator({
@@ -450,7 +475,19 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             [i + "_confidences" for i in
                              config['labels_names']]
                             )
-
+                plotRegression({
+                            'database': config['database'],
+                            'username': config['username'],
+                            'password': config['password'],
+                            'host': config['host'],
+                            'labels_names': config['labels_names'],
+                            'schema_name': config['schema_name'],
+                            'table_name': output_table_name,
+                            'query': config['query_test_plot']},
+                            config['labels_names'],
+                            conf,
+                            output_plots_test,
+                            conv_conf=True)
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
 

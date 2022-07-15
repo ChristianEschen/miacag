@@ -14,9 +14,9 @@ class debug_3d(nn.Module):
             torch.nn.Conv3d(3, self.in_dim, kernel_size=(3, 3, 3)),
             nn.ReLU(inplace=True))
 
-        self.layer2 = nn.Sequential(
-                    nn.Linear(self.in_dim, 1),
-                    nn.ReLU(inplace=True))
+        # self.layer2 = nn.Sequential(
+        #             nn.Linear(self.in_dim, 1),
+        #             nn.ReLU(inplace=True))
 
     def forward(self, x):
         x = self.layer1(x)

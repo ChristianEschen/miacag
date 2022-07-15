@@ -6,11 +6,12 @@ from miacag.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
 
 from monai.inferers import SlidingWindowInferer
-from monai.inferers import SimpleInferer, SaliencyInferer
 from torch import nn
 from miacag.metrics.metrics import softmax_transform
 from miacag.model_utils.grad_cam_utils import prepare_cv2_img
 import numpy as np
+from monai.visualize import CAM, GradCAM
+from miacag.model_utils.grad_cam_utils import calc_saliency_maps
 
 
 def get_input_shape(config):
@@ -63,29 +64,8 @@ def eval_one_step(model, data, device, criterion,
                                                         running_loss_val,
                                                         criterion)
  
-    
     if config['loaders']['val_method']['saliency'] == 'True':
-        if config['loaders']['use_amp'] is True:
-            with torch.cuda.amp.autocast():
-                saliency = SaliencyInferer(
-                    cam_name="GradCAM",
-                    target_layers='module.encoder.6')
-        else:
-            if config['model']['backbone'] == 'r2plus1d_18':
-                layer_name = 'module.encoder.4.1.relu'
-            elif config['model']['backbone'] == 'x3d_s':
-                layer_name = 'module.encoder.5.post_conv'
-            elif config['model']['backbone'] in ['MVIT-16', 'MVIT-32']:
-               # layer_name = 'module.encoder.blocks.15.norm1'
-                layer_name="module.encoder.blocks.15.attn.pool_v"
-
-            else:
-                layer_name='module.encoder.5.post_conv'
-            saliency = SaliencyInferer(
-                    cam_name="GradCAM",
-                    target_layers=layer_name)
-        cams = saliency(network=model.module, inputs=inputs)
-        cams = cams[0:1,:,:,:,:]
+        cams = calc_saliency_maps(model, data['inputs'], config)
         return outputs, losses, metrics, cams
     else:
         return outputs, losses, metrics, None

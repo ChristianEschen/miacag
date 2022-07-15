@@ -55,10 +55,10 @@ from miacag.dataloader.Classification._3D.dataset_mil import \
 def reorder_rows(df):
     temp = pd.pivot_table(
         df, index=['StudyInstanceUID', 'PatientID'],
-        values='DcmPathFlatten',
+        values=['DcmPathFlatten', 'SOPInstanceUID'],
         aggfunc=lambda x: list(x))
     temp = temp.reset_index(level=[0, 1])
-    df = df.drop(columns='DcmPathFlatten')
+    df = df.drop(columns=['DcmPathFlatten', 'SOPInstanceUID'])
     df = temp.merge(
         df, on=["PatientID", "StudyInstanceUID"],
         how="inner")
@@ -76,7 +76,9 @@ class train_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
-        self.data = self.df[self.features + config['labels_names'] + ['rowid']]
+        self.data = self.df[
+            self.features + config['labels_names'] +
+            ['rowid', "SOPInstanceUID"]]
         self.data = self.data.to_dict('records')
 
     def __call__(self):
@@ -104,42 +106,7 @@ class train_monai_classification_loader(base_monai_loader):
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
                 ]
-        # train_transforms = [
-        #         LoadImaged(keys=self.features),
-                # LabelEncodeIntegerGraded(
-                #     keys=self.config['labels_names'],
-                #     num_classes=self.config['model']['num_classes']),
-        #         EnsureChannelFirstD(keys=self.features),
-        #         self.resampleORresize(),
-        #         DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-        #         self.CropTemporalMIL(),
-        #         self.getMaybePad(),
-        #         self.getCopy1to3Channels(),
-        #         DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-        #         EnsureTyped(keys=self.features, data_type='tensor'),
-        #         ConcatItemsd(keys=self.features, name='inputs'),
-        #         DeleteItemsd(keys=self.features)
-        #         # self.getMaybePad(),
-        #         # AddChanneld(keys=self.features),
-        #         # EnsureChannelFirstD(keys=self.features),
-        #         # self.getCopy1to3Channels(),
-        #         # ScaleIntensityd(keys=self.features),
-        #         # self.maybeNormalize(),
-        #         # EnsureTyped(keys=self.features, data_type='tensor'),
-        #         # self.maybeToGpu(self.features),
-        #         # self.maybeTranslate(),
-        #         # self.maybeSpatialScaling(),
-        #         # self.maybeTemporalScaling(),
-        #         # self.maybeRotate(),
-        #         # self.CropTemporal(),
-        #         # ConcatItemsd(keys=self.features, name='inputs'),
-        #         # DeleteItemsd(keys=self.features),
-        #         ]
-        # train_transforms = [
-        #         LoadImaged(keys=self.features, allow_missing_keys=True),
-        #        # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-        #        # DeleteItemsd(keys=self.features),
-        #         ]
+
         train_transforms = Compose(train_transforms)
         train_transforms.set_random_state(seed=0)
         # CHECK: for debug ###
@@ -211,15 +178,10 @@ class val_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
-        # temp = pd.pivot_table(self.df, index=['StudyInstanceUID', 'PatientID'], values='DcmPathFlatten',
-        #               aggfunc=lambda x:list(x))
-        # temp = temp.reset_index(level=[0,1])
-        # self.df = self.df.drop(columns='DcmPathFlatten')
-        # self.df = temp.merge(
-        #     self.df, on=["PatientID", "StudyInstanceUID"],
-        #     how="inner")
-        # self.df = self.drop_duplicates(['StudyInstanceUID','PatientID'])
-        self.data = self.df[self.features + config['labels_names'] + ['rowid']]
+
+        self.data = self.df[
+            self.features + config['labels_names'] +
+            ['rowid', "SOPInstanceUID"]]
         self.data = self.data.to_dict('records')
 
 
@@ -227,11 +189,8 @@ class val_monai_classification_loader(base_monai_loader):
         val_transforms = [
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
-                # LabelEncodeIntegerGraded(
-                #     keys=self.config['labels_names'],
-                #     num_classes=self.config['model']['num_classes']),
                 self.resampleORresize(),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                #DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
@@ -240,20 +199,8 @@ class val_monai_classification_loader(base_monai_loader):
                 self.maybeToGpu(self.features),
                 self.maybeCenterCropMIL(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
-              #  DeleteItemsd(keys=self.features),
                 ]
-        # check_ds = Dataset(config=self.config,
-        #                    features=self.features,
-        #                    data=self.data,
-        #                    transform=val_transforms)
-        # check_loader = DataLoader(
-        #     check_ds,
-        #     batch_size=self.config['loaders']['batchSize'],
-        #     num_workers=0,
-        #     collate_fn=list_data_collate
-        #     )
-        # check_data = monai.utils.misc.first(check_loader)
-        # img = check_data['inputs'].cpu().numpy()
+
         val_transforms = Compose(val_transforms)
         val_transforms.set_random_state(seed=0)
         if self.config['use_DDP'] == 'True':
@@ -296,22 +243,18 @@ class val_monai_classification_loader(base_monai_loader):
                 else:
                     cachDir = os.path.join(self.config['output'],
                                            'persistent_cache')
-                    # val_ds = PersistentDataset(
-                    #         config=self.config,
-                    #         features=self.features,
-                    #         data=self.data_par_val, transform=val_transforms,
-                    #         cache_dir=cachDir
-                    #     )
-                    val_ds = Dataset(
+                    val_ds = PersistentDataset(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_val, transform=val_transforms
+                            data=self.data_par_val, transform=val_transforms,
+                            cache_dir=cachDir
                         )
-                    # val_ds = LMDBDataset(
-                    #         data=self.data_par_val, transform=val_transforms,
-                    #         cache_dir='persistent_cache'
+                    # val_ds = Dataset(
+                    #         config=self.config,
+                    #         features=self.features,
+                    #         data=self.data_par_val, transform=val_transforms
                     #     )
-
+                  
 
         else:
             val_ds = Dataset(

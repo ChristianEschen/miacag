@@ -68,12 +68,12 @@ class ImageToScalarModel(EncoderModel):
     def __init__(self, config, device):
         super(ImageToScalarModel, self).__init__(config, device)
         self.config = config
-        self.fcs = []
+       # self.fcs = ["self.fc" ]
+        self.fcs = nn.ModuleList()
         c = 0
         for head in range(0, len(self.config['labels_names'])):
             if self.config['loss']['name'][c] in ['CE']:
-                self.fcs.append(
-                    nn.Linear(
+                self.fcs.append(nn.Linear(
                         self.in_features,
                         config['model']['num_classes']).to(device))
             elif self.config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
@@ -103,6 +103,22 @@ class ImageToScalarModel(EncoderModel):
         for fc in self.fcs:
             ps.append(fc(p))
         return ps
+
+    def forward_saliency(self, x):
+        x = maybePermuteInput(x, self.config)
+        p = self.encoder(x)
+        if self.dimension in ['3D', '2D+T']:
+            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
+                p = p.mean(dim=(-3, -2, -1))
+            else:
+                pass
+        elif self.dimension == 'tabular':
+            p = p
+        else:
+            p = p.mean(dim=(-2, -1))
+        ps = self.fc(p)
+        return ps
+    
 
 
 class SimSiam(EncoderModel):

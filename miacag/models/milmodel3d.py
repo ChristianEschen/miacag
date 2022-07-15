@@ -9,7 +9,7 @@ from monai.utils.module import optional_import
 models, _ = optional_import("torchvision.models")
 
 
-class MILModel(EncoderModel):
+class MILModel(ImageToScalarModel):
     def __init__(
         self,
         config,
@@ -36,128 +36,109 @@ class MILModel(EncoderModel):
         if self.mil_mode in ["mean", "max"]:
             pass
         elif self.mil_mode == "att":
-            self.attention = nn.Sequential(
-                nn.Linear(self.in_features, 2048),
-                nn.Tanh(), nn.Linear(2048, 1))
+            self.attention = nn.ModuleList()
+            for head in range(0, len(self.config['labels_names'])):
+                self.attention.append(nn.Sequential(
+                    nn.Linear(self.in_features, 2048),
+                    nn.Tanh(), nn.Linear(2048, 1)))
 
         elif self.mil_mode == "att_trans":
-            transformer = nn.TransformerEncoderLayer(
-                d_model=self.in_features, nhead=8,
-                dropout=self.config['model'['trans_dropout']])
-            self.transformer = nn.TransformerEncoder(
-                transformer,
-                num_layers=self.config['model']['trans_blocks'])
-            self.attention = nn.Sequential(
-                nn.Linear(self.in_features, 2048),
-                nn.Tanh(),
-                nn.Linear(2048, 1))
+            self.attention = nn.ModuleList()
+            self.transformer = nn.ModuleList()
+            for head in range(0, len(self.config['labels_names'])):
+                transformer = nn.TransformerEncoderLayer(
+                    d_model=self.in_features, nhead=8,
+                    dropout=self.config['model']['trans_dropout'])
+                self.transformer.append(nn.TransformerEncoder(
+                    transformer,
+                    num_layers=self.config['model']['trans_blocks']))
+                self.attention.append(nn.Sequential(
+                    nn.Linear(self.in_features, 2048),
+                    nn.Tanh(),
+                    nn.Linear(2048, 1)))
 
         elif self.mil_mode == "att_trans_pyramid":
-
-            transformer_list = nn.ModuleList(
-                [
-                    nn.TransformerEncoder(
-                        nn.TransformerEncoderLayer(
-                            d_model=256,
-                            nhead=8,
-                            dropout=self.config['model'['trans_dropout']]),
-                        num_layers=self.config['model']['trans_blocks']
-                    ),
-                    nn.Sequential(
-                        nn.Linear(768, 256),
+            self.attention = nn.ModuleList()
+            self.transformer = nn.ModuleList()
+            for head in range(0, len(self.config['labels_names'])):
+                transformer_list = nn.ModuleList(
+                    [
                         nn.TransformerEncoder(
                             nn.TransformerEncoderLayer(
-                                d_model=256, nhead=8,
-                                dropout=self.config['model'['trans_dropout']]),
-                            num_layers=self.config['model']['trans_blocks'],
+                                d_model=256,
+                                nhead=8,
+                                dropout=self.config['model']['trans_dropout']),
+                            num_layers=self.config['model']['trans_blocks']
                         ),
-                    ),
-                    nn.Sequential(
-                        nn.Linear(1280, 256),
+                        nn.Sequential(
+                            nn.Linear(768, 256),
+                            nn.TransformerEncoder(
+                                nn.TransformerEncoderLayer(
+                                    d_model=256, nhead=8,
+                                    dropout=self.config['model']['trans_dropout']),
+                                num_layers=self.config['model']['trans_blocks'],
+                            ),
+                        ),
+                        nn.Sequential(
+                            nn.Linear(1280, 256),
+                            nn.TransformerEncoder(
+                                nn.TransformerEncoderLayer(
+                                    d_model=256, nhead=8,
+                                    dropout=self.config['model']['trans_dropout']),
+                                num_layers=self.config['model']['trans_blocks'],
+                            ),
+                        ),
                         nn.TransformerEncoder(
                             nn.TransformerEncoderLayer(
-                                d_model=256, nhead=8,
-                                dropout=self.config['model'['trans_dropout']]),
+                                d_model=2304, nhead=8,
+                                dropout=self.config['model']['trans_dropout']),
                             num_layers=self.config['model']['trans_blocks'],
                         ),
-                    ),
-                    nn.TransformerEncoder(
-                        nn.TransformerEncoderLayer(
-                            d_model=2304, nhead=8,
-                            dropout=self.config['model'['trans_dropout']]),
-                        num_layers=self.config['model']['trans_blocks'],
-                    ),
-                ]
-            )
-            self.transformer = transformer_list
-            self.in_features = self.in_features + 256
-            self.attention = nn.Sequential(
-                nn.Linear(self.in_features, 2048),
-                nn.Tanh(),
-                nn.Linear(2048, 1))
+                    ]
+                )
+                self.transformer.append(transformer_list)
+                self.in_features = self.in_features + 256
+                self.attention.append(nn.Sequential(
+                    nn.Linear(self.in_features, 2048),
+                    nn.Tanh(),
+                    nn.Linear(2048, 1)))
 
         else:
             raise ValueError("Unsupported mil_mode: " + str(self.mil_mode))
 
-        # define the number of heads for multi labels classification
-        self.fcs = []
-        c = 0
-        for head in range(0, len(self.config['labels_names'])):
-            if self.config['loss']['name'][c] in ['CE']:
-                self.fcs.append(
-                    nn.Linear(
-                        self.in_features,
-                        config['model']['num_classes']).to(device))
-            elif self.config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
-                self.fcs.append(
-                    nn.Sequential(
-                        nn.Linear(
-                            self.in_features, 1).to(device),
-                        nn.ReLU()))
-            else:
-                raise ValueError('loss not implemented')
-            c += 1
 
-    def calc_head(self, x: torch.Tensor) -> torch.Tensor:
+
+
+    def calc_head(self, x: torch.Tensor, c: int) -> torch.Tensor:
 
         sh = x.shape
 
         if self.mil_mode == "mean":
-            xs = []
-            for fc in self.fcs:
-                t = fc(x)
-                t = torch.mean(t, dim=1)
-                xs.append(t)
-
+            x = self.fcs_func(self.fcs, c)(x)
+            x = torch.mean(x, dim=1)
+            a = None
         elif self.mil_mode == "max":
-            xs = []
-            for fc in self.fcs:
-                t = fc(x)
-                t, _ = torch.max(t, dim=1)
-                xs.append(t)
-
+            x = self.fcs_func(self.fcs, c)(x)
+            x, _ = torch.max(x, dim=1)
+            a = None
         elif self.mil_mode == "att":
-
-            a = self.attention(x)
+            a = self.attention_func(self.attention, c)(x)
             a = torch.softmax(a, dim=1)
             x = torch.sum(x * a, dim=1)
 
-            xs = []
-            for fc in self.fcs:
-                xs.append(fc(x))
+            x = self.fcs_func(self.fcs, c)(x)
 
         elif self.mil_mode == "att_trans" and self.transformer is not None:
 
             x = x.permute(1, 0, 2)
-            x = self.transformer(x)
-            x = x.permute(1, 0, 2)
+            x = self.transform_func(self.transformer, c)(x)
 
-            a = self.attention(x)
+            x = x.permute(1, 0, 2)
+            a = self.attention_func(self.attention, c)(x)
+
             a = torch.softmax(a, dim=1)
             x = torch.sum(x * a, dim=1)
-            xs = []
-            for fc in self.fcs:
-                xs.append(fc(x))
+            x = self.fcs_func(self.fcs, c)(x)
 
         elif self.mil_mode == "att_trans_pyramid" \
                 and self.transformer is not None:
@@ -175,7 +156,9 @@ class MILModel(EncoderModel):
                 self.extra_outputs["layer4"], dim=(2, 3)).reshape(
                     sh[0], sh[1], -1).permute(1, 0, 2)
 
-            transformer_list = cast(nn.ModuleList, self.transformer)
+            transformer_list = cast(nn.ModuleList, self.transformer[c])
+
+            transformer_list = cast(nn.ModuleList, self.transformer[c])
 
             x = transformer_list[0](l1)
             x = transformer_list[1](torch.cat((x, l2), dim=2))
@@ -184,17 +167,17 @@ class MILModel(EncoderModel):
 
             x = x.permute(1, 0, 2)
 
-            a = self.attention(x)
+            a = self.attention_func(self.attention, c)(x)
+
             a = torch.softmax(a, dim=1)
             x = torch.sum(x * a, dim=1)
 
-            xs = []
-            for fc in self.fcs:
-                xs.append(fc(x))
+            x = self.fcs_func(self.fcs, c)(x)
 
         else:
             raise ValueError("Wrong model mode" + str(self.mil_mode))
-        return xs
+
+        return x, a
 
     def forward(self, x: torch.Tensor, no_head: bool = False) -> torch.Tensor:
 
@@ -212,12 +195,79 @@ class MILModel(EncoderModel):
 
         xs = []
         if not no_head:
-            xs = self.calc_head(x)
+            for c in range(0, len(self.fcs)):
+                x_c, _ = self.calc_head(x, c)
+                xs.append(x_c)
+           # xs = self.calc_head(x)
         else:
             xs = x
         return xs
 
+    def get_attention(self, x: torch.Tensor, no_head: bool = False):
+        self.config['loaders']['val_method']['saliency'] = 'False'
+        sh = x.shape
+        x = x.reshape(sh[0] * sh[1], sh[2], sh[3], sh[4], sh[5])
+        x = maybePermuteInput(x, self.config)
+        x = self.encoder(x)
+        if self.config['model']['dimension'] in ['3D', '2D+T']:
+            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
+                x = x.mean(dim=(-3, -2, -1))
+            else:
+                pass
 
+        x = x.reshape(sh[0], sh[1], -1)
+        a_s = []
+        xs = []
+        if not no_head:
+            for c in range(0, len(self.fcs)):
+                x_c, a_c = self.calc_head(x, c)
+                xs.append(x_c)
+                a_s.append(a_c)
+        else:
+            xs = x
+        self.config['loaders']['val_method']['saliency'] = 'True'
+        return xs, a_c
+
+    # hacks for saliency maps
+    # while running with saliency maps enabled,
+    # we change the forward method for the model
+    # to use the forward_saliency method
+    def transform_func(self, transformer, c):
+        if self.config['loaders']['val_method']['saliency'] == 'True':
+            transformer = transformer
+        else:
+            transformer = transformer[c]
+        return transformer
+
+    def fcs_func(self, fcs, c):
+        if self.config['loaders']['val_method']['saliency'] == 'True':
+            fcs = fcs
+        else:
+            fcs = fcs[c]
+        return fcs
+
+    def attention_func(self, attention, c):
+        if self.config['loaders']['val_method']['saliency'] == 'True':
+            attention = attention
+        else:
+            attention = attention[c]
+        return attention
+
+    def forward_saliency(self, x):
+        x = maybePermuteInput(x, self.config)
+        p = self.encoder(x)
+        if self.dimension in ['3D', '2D+T']:
+            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
+                p = p.mean(dim=(-3, -2, -1))
+            else:
+                pass
+        else:
+            raise ValueError(
+                'not implemented for dimension: %s' % self.config['model'])
+      #  x_c, _ = self.calc_head(p, 99999)
+        x = self.fcs(p)
+        return x
+       # return xs
        # self.fc = nn.Linear(self.in_features,
          #                   self.config['model']['num_classes'])
        # self.model = self.encoder
@@ -441,3 +491,103 @@ class MILModel(EncoderModel):
 
 #         return x
 
+
+
+
+##### graveyard
+        # # define the number of heads for multi labels classification
+        # self.fcs = []
+        # c = 0
+        # for head in range(0, len(self.config['labels_names'])):
+        #     if self.config['loss']['name'][c] in ['CE']:
+        #         self.fcs.append(
+        #             nn.Linear(
+        #                 self.in_features,
+        #                 config['model']['num_classes']).to(device))
+        #     elif self.config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
+        #         self.fcs.append(
+        #             nn.Sequential(
+        #                 nn.Linear(
+        #                     self.in_features, 1).to(device),
+        #                 nn.ReLU()))
+        #     else:
+        #         raise ValueError('loss not implemented')
+        #     c += 1
+
+    # def calc_head(self, x: torch.Tensor) -> torch.Tensor:
+
+    #     sh = x.shape
+
+    #     if self.mil_mode == "mean":
+    #         xs = []
+    #         for fc in self.fcs:
+    #             t = fc(x)
+    #             t = torch.mean(t, dim=1)
+    #             xs.append(t)
+
+    #     elif self.mil_mode == "max":
+    #         xs = []
+    #         for fc in self.fcs:
+    #             t = fc(x)
+    #             t, _ = torch.max(t, dim=1)
+    #             xs.append(t)
+
+    #     elif self.mil_mode == "att":
+
+    #         a = self.attention(x)
+    #         a = torch.softmax(a, dim=1)
+    #         x = torch.sum(x * a, dim=1)
+
+    #         xs = []
+    #         for fc in self.fcs:
+    #             xs.append(fc(x))
+
+    #     elif self.mil_mode == "att_trans" and self.transformer is not None:
+
+    #         x = x.permute(1, 0, 2)
+    #         x = self.transformer(x)
+    #         x = x.permute(1, 0, 2)
+
+    #         a = self.attention(x)
+    #         a = torch.softmax(a, dim=1)
+    #         x = torch.sum(x * a, dim=1)
+    #         xs = []
+    #         for fc in self.fcs:
+    #             xs.append(fc(x))
+
+    #     elif self.mil_mode == "att_trans_pyramid" \
+    #             and self.transformer is not None:
+
+            # l1 = torch.mean(
+            #     self.extra_outputs["layer1"], dim=(2, 3)).reshape(
+            #         sh[0], sh[1], -1).permute(1, 0, 2)
+            # l2 = torch.mean(
+            #     self.extra_outputs["layer2"], dim=(2, 3)).reshape(
+            #         sh[0], sh[1], -1).permute(1, 0, 2)
+            # l3 = torch.mean(
+            #     self.extra_outputs["layer3"], dim=(2, 3)).reshape(
+            #         sh[0], sh[1], -1).permute(1, 0, 2)
+            # l4 = torch.mean(
+            #     self.extra_outputs["layer4"], dim=(2, 3)).reshape(
+            #         sh[0], sh[1], -1).permute(1, 0, 2)
+
+            # transformer_list = cast(nn.ModuleList, self.transformer)
+
+    #         x = transformer_list[0](l1)
+    #         x = transformer_list[1](torch.cat((x, l2), dim=2))
+    #         x = transformer_list[2](torch.cat((x, l3), dim=2))
+    #         x = transformer_list[3](torch.cat((x, l4), dim=2))
+
+    #         x = x.permute(1, 0, 2)
+
+    #         a = self.attention(x)
+    #         a = torch.softmax(a, dim=1)
+    #         x = torch.sum(x * a, dim=1)
+
+    #         xs = []
+    #         for fc in self.fcs:
+    #             xs.append(fc(x))
+
+    #     else:
+    #         raise ValueError("Wrong model mode" + str(self.mil_mode))
+    #     return xs

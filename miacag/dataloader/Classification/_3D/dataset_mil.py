@@ -11,6 +11,7 @@
 
 
 import collections.abc
+from curses.ascii import SO
 import math
 import pickle
 import shutil
@@ -84,6 +85,7 @@ class Dataset(_TorchDataset):
         data_i = self.data[index]
         #post_trans = Compose([ToTensord(keys=["img"])])
         data_i_list = []
+
         for data_i_i in data_i[self.features[0]]:
             data_i_i = {
                 self.features[0]: data_i_i}
@@ -97,7 +99,9 @@ class Dataset(_TorchDataset):
             data_i_list.append(data_i_i)
         stacked_data = torch.stack([i['inputs'] for i in data_i_list], dim=0)
         data_i_i['inputs'] = stacked_data
+        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
         data_i_i["rowid"] = data_i["rowid"]
+        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
         return data_i_i
 
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
@@ -268,14 +272,33 @@ class PersistentDataset(Dataset):
             the transformed element up to the first identified
             random transform object
         """
-        for _transform in self.transform.transforms:
-            # execute all the deterministic transforms
-            if isinstance(_transform, Randomizable) or not isinstance(_transform, Transform):
-                break
-            # this is to be consistent with CacheDataset even though it's not in a multi-thread situation.
-            _xform = deepcopy(_transform) if isinstance(_transform, ThreadUnsafe) else _transform
-            item_transformed = apply_transform(_xform, item_transformed)
-        return item_transformed
+        data_i_list = []
+       # data_i = self.data[idx]
+        for data_i_i in item_transformed[self.features[0]]:
+            data_i_i = {
+                self.features[0]: data_i_i}
+            for n in self.config['labels_names']:
+                data_i_i[n] = item_transformed[n]
+
+            for _transform in self.transform.transforms:
+                # execute all the deterministic transforms
+                if isinstance(_transform, Randomizable) \
+                        or not isinstance(_transform, Transform):
+                    break
+                # this is to be consistent with CacheDataset even -
+                # though it's not in a multi-thread situation.
+                _xform = deepcopy(_transform) if \
+                    isinstance(_transform, ThreadUnsafe) else _transform
+                data_i_i = apply_transform(_xform, data_i_i)
+            data_i_list.append(data_i_i)
+        stacked_data = torch.stack(
+            [i[self.features[0]] for i in data_i_list], dim=0)
+        data_i_i['inputs'] = stacked_data
+        data_i_i["rowid"] = item_transformed["rowid"]
+        data_i_i['DcmPathFlatten_paths'] = item_transformed['DcmPathFlatten']
+        data_i_i["SOPInstanceUID"] = item_transformed["SOPInstanceUID"]
+
+        return data_i_i
 
     def _post_transform(self, item_transformed):
         """
@@ -289,12 +312,16 @@ class PersistentDataset(Dataset):
             raise ValueError("transform must be an instance of monai.transforms.Compose.")
         start_post_randomize_run = False
         for _transform in self.transform.transforms:
-            if (
-                start_post_randomize_run
-                or isinstance(_transform, Randomizable)
-                or not isinstance(_transform, Transform)
-            ):
-                start_post_randomize_run = True
+            if self.config['loaders']['mode'] != 'prediction':
+                raise ValueError(
+                    "persistent loaders is only supported for prediction mode")
+            # persistant 
+            # if (
+            #     start_post_randomize_run
+            #     or isinstance(_transform, Randomizable)
+            #     or not isinstance(_transform, Transform)
+            # ):
+            #     start_post_randomize_run = True
                 item_transformed = apply_transform(_transform, item_transformed)
         return item_transformed
 
@@ -761,30 +788,17 @@ class CacheDataset(Dataset):
             #    transformed_i.append(data_i_i)
             data_i_list.append(data_i_i)
 
-       # print('penis')
-
-      #  stacked_data = torch.stack([i['inputs'] for i in data_i_list], dim=0)
-       # data_i_i['inputs'] = stacked_data
         stacked_data = torch.stack([i[self.features[0]] for i in data_i_list], dim=0)
         data_i_i[self.features[0]] = stacked_data
 
         if self.as_contiguous:
             data_i_i = convert_to_contiguous(data_i_i, memory_format=torch.contiguous_format)
         data_i_i["rowid"] = data_i["rowid"]
+        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
+        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+
         return data_i_i
 
-
-
-        # item = self.data[idx]
-        # for _transform in self.transform.transforms:  # type:ignore
-        #     # execute all the deterministic transforms
-        #     if isinstance(_transform, Randomizable) or not isinstance(_transform, Transform):
-        #         break
-        #     _xform = deepcopy(_transform) if isinstance(_transform, ThreadUnsafe) else _transform
-        #     item = apply_transform(_xform, item)
-        # if self.as_contiguous:
-        #     item = convert_to_contiguous(item, memory_format=torch.contiguous_format)
-        # return item
 
     def _transform(self, index: int):
         index_: Any = index

@@ -215,7 +215,9 @@ class base_monai_loader(DataloaderBase):
 
     def maybeToGpu(self, keys):
         if self.config['cpu'] == 'True':
-            if self.config['task_type'] in ["classification", "regression"]:
+            if self.config['task_type'] in ["mil_classification",
+                                            "classification",
+                                            "regression"]:
                 device = ToDeviced(keys=keys, device="cpu")
             else:
                 device = ToDeviced(

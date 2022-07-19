@@ -3,6 +3,8 @@
 tensorboard_comment: 'test_v1'
 DataSetPath: "/home/gandalf/miacag/data/angio"
 query: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+query_pred: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
+
 query_transform: "SELECT * FROM ?schema_name.?table_name;"
 query_split: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
 
@@ -43,7 +45,7 @@ password: '123qweasd'
 database: 'mydb'
 host: "localhost"
 # outputs
-output: "/home/gandalf/angiography_data/runs/stenosis_regression_rca_v22_l1smooth_lr0p02_beta_1p0"
+output: "/home/gandalf/angiography_data/runs/stenosis_regression_rca_v22_l1smooth_lr0p02_beta_1p0_r2dp1"
 # use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
 manual_seed: 0
 
@@ -55,15 +57,15 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "x3d_s" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  backbone: "mvit_base_16x4" #"r2plus1_18" #"mvit_base_16x4" # "mvit_base_32x3" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
   num_classes: 1
   pretrained: "True" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_encoder: "None"
 # Data loader configuration
 task_type: "regression" #"classification"
-labels_names: ["sten_proc_2_midt_rca"]
-#labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
+#labels_names: ["sten_proc_1_prox_rca"]
+labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
 weighted_sampler: "False"
 cache_num: 'None'
 cache_rate: 0.001 #0.25
@@ -73,7 +75,7 @@ loaders:
   format: 'dicom'
   store_memory: False
 
-  use_amp: False
+  use_amp: True
   
 
   CropForeGround: False
@@ -84,18 +86,18 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 130 #224 #312 #224 #224 # 224
-  Resize_width: 130 #224 #312 #224 #224 # 224
-  Resize_depth: 64 #-1
+  Resize_height: 224 #224 #312 #224 #224 # 224
+  Resize_width: 224 #224 #312 #224 #224 # 224
+  Resize_depth: 16 #-1
 
   spatial_scaling: "False"
   temporal_scaling: "False"
   translate: "False"
   rotate: "False"
 
-  Crop_height: 130 #224 #312 #224 #224 # 224
-  Crop_width: 130 #224 #312 #224 #224 # 224
-  Crop_depth: 64
+  Crop_height: 224 #224 #312 #224 #224 # 224
+  Crop_width: 224 #224 #312 #224 #224 # 224
+  Crop_depth: 16
   batchSize: 4
 
 
@@ -112,7 +114,7 @@ trainer:
   # how many iterations between validations
   validate_frequency: 10
   # max number of epochs
-  epochs: 1
+  epochs: 100
   # number of epochs before use early stopping
   max_stagnation: 1000000000000000000
 
@@ -120,7 +122,7 @@ trainer:
 optimizer:
   type: "sgd" # 
   # initial learning rate
-  learning_rate: 0.020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
+  learning_rate: 0.0020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
   # weight decay
   weight_decay: 0.0005 #5e-4 
   momentum: 0.9
@@ -133,12 +135,12 @@ lr_scheduler:
 # loss function configuration
 loss:
   # loss function to be used during training
-  beta: 1 # maybe 0.5
-  name: ['L1smooth'] #CE_pixel CE_pixel
+  beta: 0.5 # maybe 0.5
+  name: ['L1smooth', 'L1smooth'] #CE_pixel CE_pixel
 # evaluation metric configuration
 eval_metric_train:
-  name: ['RMSE']
+  name: ['RMSE', 'RMSE']
 eval_metric_val:
-  name: ['RMSE']
+  name: ['RMSE', 'RMSE']
 # learning rate scheduler configuration
 

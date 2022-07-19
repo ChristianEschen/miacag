@@ -64,11 +64,11 @@ def eval_one_step(model, data, device, criterion,
                                                         running_loss_val,
                                                         criterion)
  
-    if config['loaders']['val_method']['saliency'] == 'True':
-        cams = calc_saliency_maps(model, data['inputs'], config)
-        return outputs, losses, metrics, cams
-    else:
-        return outputs, losses, metrics, None
+    # if config['loaders']['val_method']['saliency'] == 'True':
+    #     cams = calc_saliency_maps(model, data['inputs'], config, )
+    #     return outputs, losses, metrics, cams
+    # else:
+    return outputs, losses, metrics, None
 
 def forward_model(inputs, model, config):
     if config['loaders']['use_amp'] is True:
@@ -199,29 +199,8 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             running_loss_val,
                                             saliency_maps)
             if config['loaders']['mode'] == 'testing':
-                #for label in outputs:
-                 #   label = label.cpu()
-
-                 #   logits.append(label)
                 logits.append([out.cpu() for out in outputs])
                 rowids.append(data['rowid'].cpu())
-            if config['loaders']['val_method']['saliency'] == 'True':
-                data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
-                patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
-                studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
-                seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
-                SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
-
-                prepare_cv2_img(
-                    data['inputs'].cpu().numpy(),
-                    cams.cpu().numpy(),
-                    data_path,
-                    patientID,
-                    studyInstanceUID,
-                    seriesInstanceUID,
-                    SOPInstanceUID,
-                    config)
-
 
 
     else:

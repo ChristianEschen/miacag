@@ -55,50 +55,42 @@ class TestPipeline():
             saliency_maps=False)
         stop = time.time()
         print('time for testing:', stop-start)
-        if config['loaders']['val_method']['saliency'] == 'False':
+        for count, label in enumerate(config['labels_names']):
+            csv_files = self.saveCsvFiles(label, confidences[count],
+                                            index, config)
+        torch.distributed.barrier()
+        if torch.distributed.get_rank() == 0:
             for count, label in enumerate(config['labels_names']):
-                csv_files = self.saveCsvFiles(label, confidences[count],
-                                              index, config)
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                for count, label in enumerate(config['labels_names']):
-                    test_loader.val_df = self.buildPandasResults(
-                        label,
-                        test_loader.val_df,
-                        csv_files
-                        )
-                    #self.resetDataPaths(test_loader, config)
-                    self.insert_data_to_db(test_loader, label, config)
-                    if config['loss']['name'] == 'CE':
-                        acc = {
-                            'accuracy ensemble_' + label: accuracy_score(
-                                test_loader.val_df[label].astype('float').astype('int'),
-                                test_loader.val_df[
-                                    label + '_predictions'].astype(
-                                        'float').astype('int'))}
-                        print('accuracy_correct', acc)
-                        metrics.update(acc)
-                    print('metrics (mean of all preds)', metrics)
-                    
-                    log_name = config["table_name"] + '_' + label + '_log.txt'
-                    with open(
-                        os.path.join(config['output_directory'], log_name),
-                            'w') as file:
-                        file.write(json.dumps({**metrics, **config},
-                                sort_keys=True, indent=4,
-                                separators=(',', ': ')))
-                shutil.rmtree(csv_files)
-                cacheDir = os.path.join(config['output'],
-                                        'persistent_cache')
-                if os.path.exists(cacheDir):
-                    shutil.rmtree(cacheDir)
-
-        elif config['loaders']['val_method']['saliency'] == 'True':
-            print('done producing saliency maps')
-        else:
-            raise ValueError(
-                "test pipeline is not implemented %s" % repr(
-                    config['loaders']['val_method']['type']))
+                test_loader.val_df = self.buildPandasResults(
+                    label,
+                    test_loader.val_df,
+                    csv_files
+                    )
+                #self.resetDataPaths(test_loader, config)
+                self.insert_data_to_db(test_loader, label, config)
+                if config['loss']['name'] == 'CE':
+                    acc = {
+                        'accuracy ensemble_' + label: accuracy_score(
+                            test_loader.val_df[label].astype('float').astype('int'),
+                            test_loader.val_df[
+                                label + '_predictions'].astype(
+                                    'float').astype('int'))}
+                    print('accuracy_correct', acc)
+                    metrics.update(acc)
+                print('metrics (mean of all preds)', metrics)
+                
+                log_name = config["table_name"] + '_' + label + '_log.txt'
+                with open(
+                    os.path.join(config['output_directory'], log_name),
+                        'w') as file:
+                    file.write(json.dumps({**metrics, **config},
+                            sort_keys=True, indent=4,
+                            separators=(',', ': ')))
+            shutil.rmtree(csv_files)
+            cacheDir = os.path.join(config['output'],
+                                    'persistent_cache')
+            if os.path.exists(cacheDir):
+                shutil.rmtree(cacheDir)
 
 
     def get_test_segmentation_pipeline(self, model, criterion,

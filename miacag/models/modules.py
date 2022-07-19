@@ -91,7 +91,7 @@ class ImageToScalarModel(EncoderModel):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
+            if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
                 p = p.mean(dim=(-3, -2, -1))
             else:
                 pass
@@ -108,8 +108,9 @@ class ImageToScalarModel(EncoderModel):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in ["MVIT-16", "MVIT-32"]:
-                p = p.mean(dim=(-3, -2, -1))
+            if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
+               p = p.mean(dim=(-3, -2, -1))
+               # p = p[:, 1:, :].reshape(p.size(0), 8, 7, 7, p.size(2))
             else:
                 pass
         elif self.dimension == 'tabular':

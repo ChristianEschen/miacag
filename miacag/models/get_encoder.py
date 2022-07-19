@@ -27,7 +27,7 @@ def getPretrainedWeights(config, model, device):
                     map_location=device)
 
             if config['model']['backbone'] in \
-                    ['x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32']:
+                    ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
 
                 model.load_state_dict(loaded_model['model_state'])
             else:
@@ -50,7 +50,7 @@ def get_encoder(config, device):
         in_features = model.fc.in_features
         model = nn.Sequential(*list(model.children())[:-2])
         # model.fc = nn.Identity()
-    elif config['model']['backbone'] == 'r2plus1d_18':
+    elif config['model']['backbone'] == 'r2plus1_18':
         model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
             pretrained=False)
         if config['loaders']['mode'] != 'testing':
@@ -78,7 +78,7 @@ def get_encoder(config, device):
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
 
-    elif config['model']['backbone'] in ['MVIT-16', 'MVIT-32']:
+    elif config['model']['backbone'] in ["mvit_base_16x4", 'mvit_base_32x3']:
         import pytorchvideo.models.vision_transformers as VT
         model = VT.create_multiscale_vision_transformers(
             spatial_size=(config['loaders']['Crop_height'],
@@ -118,6 +118,6 @@ def get_encoder(config, device):
 
 def modelsRequiredPermute():
     model_list = [
-        'r3d_18', 'r2plus1d_18',
-        'x3d_l', 'x3d_s', 'MVIT-16', 'MVIT-32', 'slowfast8x8']
+        'r3d_18', 'r2plus1_18',
+        'x3d_l', 'x3d_s', "mvit_base_16x4", 'mvit_base_32x3', 'slowfast8x8']
     return model_list

@@ -242,13 +242,21 @@ class base_monai_loader(DataloaderBase):
                     self.config['loaders']['Crop_width'],
                     self.config['loaders']['Crop_depth']])
         else:
-            crop = RandSpatialCropd(
-                keys=features,
-                roi_size=[
-                    self.config['loaders']['Crop_height'],
-                    self.config['loaders']['Crop_width'],
-                    self.config['loaders']['Crop_depth']],
-                random_size=False)
+            if self.config['loaders']['val_method']['saliency'] != 'True':
+                crop = RandSpatialCropd(
+                    keys=features,
+                    roi_size=[
+                        self.config['loaders']['Crop_height'],
+                        self.config['loaders']['Crop_width'],
+                        self.config['loaders']['Crop_depth']],
+                    random_size=False)
+            else:
+                crop = CenterSpatialCropd(
+                    keys=features,
+                    roi_size=[
+                        self.config['loaders']['Crop_height'],
+                        self.config['loaders']['Crop_width'],
+                        self.config['loaders']['Crop_depth']])
         return crop
 
     def maybeCenterCropMIL(self, features):
@@ -352,13 +360,13 @@ class base_monai_loader(DataloaderBase):
 
     def maybeNormalize(self):
         if self.config['model']['backbone'] in [
-            'x3d_s', 'slowfast8x8', 'MVIT-16', 'MVIT-32', 'debug_3d']:
+            'x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3', 'debug_3d']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
                 divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] == 'r2plus1d_18':
+        elif self.config['model']['backbone'] == 'r2plus1_18':
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.43216, 0.394666, 0.37645),

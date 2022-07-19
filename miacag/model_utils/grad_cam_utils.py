@@ -9,7 +9,21 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import SimpleITK as sitk
 from monai.inferers import SimpleInferer, SaliencyInferer
 import copy
+from miacag.models.get_encoder import Identity
+from miacag.model_utils.GradCam_model import GradCAM, ClassifierOutputTarget
+#from miacag.model_utils.GradCam_monai import GradCAM
+import torch.optim
+from miacag.models.BuildModel import ModelBuilder
+from monai.transforms import LoadImage
 
+
+def resize3dVolume(img, output_size):
+    factors = (output_size[0]/img.shape[0],
+               output_size[1]/img.shape[1],
+               output_size[2]/img.shape[2])
+
+    new_array = zoom(img, (factors[0], factors[1], factors[2]))
+    return new_array
 
 def resizeVolume(img, output_size):
     factors = (output_size[0]/img.shape[0],
@@ -28,7 +42,8 @@ def normalize(img):
 def crop_center(img, cropz):
     z = img.shape[-1]
     startz = z//2-(cropz//2)
-    return img[:, :, :, startz:startz+cropz]
+    return img[:, :, startz:startz+cropz]
+
 
 def prepare_cv2_img(img, label, mask, data_path,
                     path_name,
@@ -49,88 +64,74 @@ def prepare_cv2_img(img, label, mask, data_path,
         label)
     if not os.path.isdir(path):
         mkDir(path)
-    img = img[0, 0, :, :, :]
-    img = np.expand_dims(img, 2)
-   # img2 = pydicom.read_file(data_path[0]).pixel_array
-    img2 = sitk.ReadImage(data_path[0])
-    img2 = sitk.GetArrayFromImage(img2)
-    img2 = np.transpose(img2, (1, 2, 0))
-    img2 = np.expand_dims(img2, 2)
-    img2 = crop_center(img2, img.shape[-1])
+    # for debug onyl:
+    # img_model_inp = img[0, 0, :, :, :]
+    # img_model_inp = np.expand_dims(img_model_inp, 2)
+    # img_model_inp = crop_center(img_model_inp, mask.shape[-1])
+
+    img_loaded, meta = LoadImage()(data_path[0])
+    img_loaded = crop_center(img_loaded, mask.shape[-1])
+    img_loaded = np.expand_dims(img_loaded, 2)
+
     mask = mask[0, 0, :, :, :]
-    mask = resizeVolume(mask, (img2.shape[0], img2.shape[1]))
-  #  mask = np.expand_dims(mask, 2)
-    for i in range(0, img2.shape[3]):
-        input2d = img[:, :, :, i]
-        input2d_2 = img2[:, :, :, i]
+    mask = resizeVolume(mask, (img_loaded.shape[0], img_loaded.shape[1]))
+
+    for i in range(0, img_loaded.shape[-1]):
+        input2d_2 = img_loaded[:, :, :, i]
         cam, heatmap, input2d_2 = show_cam_on_image(
             input2d_2,
-            mask[:, :, i]) # mask[:,:,:,i]
+            mask[:, :, i])
 
-        # input2d = np.flip(np.rot90(np.rot90(np.rot90(input2d))), 1)
-        # plt.imshow(input2d, cmap="gray", interpolation="None")
-        # plt.colorbar()
-        # plt.axis('off')
-        # plt.savefig(os.path.join(path, 'input{}.png'.format(i)))
-        # plt.clf()
+        input2d_2 = np.flip(np.rot90(np.rot90(np.rot90(input2d_2))), 1)
 
-        #input2d_2 = np.flip(np.rot90(np.rot90(np.rot90(input2d))), 1)
         plt.imshow(input2d_2, cmap="gray", interpolation="None")
         plt.colorbar()
         plt.axis('off')
         plt.savefig(os.path.join(path, 'input2{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
         plt.imshow(input2d_2, cmap="gray", interpolation="None")
-       # plt.colorbar()
         plt.savefig(os.path.join(path, 'input2_no_colormap{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
-
-        #cam = np.flip(np.rot90(np.rot90(np.rot90(cam))), 1)
+        cam = np.flip(np.rot90(np.rot90(np.rot90(cam))), 1)
         plt.imshow(cam, cmap="jet", interpolation="None")
         plt.colorbar()
         plt.axis('off')
         plt.savefig(os.path.join(path, 'cam{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
-        #heatmap = np.flip(np.rot90(np.rot90(np.rot90(heatmap))), 1)
+        heatmap = np.flip(np.rot90(np.rot90(np.rot90(heatmap))), 1)
         plt.imshow(heatmap, cmap="jet", interpolation="None")
         plt.colorbar()
         plt.axis('off')
         plt.savefig(os.path.join(path, 'heatmap{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
         plt.imshow(heatmap, cmap="jet", interpolation="None")
-        #plt.colorbar()
         plt.axis('off')
         plt.savefig(os.path.join(path, 'heatmap_no_colorbar{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
         fig = plt.figure(figsize=(16, 12))
-        #ax = plt.gca()
         fig.add_subplot(1, 2, 1)
-        # f, axarr = plt.subplots(1, 2)
-       # divider = make_axes_locatable(ax)
         plt.imshow(input2d_2, cmap="gray", interpolation="None")
-        # cax = divider.append_axes("right", size="5%", pad=0.05)
 
-        #plt.colorbar(im, cax)
-        # plt.colorbar()
         plt.axis('off')
 
         fig.add_subplot(1, 2, 2)
-        # f, axarr = plt.subplots(1, 2)
         plt.imshow(heatmap, cmap="jet", interpolation="None")
-        #cax = divider.append_axes("right", size="5%", pad=0.05)
-        #plt.colorbar(im2, cax)
-        #plt.colorbar()
         plt.axis('off')
 
         plt.savefig(os.path.join(path, 'twoplots{}.png'.format(i)))
         plt.clf()
+        plt.close()
 
-       # axarr[0, 1].imshow(image_datas[1])
 
 def show_cam_on_image(img, mask):
     img = normalize(img)
@@ -142,46 +143,80 @@ def show_cam_on_image(img, mask):
     cam = cam / (np.max(cam) + 1e-6)
     return cam, heatmap, img
 
-def calc_saliency_maps(model, inputs, config):
-    if config['loaders']['use_amp'] is True:
-        with torch.cuda.amp.autocast():
-            saliency = SaliencyInferer(
-                cam_name="GradCAM",
-                target_layers='module.encoder.6')
-    else:
-        if config['model']['backbone'] == 'r2plus1d_18':
-            layer_name = 'module.encoder.4.1.relu'
-        elif config['model']['backbone'] == 'x3d_s':
-            layer_name = 'module.encoder.5.post_conv'
-            layer_name = 'module.encoder.4.res_blocks.6.activation'
-        elif config['model']['backbone'] == 'debug_3d':
-            layer_name = 'module.encoder.layer1'
-        elif config['model']['backbone'] in ['MVIT-16', 'MVIT-32']:
-            layer_name = "module.encoder.blocks.15.attn.pool_v"
-        else:
-            layer_name = 'module.encoder.5.post_conv'
-        saliency = SaliencyInferer(
-                cam_name="GradCAM",
-                target_layers=layer_name)
 
-        cams = []
-        for c, label in enumerate(config['labels_names']):
-            model_copy = prepare_model_for_sm(model, config, c)
+def calc_saliency_maps(model, inputs, config, device):
+    if config['model']['backbone'] == 'r2plus1_18':
+        layer_name = 'module.encoder.4.1.relu'
+    elif config['model']['backbone'] == 'x3d_s':
+        layer_name = 'module.encoder.5.post_conv'
+        layer_name = 'module.encoder.4.res_blocks.6.activation'
+    elif config['model']['backbone'] == 'debug_3d':
+        layer_name = 'module.encoder.layer1'
+    elif config['model']['backbone'] in ["mvit_base_16x4", 'mvit_base_32x3']:
+        layer_name = "module.module.encoder.blocks.15.attn"
+        layer_name = "module.module.encoder.blocks.15.norm1"
+        layer_names = [model.module.module.encoder.blocks[-1].norm1]
+
+    else:
+        layer_name = 'module.encoder.5.post_conv'
+
+    cams = []
+    for c, label in enumerate(config['labels_names']):
+        # model.module.module.encoder.norm_embed = Identity()
+        BuildModel = ModelBuilder(config, device)
+        model = BuildModel()
+        if config['use_DDP'] == 'True':
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[device] if config["cpu"] == "False" else None)
+        model = prepare_model_for_sm(model, config, c)
+
+        if config['model']['backbone'] in [
+                "mvit_base_16x4", "mvit_base_32x3"]:
+            cam_f = GradCAM(model=model,
+                            target_layers=layer_names,
+                            reshape_transform=reshape_transform)
+            targets = [ClassifierOutputTarget(0)]
+            cam = cam_f(input_tensor=inputs, targets=targets)
+            cam = resize3dVolume(
+                cam[0, :, :, :],
+                (config['loaders']['Crop_height'],
+                    config['loaders']['Crop_width'],
+                    config['loaders']['Crop_depth']))
+            cam = np.expand_dims(np.expand_dims(cam, 0), 0)
+        else:
+
             saliency = SaliencyInferer(
                 cam_name="GradCAM",
                 target_layers=layer_name)
-            cam = saliency(network=model_copy.module, inputs=inputs)
-            cam = cam[0:1, :, :, :, :]
-            cams.append(cam)
-        return cams, config['labels_names']
+            cam = saliency(network=model.module, inputs=inputs)
+
+        cam = cam[0:1, :, :, :, :]
+        cams.append(cam)
+    return cams, config['labels_names']
+
+
+def reshape_transform(tensor, height=14, width=14):
+    tensor = tensor[:, 1:, :]
+    tensor = tensor.unsqueeze(dim=0)
+    result = torch.nn.functional.interpolate(
+        tensor,
+        scale_factor=(392/tensor.size(2), 1))
+    result = result.reshape(result.size(0), 8, 7, 7, result.size(-1))
+    # Bring the channels to the first dimension,
+    # like in CNNs.
+    result = result.permute(0, 4, 1, 2, 3)
+    return result
 
 
 def prepare_model_for_sm(model, config, c):
     if config['task_type'] in ['regression', 'classification']:
-        model.module.module.fc = model.module.module.fcs[c]
-        bound_method = model.module.module.forward_saliency.__get__(
-            model, model.module.module.__class__)
-        setattr(model.module.module, 'forward', bound_method)
+        copy_model = copy.deepcopy(model)
+        copy_model.module.module.fc = copy_model.module.module.fcs[c]
+        bound_method = copy_model.module.module.forward_saliency.__get__(
+            copy_model, copy_model.module.module.__class__)
+        setattr(copy_model.module.module, 'forward', bound_method)
+        return copy_model
     elif config['task_type'] == 'mil_classification':
         copy_model = copy.deepcopy(model)
         copy_model.module.module.attention = model.module.module.attention[c]
@@ -192,4 +227,4 @@ def prepare_model_for_sm(model, config, c):
         bound_method = copy_model.module.module.forward_saliency.__get__(
             copy_model, copy_model.module.module.__class__)
         setattr(copy_model.module.module, 'forward', bound_method)
-    return copy_model
+        return copy_model

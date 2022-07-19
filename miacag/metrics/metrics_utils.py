@@ -138,9 +138,10 @@ def get_metrics(outputs,
                 label_name,
                 metrics,
                 criterion,
-                config):
+                config,
+                metrics_dicts):
     
-    dicts = {}
+    #metrics_dicts = {}
     for metric in metrics:
         if metric.endswith(label_name):
             c = 0
@@ -157,22 +158,22 @@ def get_metrics(outputs,
                         labels,
                         num_classes=config['model']['num_classes'])
                     metrics[metric](y_pred=outputs, y=labels)
-                    dicts[metric] = metrics[metric]
+                    metrics_dicts[metric] = metrics[metric]
                 else:
                     # this is wrong, but it does not break the pipeline
                     metrics[metric](
                         y_pred=torch.tensor((1, 1)).unsqueeze(1),
                         y=torch.tensor((1, 1)).unsqueeze(1))
-                    dicts[metric] = metrics[metric]
+                    metrics_dicts[metric] = metrics[metric]
             elif metric.startswith('RMSE'):
                 metrics[metric](y_pred=outputs, y=torch.unsqueeze(labels, -1))
-                dicts[metric] = metrics[metric]
+                metrics_dicts[metric] = metrics[metric]
             elif metric.startswith('acc_top_5'):
-                dicts[metric] = \
+                metrics_dicts[metric] = \
                     corrects_top_batch(outputs, labels, topk=(1, 5))[1].item()
             elif metric.startswith('MeanIoU'):  # does not work properly i think
                 criterion = MeanIoU()
-                dicts[metric] = criterion(softmax_transform(outputs), labels)
+                metrics_dicts[metric] = criterion(softmax_transform(outputs), labels)
             elif metric.startswith('dice_global'):
                 post_trans_multiCat = Compose(
                     [Activations(softmax=True),
@@ -183,7 +184,7 @@ def get_metrics(outputs,
                 outputs = post_trans_multiCat(outputs)
                 dice_global = DiceMetric(include_background=True,
                                         reduction="mean")
-                dicts[metric] = dice_global(outputs, labels)[0]
+                metrics_dicts[metric] = dice_global(outputs, labels)[0]
 
             elif metric.startswith('dice_class_'):
                 if c < 1:
@@ -197,12 +198,12 @@ def get_metrics(outputs,
                                             reduction="mean_batch")
                     dice_channel_result = dice_channel(outputs, labels)[0]
                     for class_id in range(0, labels.shape[1]):
-                        dicts[metric[:-1]+str(class_id)] = \
+                        metrics_dicts[metric[:-1]+str(class_id)] = \
                             dice_channel_result[class_id]
                     c += 1
             else:
                 raise ValueError("Invalid metric %s" % repr(metric))
-    return dicts
+    return metrics_dicts
 
 
 def get_losses_metric(outputs,
@@ -210,24 +211,26 @@ def get_losses_metric(outputs,
                       running_losses,
                       losses,
                       criterion,
-                      config):
-    dicts = {}
+                      config,
+                      losses_metric
+                      ):
+    #losses_metric = {}
     for loss in losses:
         if loss.startswith('CE'):
             running_losses[loss].append(losses[loss])
-            dicts[loss] = running_losses[loss]
+            losses_metric[loss] = running_losses[loss]
         elif loss.startswith('MSE'):
             running_losses[loss].append(losses[loss])
-            dicts[loss] = running_losses[loss]
+            losses_metric[loss] = running_losses[loss]
         elif loss.startswith('L1'):
             running_losses[loss].append(losses[loss])
-            dicts[loss] = running_losses[loss]
+            losses_metric[loss] = running_losses[loss]
         elif loss.startswith('total'):
             running_losses[loss].append(losses[loss])
-            dicts[loss] = running_losses[loss]
+            losses_metric[loss] = running_losses[loss]
         else:
             raise ValueError("Invalid loss %s" % repr(loss))
-    return dicts
+    return losses_metric
 
 
 def get_loss_metric_class(config,
@@ -237,20 +240,26 @@ def get_loss_metric_class(config,
                           running_metric,
                           running_loss,
                           criterion):
+    metrics = {}
+    losses_metric = {}
     for count, label_name in enumerate(config['labels_names']):
         metrics = get_metrics(outputs[count],
                               data[label_name],
                               label_name,
                               running_metric,
                               criterion,
-                              config)
+                              config,
+                              metrics
+                              )
         losses_metric = get_losses_metric(
             outputs,
             data[label_name],
             running_loss,
             losses,
             criterion,
-            config)
+            config,
+            losses_metric
+            )
 
     return metrics, losses_metric
         

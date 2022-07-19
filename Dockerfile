@@ -16,10 +16,10 @@ RUN pip install --requirement /tmp/requirements.txt
 RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/X3D_S.pyth`
 RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/MVIT_B_16x4.pyth`
 RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/MVIT_B_32x3_f294077834.pyth`
-RUN `wget https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/R2PLUS1D_16x4_R50.pyth`
+RUN `wget https://download.pytorch.org/models/r2plus1d_18-91a641e6.pth`
 # move pretrained models to miacag
 RUN miapath=`python -c "import miacag, os; print(os.path.dirname(miacag.__file__))"` && \
     mv "X3D_S.pyth" "$miapath/models/torchhub/2D+T/x3d_s/model.pt" && \
     mv "MVIT_B_16x4.pyth" "$miapath/models/torchhub/2D+T/mvit_base_16x4/model.pt" && \
     mv "MVIT_B_32x3_f294077834.pyth" "$miapath/models/torchhub/2D+T/mvit_base_32x3/model.pt" && \
-    mv "R2PLUS1D_16x4_R50.pyth" "$miapath/models/torchhub/2D+T/r2plus1_18/model.pt"
+    mv "r2plus1d_18-91a641e6.pth" "$miapath/models/torchhub/2D+T/r2plus1_18/model.pt"

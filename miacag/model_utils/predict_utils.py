@@ -97,7 +97,8 @@ class Predictor(TestPipeline):
 def saliency_one_step(model, config, validation_loader, device):
     for data in validation_loader:
         data = get_data_from_loader(data, config, device)
-        cams, label_names = calc_saliency_maps(model, data['inputs'], config)
+        cams, label_names = calc_saliency_maps(model, data['inputs'],
+                                               config, device)
         data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
         patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
         studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
@@ -112,10 +113,13 @@ def saliency_one_step(model, config, validation_loader, device):
        # torch.distributed.barrier()
         if torch.distributed.get_rank() == 0:
             for c, cam in enumerate(cams):
+                if config['model']['backbone'] not in [
+                        'mvit_base_16x4', 'mvit_base_32x3']:
+                    cam = cam.cpu().numpy()
                 prepare_cv2_img(
                     data['inputs'].cpu().numpy(),
                     label_names[c],
-                    cam.cpu().numpy(),
+                    cam,
                     data_path,
                     path_name,
                     patientID,
@@ -123,6 +127,7 @@ def saliency_one_step(model, config, validation_loader, device):
                     seriesInstanceUID,
                     SOPInstanceUID,
                     config)
+
 
 def saliency_one_step_mil(model, config, validation_loader, device):
 

@@ -233,21 +233,27 @@ class MILModel(ImageToScalarModel):
     # we change the forward method for the model
     # to use the forward_saliency method
     def transform_func(self, transformer, c):
-        if self.config['loaders']['val_method']['saliency'] == 'True':
+        if (self.config['loaders']['val_method']['saliency'] == 'True'
+                and
+                self.config['loaders']['mode'] == 'prediction'):
             transformer = transformer
         else:
             transformer = transformer[c]
         return transformer
 
     def fcs_func(self, fcs, c):
-        if self.config['loaders']['val_method']['saliency'] == 'True':
+        if (self.config['loaders']['val_method']['saliency'] == 'True'
+                and
+                self.config['loaders']['mode'] == 'prediction'):
             fcs = fcs
         else:
             fcs = fcs[c]
         return fcs
 
     def attention_func(self, attention, c):
-        if self.config['loaders']['val_method']['saliency'] == 'True':
+        if (self.config['loaders']['val_method']['saliency'] == 'True'
+                and
+                self.config['loaders']['mode'] == 'prediction'):
             attention = attention
         else:
             attention = attention[c]

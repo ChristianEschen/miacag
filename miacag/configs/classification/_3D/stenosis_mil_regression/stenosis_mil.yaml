@@ -4,6 +4,8 @@ tensorboard_comment: 'test_v1'
 DataSetPath: "/home/gandalf/miacag/data/angio"
 query: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test: "SELECT * FROM ?schema_name.?table_name;"
+query_pred: "SELECT * FROM ?schema_name.?table_name;"
+
 query_transform: "SELECT * FROM ?schema_name.?table_name;"
 
 query_split: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
@@ -254,7 +256,7 @@ loaders:
   format: 'dicom'
   store_memory: False
 
-  use_amp: False
+  use_amp: True
   
 
   CropForeGround: False
@@ -265,19 +267,21 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 224 #224 #312 #224 #224 # 224
-  Resize_width: 224 #224 #312 #224 #224 # 224
-  Resize_depth: 32 #-1
+  Resize_height: 130 #224 #312 #224 #224 # 224
+  Resize_width: 130 #224 #312 #224 #224 # 224
+  Resize_depth: 16 #-1
 
   spatial_scaling: "False"
   temporal_scaling: "False"
   translate: "False"
   rotate: "False"
 
-  Crop_height: 224 #224 #312 #224 #224 # 224
-  Crop_width: 224 #224 #312 #224 #224 # 224
+  Crop_height: 130 #224 #312 #224 #224 # 224
+  Crop_width: 130 #224 #312 #224 #224 # 224
   Crop_depth: 16
-  batchSize: 1
+  batchSize: 2
+  nr_patches: 2 #"None" #2 #"None" #2 # None
+  nr_patches_max_cache: 7
 
 
   # validation method 

@@ -32,10 +32,11 @@ def convert_string_to_tuple(field):
 
 def test(config):
     config['loaders']['mode'] = 'testing'
-    if config['loaders']['val_method']['saliency'] == 'False':
-        config['loaders']['val_method']["samples"] = 10
+    # if config['loaders']['val_method']['saliency'] == 'False':
+    config['loaders']['val_method']["samples"] = 10
     if config["task_type"] == "mil_classification":
         config['loaders']['val_method']["samples"] = 1
+        config['loaders']['batchSize'] = 1
 
     set_random_seeds(random_seed=config['manual_seed'])
 

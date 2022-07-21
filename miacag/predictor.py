@@ -10,15 +10,31 @@ from miacag.models.BuildModel import ModelBuilder
 import os
 from miacag.model_utils.train_utils import set_random_seeds
 from miacag.tester import read_log_file, convert_string_to_tuple
+import shutil
+
+
+def maybe_remove_persistence_data(config):
+    cachDir = os.path.join(
+        config['model']['pretrain_model'],
+        'persistent_cache')
+    if torch.distributed.get_rank() == 0:
+        if os.path.exists(cachDir):
+            shutil.rmtree(cachDir)
 
 
 def pred(config, model_path):
     config['loaders']['mode'] = 'prediction'
+
     if config['loaders']['val_method']['saliency'] == 'False':
         config['loaders']['val_method']["samples"] = 10
-    if config['task_type'] != 'mil_classification':
+    if config['task_type'] == 'mil_classification':
+        config['loaders']['batchSize'] = 1
         config['loaders']['val_method']["samples"] = 10
     else:
+        config['loaders']['val_method']["samples"] = 1
+
+    if config['loaders']['val_method']['saliency'] == 'True':
+        config['loaders']['batchSize'] = 1
         config['loaders']['val_method']["samples"] = 1
     set_random_seeds(random_seed=config['manual_seed'])
 
@@ -28,6 +44,8 @@ def pred(config, model_path):
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
     config['model']['pretrain_model'] = model_path
+    maybe_remove_persistence_data(config)
+
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
     if config['use_DDP'] == 'True':

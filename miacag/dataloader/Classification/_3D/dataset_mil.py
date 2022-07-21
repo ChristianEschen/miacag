@@ -24,6 +24,7 @@ from copy import copy, deepcopy
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Union
+import random
 
 import numpy as np
 import torch
@@ -35,6 +36,7 @@ from monai.data.utils import SUPPORTED_PICKLE_MOD, convert_tables_to_dicts, pick
 from monai.transforms import Compose, Randomizable, ThreadUnsafe, Transform, apply_transform, convert_to_contiguous
 from monai.utils import MAX_SEED, deprecated_arg, get_seed, look_up_option, min_version, optional_import
 from monai.utils.misc import first
+from torch.utils.data.dataloader import default_collate
 
 if TYPE_CHECKING:
     from tqdm import tqdm
@@ -45,6 +47,41 @@ else:
 
 lmdb, _ = optional_import("lmdb")
 pd, _ = optional_import("pandas")
+from monai.transforms import CenterSpatialCropd, RandSpatialCropd, SpatialPad
+
+
+def get_random_patches_cache(stacked_data, config):
+    nr_patches = config['loaders']['nr_patches_max_cache']
+    if nr_patches != "None":
+        if stacked_data.shape[0] <= nr_patches:
+            return stacked_data
+        else:
+            idx = random.sample(
+                range(stacked_data.shape[0]), nr_patches)
+            stacked_data = stacked_data[idx]
+            return stacked_data
+    else:
+        return stacked_data
+
+
+def get_random_patches(stacked_data, config):
+    nr_patches = config['loaders']['nr_patches']
+    if nr_patches != "None":
+        if stacked_data.shape[0] == nr_patches:
+            return stacked_data
+        elif stacked_data.shape[0] < nr_patches:
+            idx = random.sample(
+                range(stacked_data.shape[0]),
+                nr_patches - stacked_data.shape[0])
+            stacked_data = torch.cat((stacked_data, stacked_data[idx]), dim=0)
+            return stacked_data
+        else:
+            idx = random.sample(
+                range(stacked_data.shape[0]), nr_patches)
+            stacked_data = stacked_data[idx]
+            return stacked_data
+    else:
+        return stacked_data
 
 
 class Dataset(_TorchDataset):
@@ -99,9 +136,9 @@ class Dataset(_TorchDataset):
             data_i_list.append(data_i_i)
         stacked_data = torch.stack([i['inputs'] for i in data_i_list], dim=0)
         data_i_i['inputs'] = stacked_data
-        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
+       # data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
         data_i_i["rowid"] = data_i["rowid"]
-        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+       # data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
         return data_i_i
 
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
@@ -297,6 +334,9 @@ class PersistentDataset(Dataset):
         data_i_i["rowid"] = item_transformed["rowid"]
         data_i_i['DcmPathFlatten_paths'] = item_transformed['DcmPathFlatten']
         data_i_i["SOPInstanceUID"] = item_transformed["SOPInstanceUID"]
+        data_i_i["SeriesInstanceUID"] = item_transformed["SeriesInstanceUID"]
+        data_i_i["StudyInstanceUID"] = item_transformed["StudyInstanceUID"]
+        data_i_i["PatientID"] = item_transformed["PatientID"]
 
         return data_i_i
 
@@ -311,10 +351,30 @@ class PersistentDataset(Dataset):
         if not isinstance(self.transform, Compose):
             raise ValueError("transform must be an instance of monai.transforms.Compose.")
         start_post_randomize_run = False
-        for _transform in self.transform.transforms:
-            if self.config['loaders']['mode'] != 'prediction':
-                raise ValueError(
-                    "persistent loaders is only supported for prediction mode")
+       # for _transform in self.transform.transforms:
+        if self.config['loaders']['mode'] not in ['testing', 'prediction']:
+            raise ValueError(
+                "persistent loaders is only supported for prediction mode")
+       # if 
+        if self.config['loaders']['val_method']['saliency'] == 'True':
+            crop = CenterSpatialCropd(
+                        keys='inputs',
+                        roi_size=[
+                            -1,
+                            self.config['loaders']['Crop_height'],
+                            self.config['loaders']['Crop_width'],
+                            self.config['loaders']['Crop_depth']])
+        else:
+            crop = RandSpatialCropd(
+                keys='inputs',
+                roi_size=[
+                    -1,
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']],
+                random_size=False)
+        item_transformed['inputs'] = crop(item_transformed)['inputs']
+
             # persistant 
             # if (
             #     start_post_randomize_run
@@ -322,7 +382,10 @@ class PersistentDataset(Dataset):
             #     or not isinstance(_transform, Transform)
             # ):
             #     start_post_randomize_run = True
-                item_transformed = apply_transform(_transform, item_transformed)
+            # if isinstance(_transform, Randomizable) or not isinstance(_transform, Transform):
+            #     item_transformed = apply_transform(_transform, item_transformed)
+       # print('ugly hack for prediction mode with mil')
+       # item_transformed['inputs'] = item_transformed['inputs'][:,:, :,:, 0:self.config['loaders']['Crop_depth']]
         return item_transformed
 
     def _cachecheck(self, item_transformed):
@@ -789,13 +852,16 @@ class CacheDataset(Dataset):
             data_i_list.append(data_i_i)
 
         stacked_data = torch.stack([i[self.features[0]] for i in data_i_list], dim=0)
+        stacked_data = get_random_patches_cache(
+            stacked_data,
+            self.config)
         data_i_i[self.features[0]] = stacked_data
 
         if self.as_contiguous:
             data_i_i = convert_to_contiguous(data_i_i, memory_format=torch.contiguous_format)
         data_i_i["rowid"] = data_i["rowid"]
-        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
-        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+       # data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
+       # data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
 
         return data_i_i
 
@@ -829,7 +895,9 @@ class CacheDataset(Dataset):
                         data_i = deepcopy(data_i)
                 data_i = apply_transform(_transform, data_i)
 
-
+        data_i['inputs'] = get_random_patches(
+            data_i['inputs'],
+            self.config)
         return data_i
         # data = self._cache[index_]
         #     if not isinstance(self.transform, Compose):

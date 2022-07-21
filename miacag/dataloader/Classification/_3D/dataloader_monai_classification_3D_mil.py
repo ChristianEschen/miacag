@@ -55,10 +55,11 @@ from miacag.dataloader.Classification._3D.dataset_mil import \
 def reorder_rows(df):
     temp = pd.pivot_table(
         df, index=['StudyInstanceUID', 'PatientID'],
-        values=['DcmPathFlatten', 'SOPInstanceUID'],
+        values=['DcmPathFlatten', 'SOPInstanceUID', 'SeriesInstanceUID'],
         aggfunc=lambda x: list(x))
     temp = temp.reset_index(level=[0, 1])
-    df = df.drop(columns=['DcmPathFlatten', 'SOPInstanceUID'])
+    df = df.drop(columns=[
+        'DcmPathFlatten', 'SOPInstanceUID', 'SeriesInstanceUID'])
     df = temp.merge(
         df, on=["PatientID", "StudyInstanceUID"],
         how="inner")
@@ -181,7 +182,8 @@ class val_monai_classification_loader(base_monai_loader):
 
         self.data = self.df[
             self.features + config['labels_names'] +
-            ['rowid', "SOPInstanceUID"]]
+            ['rowid', "SOPInstanceUID", "PatientID",
+             "StudyInstanceUID", "SeriesInstanceUID"]]
         self.data = self.data.to_dict('records')
 
 
@@ -190,7 +192,7 @@ class val_monai_classification_loader(base_monai_loader):
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
-                #DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+               # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),
@@ -199,6 +201,7 @@ class val_monai_classification_loader(base_monai_loader):
                 self.maybeToGpu(self.features),
                 self.maybeCenterCropMIL(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
+               # self.maybeDeleteFeatures()
                 ]
 
         val_transforms = Compose(val_transforms)
@@ -241,8 +244,9 @@ class val_monai_classification_loader(base_monai_loader):
                             copy_cache=True,
                             num_workers=self.config['num_workers'])
                 else:
-                    cachDir = os.path.join(self.config['output'],
-                                           'persistent_cache')
+                    cachDir = os.path.join(
+                        self.config['model']['pretrain_model'],
+                        'persistent_cache')
                     val_ds = PersistentDataset(
                             config=self.config,
                             features=self.features,

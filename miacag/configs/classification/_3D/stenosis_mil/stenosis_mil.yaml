@@ -4,6 +4,8 @@ tensorboard_comment: 'test_v1'
 DataSetPath: "/home/gandalf/miacag/data/angio"
 query: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
 query_test: "SELECT * FROM ?schema_name.?table_name;"
+query_pred: "SELECT * FROM ?schema_name.?table_name;"
+
 query_transform: "SELECT * FROM ?schema_name.?table_name;"
 
 query_split: "SELECT * FROM ?schema_name.?table_name WHERE phase IS DISTINCT FROM 'test';"
@@ -236,7 +238,7 @@ model:
   mil_mode: "att"
   trans_blocks: 4
   trans_dropout: 0.0
-  pretrained: "/home/gandalf/miacag/miacag/models/torchhub/3D/x3d_s" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
+  pretrained: "True" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_encoder: "None"
 # Data loader configuration
@@ -252,7 +254,7 @@ loaders:
   format: 'dicom'
   store_memory: False
 
-  use_amp: False
+  use_amp: True
   
 
   CropForeGround: False
@@ -263,26 +265,27 @@ loaders:
   pixdim_height: 4 # 0.213828125
   pixdim_width: 4 # 0.213828125
   pixdim_depth: 66 # 0.33 # 1/66.673
-  Resize_height: 224 #224 #312 #224 #224 # 224
-  Resize_width: 224 #224 #312 #224 #224 # 224
-  Resize_depth: 32 #-1
+  Resize_height: 130 #224 #312 #224 #224 # 224
+  Resize_width: 130 #224 #312 #224 #224 # 224
+  Resize_depth: -1
 
   spatial_scaling: "False"
   temporal_scaling: "False"
   translate: "False"
   rotate: "False"
 
-  Crop_height: 224 #224 #312 #224 #224 # 224
-  Crop_width: 224 #224 #312 #224 #224 # 224
+  Crop_height: 130 #224 #312 #224 #224 # 224
+  Crop_width: 130 #224 #312 #224 #224 # 224
   Crop_depth: 16
   batchSize: 1
-
+  nr_patches: 2 #"None" #2 #"None" #2 # None
+  nr_patches_max_cache: 7
 
   # validation method 
   val_method:
     type: patches #'sliding_window' # patches | sliding_window
     samples: 1
-    saliency: 'False'
+    saliency: 'True'
     misprediction: 'False'
     threshold_sten: 0.70
     threshold_ffr: 0.80
@@ -300,7 +303,7 @@ trainer:
 optimizer:
   type: "sgd" # 
   # initial learning rate
-  learning_rate: 0.10 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
+  learning_rate: 0.0020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
   # weight decay
   weight_decay: 0.0005 #5e-4 
   momentum: 0.9

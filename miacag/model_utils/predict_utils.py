@@ -8,7 +8,8 @@ import shutil
 import os
 from miacag.plots.plot_histogram import plot_histogram
 from miacag.metrics.metrics_utils import mkDir
-
+from miacag.models.BuildModel import ModelBuilder
+from miacag.model_utils.grad_cam_utils import prepare_model_for_sm
 
 class Predictor(TestPipeline):
     def __init__(self, model, criterion, config, device, test_loader):
@@ -43,8 +44,8 @@ class Predictor(TestPipeline):
                     self.insert_data_to_db(
                         self.test_loader, label, self.config)
                 shutil.rmtree(csv_files)
-                if os.path.exists('persistent_cache'):
-                    shutil.rmtree('persistent_cache')
+                
+        
             print('prediction pipeline done')
         else:
             if self.config['task_type'] == 'mil_classification':
@@ -55,11 +56,13 @@ class Predictor(TestPipeline):
                                 self.test_loader.val_loader, self.device)
             else:
                 raise ValueError('Not implemented')
+        if torch.distributed.get_rank() == 0:
+            cachDir = os.path.join(
+                            self.config['model']['pretrain_model'],
+                            'persistent_cache')
+            if os.path.exists(cachDir):
+                shutil.rmtree(cachDir)
 
-        if os.path.exists('persistent_cache'):
-            shutil.rmtree('persistent_cache')
-            print('saliency pipeline done')
-    
     def predict_one_epoch(self, validation_loader):
         self.model.eval()
         with torch.no_grad():
@@ -96,29 +99,29 @@ class Predictor(TestPipeline):
 
 def saliency_one_step(model, config, validation_loader, device):
     for data in validation_loader:
-        data = get_data_from_loader(data, config, device)
-        cams, label_names = calc_saliency_maps(model, data['inputs'],
-                                               config, device)
-        data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
-        patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
-        studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
-        seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
-        SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
-        if config['loaders']['val_method']['misprediction'] == 'True':
-            path_name = 'mispredictions'
-        elif config['loaders']['val_method']['misprediction'] == 'False':
-            path_name = 'correct'
-        else:
-            path_name = 'unknown'
-       # torch.distributed.barrier()
-        if torch.distributed.get_rank() == 0:
-            for c, cam in enumerate(cams):
+        for c, label_name in enumerate(config['labels_names']):
+            data = get_data_from_loader(data, config, device)
+            cam = calc_saliency_maps(model, data['inputs'],
+                                     config, device, c)
+            data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
+            patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
+            studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
+            seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
+            SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
+            if config['loaders']['val_method']['misprediction'] == 'True':
+                path_name = 'mispredictions'
+            elif config['loaders']['val_method']['misprediction'] == 'False':
+                path_name = 'correct'
+            else:
+                path_name = 'unknown'
+        # torch.distributed.barrier()
+            if torch.distributed.get_rank() == 0:
                 if config['model']['backbone'] not in [
                         'mvit_base_16x4', 'mvit_base_32x3']:
                     cam = cam.cpu().numpy()
                 prepare_cv2_img(
                     data['inputs'].cpu().numpy(),
-                    label_names[c],
+                    label_name,
                     cam,
                     data_path,
                     path_name,
@@ -132,57 +135,72 @@ def saliency_one_step(model, config, validation_loader, device):
 def saliency_one_step_mil(model, config, validation_loader, device):
 
     for data in validation_loader:
-        data = get_data_from_loader(data, config, device)
-        _, a = model.module.module.get_attention(data['inputs'])
-        max_index = torch.argmax(a).item()
-        a = a.detach().numpy()
-        image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
-        SOPInstanceUIDs = [i[0] for i in data['SOPInstanceUID']]
-        data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
-        patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
-        studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
-        seriesInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000e'][0]
-        SOPInstanceUID = data['DcmPathFlatten_meta_dict']['0008|0018'][0]
-        image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
-        # Decide name of dir (mis preds)
-        if config['loaders']['val_method']['misprediction'] == 'True':
-            path_name = 'mispredictions'
-        elif config['loaders']['val_method']['misprediction'] == 'False':
-            path_name = 'correct'
-        else:
-            path_name = 'unknown'
-        path = os.path.join(
-            config['output_directory'],
-            'saliency',
-            path_name,
-            patientID,
-            studyInstanceUID)
-        if not os.path.isdir(path):
-            mkDir(path)
+        for c, label_name in enumerate(config['labels_names']):
+            a, _ = get_attention_values(model, config, data, device, c)
+            image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
+            SOPInstanceUIDs = [i[0] for i in data['SOPInstanceUID']]
+            data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
+            patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
+            studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
+            seriesInstanceUIDs = [i[0] for i in data['SeriesInstanceUID']]
+            image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
+            if config['loaders']['val_method']['misprediction'] == 'True':
+                path_name = 'mispredictions'
+            elif config['loaders']['val_method']['misprediction'] == 'False':
+                path_name = 'correct'
+            else:
+                path_name = 'unknown'
+            path = os.path.join(
+                config['output_directory'],
+                'saliency',
+                path_name,
+                patientID,
+                studyInstanceUID)
+            if not os.path.isdir(path):
+                mkDir(path)
 
+            plot_histogram(SOPInstanceUIDs, a, path, label_name)
 
-        plot_histogram(SOPInstanceUIDs, a, path)
+            samples = data['inputs'].shape[1]
+            for i in range(0, samples):
+                cam = calc_saliency_maps(
+                    model,
+                    data['inputs'][:, i, :, :, :, :],
+                    config,
+                    device,
+                    c)
 
-        samples = data['inputs'].shape[1]
-        for i in range(0, samples):
-            cams, label_names = calc_saliency_maps(
-                model,
-                data['inputs'][:, i, :, :, :, :],
-                config)
-
-            # Calculate histogram
-        # torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                for c, cam in enumerate(cams):
+                # Calculate histogram
+            # torch.distributed.barrier()
+                if torch.distributed.get_rank() == 0:
+                    if config['model']['backbone'] not in [
+                            'mvit_base_16x4', 'mvit_base_32x3']:
+                        cam = cam.cpu().numpy()
                     prepare_cv2_img(
                         data['inputs'].cpu().numpy(),
-                        label_names[c],
-                        cam.cpu().numpy(),
-                        [image_paths[c]],
+                        label_name,
+                        cam,
+                        [image_paths[i]],
                         path_name,
                         patientID,
                         studyInstanceUID,
-                        seriesInstanceUID,
-                        SOPInstanceUID,
+                        seriesInstanceUIDs[c],
+                        SOPInstanceUIDs[c],
                         config)
 
+
+def get_attention_values(model, config, data, device, c):
+    BuildModel = ModelBuilder(config, device)
+    model = BuildModel()
+    if config['use_DDP'] == 'True':
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[device] if config["cpu"] == "False" else None)
+  #  model = prepare_model_for_sm(model, config, c)
+    _, a = model.module.module.get_attention(data['inputs'])
+    max_index = torch.argmax(a).item()
+    if config['cpu'] == 'True':
+        a = a.detach().numpy()
+    else:
+        a = a.cpu().detach().numpy()
+    return a, max_index

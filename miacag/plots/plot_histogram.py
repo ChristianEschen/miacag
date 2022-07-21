@@ -5,7 +5,7 @@ matplotlib.use('Agg')
 import os
 
 
-def plot_histogram(x, y, path):
+def plot_histogram(x, y, path, label_name):
     y = [i[0] for i in y.tolist()[0]]
     #fig = plt.figure()
 
@@ -14,7 +14,7 @@ def plot_histogram(x, y, path):
     plt.suptitle('Attention scores for the respective SOPinstanceUIDs')
     plt.xticks(rotation='82.5')
 
-    plt.savefig(os.path.join(path, 'attentionSOP.png'))
+    plt.savefig(os.path.join(path, label_name + '_attentionSOP.png'))
     plt.show()
     plt.close()
     plt.clf()
@@ -25,7 +25,7 @@ def plot_histogram(x, y, path):
     plt.suptitle('Attention scores for the respective instances')
     plt.xticks(rotation='82.5')
 
-    plt.savefig(os.path.join(path, 'attentionInstance.png'))
+    plt.savefig(os.path.join(path, label_name + '_attentionInstance.png'))
     plt.show()
     plt.close()
     plt.clf()

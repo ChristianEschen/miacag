@@ -242,7 +242,17 @@ class base_monai_loader(DataloaderBase):
                     self.config['loaders']['Crop_width'],
                     self.config['loaders']['Crop_depth']])
         else:
-            if self.config['loaders']['val_method']['saliency'] != 'True':
+            # before it was equal true. correct now?
+            if (self.config['loaders']['val_method']['saliency'] == 'True' and
+                    self.config['loaders']['mode'] == 'prediction'):
+
+                crop = CenterSpatialCropd(
+                    keys=features,
+                    roi_size=[
+                        self.config['loaders']['Crop_height'],
+                        self.config['loaders']['Crop_width'],
+                        self.config['loaders']['Crop_depth']])
+            else:
                 crop = RandSpatialCropd(
                     keys=features,
                     roi_size=[
@@ -250,25 +260,11 @@ class base_monai_loader(DataloaderBase):
                         self.config['loaders']['Crop_width'],
                         self.config['loaders']['Crop_depth']],
                     random_size=False)
-            else:
-                crop = CenterSpatialCropd(
-                    keys=features,
-                    roi_size=[
-                        self.config['loaders']['Crop_height'],
-                        self.config['loaders']['Crop_width'],
-                        self.config['loaders']['Crop_depth']])
         return crop
 
     def maybeCenterCropMIL(self, features):
         if self.config['loaders']['mode'] == 'training':
-            # temp = RandSpatialCropd(
-            #     keys=features,
-            #     roi_size=[
-            #         -1,
-            #         self.config['loaders']['Crop_height'],
-            #         self.config['loaders']['Crop_width'],
-            #         self.config['loaders']['Crop_depth']],
-            #     random_size=False)
+
             crop = MyCenterCropd(
                 keys=features,
                 roi_size=[
@@ -276,24 +272,32 @@ class base_monai_loader(DataloaderBase):
                     self.config['loaders']['Crop_height'],
                     self.config['loaders']['Crop_width'],
                     self.config['loaders']['Crop_depth']])
-            # crop.Randomizable = True
-            # crop.R = temp.R
-            # crop.hack = True
+
         else:
-            crop = MyCenterCropd(
-                keys=features,
-                roi_size=[
-                    self.config['loaders']['Crop_height'],
-                    self.config['loaders']['Crop_width'],
-                    self.config['loaders']['Crop_depth']])
-        #     crop = RandSpatialCropd(
-        #         keys=features,
-        #         roi_size=[
-        #             -1,
-        #             self.config['loaders']['Crop_height'],
-        #             self.config['loaders']['Crop_width'],
-        #             self.config['loaders']['Crop_depth']],
-        #         random_size=False)
+        #    if self.config['loaders']['val_method']['saliency'] == 'True':
+            # crop = MyCenterCropd(
+            #     keys=features,
+            #     roi_size=[
+            #         -1,
+            #         -1,
+            #         self.config['loaders']['Crop_height'],
+            #         self.config['loaders']['Crop_width'],
+            #         self.config['loaders']['Crop_depth']])
+            crop = CenterSpatialCropd(
+                    keys=features,
+                    roi_size=[
+                        self.config['loaders']['Crop_height'],
+                        self.config['loaders']['Crop_width'],
+                        self.config['loaders']['Crop_depth']])
+            # else:
+            #     crop = RandSpatialCropd(
+            #         keys=features,
+            #         roi_size=[
+            #             -1,
+            #             self.config['loaders']['Crop_height'],
+            #             self.config['loaders']['Crop_width'],
+            #             self.config['loaders']['Crop_depth']],
+            #         random_size=False)
         return crop
 
     def maybeTranslate(self):
@@ -400,18 +404,23 @@ class base_monai_loader(DataloaderBase):
         return crop
 
     def maybeDeleteFeatures(self):
-        if self.config['loaders']['val_method']['saliency'] != 'False':
+       # if self.config['loaders']['mode'] != 'predictions':
+        if (self.config['loaders']['val_method']['saliency'] == 'True' and
+                self.config['loaders']['mode'] == 'prediction'):
             deleter = DeleteItemsd(keys=self.features)
         else:
             deleter = Identityd(keys=self.features)
+
         return deleter
 
     def maybeDeleteMeta(self):
-        if self.config['loaders']['val_method']['saliency'] == 'False':
+        if (self.config['loaders']['val_method']['saliency'] == 'True' and
+                self.config['loaders']['mode'] in ['prediction']):
+            
+            deleter = Identityd(keys=self.features)
+        else:
             deleter = DeleteItemsd(
                 keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True)
-        else:
-            deleter = Identityd(keys=self.features)
         return deleter
 
 

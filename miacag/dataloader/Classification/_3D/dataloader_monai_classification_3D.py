@@ -229,8 +229,9 @@ class val_monai_classification_loader(base_monai_loader):
                             copy_cache=True,
                             num_workers=self.config['num_workers'])
                 else:
-                    cachDir = os.path.join(self.config['output'],
-                                           'persistent_cache')
+                    cachDir = os.path.join(
+                        self.config['model']['pretrain_model'],
+                        'persistent_cache')
                     val_ds = monai.data.PersistentDataset(
                             data=self.data_par_val, transform=val_transforms,
                             cache_dir=cachDir

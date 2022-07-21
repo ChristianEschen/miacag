@@ -10,6 +10,22 @@ import os
 from monai.data import DistributedWeightedRandomSampler, DistributedSampler
 from miacag.utils.sql_utils import getDataFromDatabase
 import numpy as np
+from torch.utils.data.dataloader import default_collate
+import collections.abc
+
+
+# def list_data_collate_mil(batch: collections.abc.Sequence):
+#     '''
+#         Combine instances from a list of dicts into a single dict, by stacking them along first dim
+#         [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+#         followed by the default collate which will form a batch BxNx3xHxW
+#     '''
+
+#     for i, item in enumerate(batch):
+#         data = item
+#         data["inputs"] = torch.stack([ix["inputs"] for ix in batch], dim=0)
+#         batch[i] = data
+#     return default_collate(batch)
 
 
 class ClassificationLoader():
@@ -80,7 +96,12 @@ class ClassificationLoader():
                 self.val_df,
                 config)
         val_ds = val_ds()
-    
+
+        # if config['task_type'] == 'mil_classification':
+        #     collate = list_data_collate_mil
+        # else:
+        #     collate = pad_list_data_collate
+        
         train_loader = ThreadDataLoader(
             train_ds,
             sampler=sampler,
@@ -97,7 +118,7 @@ class ClassificationLoader():
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
                 num_workers=0,
-                collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                 pin_memory=False,)
       
         return train_loader, val_loader, train_ds, val_ds

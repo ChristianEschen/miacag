@@ -57,7 +57,7 @@ model:
   dimension: 2D+T
   encoder_depth: 4
   in_channels: 1
-  backbone: "mvit_base_16x4" #"r2plus1_18" #"mvit_base_16x4" # "mvit_base_32x3" #"slowfast8x8" #r2plus1d_18 #r2plus1d_18 #x3d_s #x3d_l #r2plus1d_18 # x3d_l
+  backbone: "r2plus1_18" #"mvit_base_16x4" #"r2plus1_18" #"mvit_base_16x4" # "mvit_base_32x3" #"slowfast8x8" #r2plus1_18 #r2plus1_18 #x3d_s #x3d_l #r2plus1_18 # x3d_l
   num_classes: 1
   pretrained: "True" #"None" #/home/sauroman/mia/models/torchhub/3D/r2plus1_18 #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
   pretrain_model: "None" #"/home/sauroman/mia/models/torchhub/3D/mvit_base_16x4"
@@ -88,7 +88,7 @@ loaders:
   pixdim_depth: 66 # 0.33 # 1/66.673
   Resize_height: 224 #224 #312 #224 #224 # 224
   Resize_width: 224 #224 #312 #224 #224 # 224
-  Resize_depth: 16 #-1
+  Resize_depth: -1
 
   spatial_scaling: "False"
   temporal_scaling: "False"
@@ -105,7 +105,7 @@ loaders:
   val_method:
     type: patches #'sliding_window' # patches | sliding_window
     samples: 1
-    saliency: 'False'
+    saliency: 'True'
     misprediction: 'False'
     threshold_sten: 0.70
     threshold_ffr: 0.80
@@ -114,7 +114,7 @@ trainer:
   # how many iterations between validations
   validate_frequency: 10
   # max number of epochs
-  epochs: 100
+  epochs: 1
   # number of epochs before use early stopping
   max_stagnation: 1000000000000000000
 
@@ -122,7 +122,7 @@ trainer:
 optimizer:
   type: "sgd" # 
   # initial learning rate
-  learning_rate: 0.0020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
+  learning_rate: 0.00020 # 0.0003125 # 0.05*BS/256 -> 0.1 if BS=512
   # weight decay
   weight_decay: 0.0005 #5e-4 
   momentum: 0.9

@@ -54,7 +54,7 @@ def prepare_cv2_img(img, label, mask, data_path,
                     config):
 
     path = os.path.join(
-        config['output_directory'],
+        config['model']['pretrain_model'],
         'saliency',
         path_name,
         patientID,
@@ -144,7 +144,7 @@ def show_cam_on_image(img, mask):
     return cam, heatmap, img
 
 
-def calc_saliency_maps(model, inputs, config, device):
+def calc_saliency_maps(model, inputs, config, device, c):
     if config['model']['backbone'] == 'r2plus1_18':
         layer_name = 'module.encoder.4.1.relu'
     elif config['model']['backbone'] == 'x3d_s':
@@ -155,45 +155,42 @@ def calc_saliency_maps(model, inputs, config, device):
     elif config['model']['backbone'] in ["mvit_base_16x4", 'mvit_base_32x3']:
         layer_name = "module.module.encoder.blocks.15.attn"
         layer_name = "module.module.encoder.blocks.15.norm1"
-        layer_names = [model.module.module.encoder.blocks[-1].norm1]
+        target_layers = [model.module.module.encoder.blocks[-1].norm1]
+        #target_layers = [model.module.module.encoder.blocks[-1].mlp]
 
     else:
         layer_name = 'module.encoder.5.post_conv'
 
-    cams = []
-    for c, label in enumerate(config['labels_names']):
-        # model.module.module.encoder.norm_embed = Identity()
-        BuildModel = ModelBuilder(config, device)
-        model = BuildModel()
-        if config['use_DDP'] == 'True':
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[device] if config["cpu"] == "False" else None)
-        model = prepare_model_for_sm(model, config, c)
+    BuildModel = ModelBuilder(config, device)
+    model = BuildModel()
+    if config['use_DDP'] == 'True':
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[device] if config["cpu"] == "False" else None)
+    model = prepare_model_for_sm(model, config, c)
+    if config['model']['backbone'] in [
+            "mvit_base_16x4", "mvit_base_32x3"]:
+        target_layers = [model.module.module.encoder.blocks[-1].norm1]
+        cam_f = GradCAM(model=model,
+                        target_layers=target_layers,
+                        reshape_transform=reshape_transform)
+       # targets = [ClassifierOutputTarget(0)]
+        cam = cam_f(input_tensor=inputs)
+        cam = resize3dVolume(
+            cam[0, :, :, :],
+            (config['loaders']['Crop_height'],
+                config['loaders']['Crop_width'],
+                config['loaders']['Crop_depth']))
+        cam = np.expand_dims(np.expand_dims(cam, 0), 0)
+    else:
 
-        if config['model']['backbone'] in [
-                "mvit_base_16x4", "mvit_base_32x3"]:
-            cam_f = GradCAM(model=model,
-                            target_layers=layer_names,
-                            reshape_transform=reshape_transform)
-            targets = [ClassifierOutputTarget(0)]
-            cam = cam_f(input_tensor=inputs, targets=targets)
-            cam = resize3dVolume(
-                cam[0, :, :, :],
-                (config['loaders']['Crop_height'],
-                    config['loaders']['Crop_width'],
-                    config['loaders']['Crop_depth']))
-            cam = np.expand_dims(np.expand_dims(cam, 0), 0)
-        else:
+        saliency = SaliencyInferer(
+            cam_name="GradCAM",
+            target_layers=layer_name)
+        cam = saliency(network=model.module, inputs=inputs)
 
-            saliency = SaliencyInferer(
-                cam_name="GradCAM",
-                target_layers=layer_name)
-            cam = saliency(network=model.module, inputs=inputs)
-
-        cam = cam[0:1, :, :, :, :]
-        cams.append(cam)
-    return cams, config['labels_names']
+    cam = cam[0:1, :, :, :, :]
+    return cam
 
 
 def reshape_transform(tensor, height=14, width=14):

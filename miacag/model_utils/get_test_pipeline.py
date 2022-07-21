@@ -87,11 +87,11 @@ class TestPipeline():
                             sort_keys=True, indent=4,
                             separators=(',', ': ')))
             shutil.rmtree(csv_files)
-            cacheDir = os.path.join(config['output'],
-                                    'persistent_cache')
-            if os.path.exists(cacheDir):
-                shutil.rmtree(cacheDir)
-
+            cachDir = os.path.join(
+                            config['model']['pretrain_model'],
+                            'persistent_cache')
+            if os.path.exists(cachDir):
+                shutil.rmtree(cachDir)
 
     def get_test_segmentation_pipeline(self, model, criterion,
                                        config, test_loader,

@@ -54,7 +54,7 @@ class DataloaderBase(data.Dataset):
                     self.df[config['labels_names']] = \
                         self.df[config['labels_names']].astype(int)
                     self.class_counts = \
-                        self.df[config['labels_names']].value_counts().to_list()
+                        self.df[config['labels_names']].value_counts(ascending=True).to_list()
 
     def __len__(self):
         return self.num_samples

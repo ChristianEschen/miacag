@@ -100,7 +100,6 @@ def angio_classifier(cpu, num_workers, config_path):
             os.system("mkdir -p {output_dir}".format(
                 output_dir=output_directory))
 
-            
             trans_labels = [i + '_transformed' for i in config['labels_names']]
 
             torch.distributed.barrier()

@@ -1005,7 +1005,10 @@ class SmartCacheDataset(Randomizable, CacheDataset):
         self._replace_done: bool = False
         self._replace_mgr: Optional[threading.Thread] = None
 
-        super().__init__(data, transform, cache_num, cache_rate, num_init_workers, progress, copy_cache, as_contiguous)
+        super().__init__(
+            config=config, features=features, data=data, transform=transform,
+            cache_num=cache_num, cache_rate=cache_rate,
+            progress=progress, copy_cache=copy_
         if self._cache is None:
             self._cache = self._fill_cache()
         if self.cache_num >= len(data):

@@ -175,7 +175,7 @@ class val_monai_representation_loader(base_monai_representation_loader):
                                         transform=val_transforms)
         # val_loader = monai.data.CacheDataset(data=self.data,
         #                                      transform=val_transforms,
-        #                                      cache_rate=0.8)
+        #                                      'replace_rate'=0.8)
         return val_loader
 
 

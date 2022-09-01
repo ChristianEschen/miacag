@@ -1008,7 +1008,7 @@ class SmartCacheDataset(Randomizable, CacheDataset):
         super().__init__(
             config=config, features=features, data=data, transform=transform,
             cache_num=cache_num, cache_rate=cache_rate,
-            progress=progress, copy_cache=copy_
+            progress=progress, copy_cache=copy_cache)
         if self._cache is None:
             self._cache = self._fill_cache()
         if self.cache_num >= len(data):

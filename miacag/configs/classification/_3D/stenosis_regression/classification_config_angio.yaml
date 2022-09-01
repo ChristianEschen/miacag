@@ -68,7 +68,7 @@ task_type: "regression" #"classification"
 labels_names: ["sten_proc_2_midt_rca", "sten_proc_1_prox_rca"]
 weighted_sampler: "False"
 cache_num: 'None'
-cache_rate: 0.001 #0.25
+'replace_rate': 0.001 #0.25
 cache_test: 'False'
 loaders:
   #dimension order

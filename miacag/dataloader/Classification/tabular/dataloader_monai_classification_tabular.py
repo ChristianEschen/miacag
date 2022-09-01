@@ -200,7 +200,7 @@ class val_monai_classification_loader(base_monai_loader):
                         copy_cache=True,
                         cache_num=self.config['cache_num'],
                         num_init_workers=int(self.config['num_workers']/2),
-                        replace_rate=self.config['cache_rate'],
+                        replace_rate=self.config['replace_rate'],
                         num_replace_workers=int(self.config['num_workers']/2))
                 else:
                     val_ds = monai.data.CacheDataset(
@@ -254,7 +254,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
                     copy_cache=True,
                     cache_num=self.config['cache_num'],
                     num_init_workers=int(self.config['num_workers']/2),
-                    replace_rate=self.config['cache_rate'],
+                    replace_rate=self.config['replace_rate'],
                     num_replace_workers=int(self.config['num_workers']/2))
             else:
                 val_ds = monai.data.CacheDataset(

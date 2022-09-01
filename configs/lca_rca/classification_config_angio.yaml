@@ -60,7 +60,7 @@ labels_dict: {0: 0,
           20: 6}
 cache_num: 'None'
 cache_test: "False"
-cache_rate: 0.001 #0.25
+'replace_rate': 0.001 #0.25
 loaders:
   #dimension order
   format: 'dicom'

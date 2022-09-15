@@ -1,7 +1,7 @@
 import uuid
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 import yaml
 from miacag.preprocessing.split_train_val import splitter
 from miacag.utils.sql_utils import copy_table, add_columns
@@ -42,7 +42,8 @@ parser.add_argument(
 def angio_predict(cpu, num_workers, config_path, model_path):
     torch.distributed.init_process_group(
             backend="nccl" if cpu == "False" else "Gloo",
-            init_method="env://"
+            init_method="env://",
+            timeout=timedelta(seconds=1800)
             )
     # config_path = [
     #     os.path.join(config_path, i) for i in os.listdir(config_path)]
@@ -66,7 +67,6 @@ def angio_predict(cpu, num_workers, config_path, model_path):
                 experiment_name)
     output_table_name = config['table_name'] + '_' + experiment_name
 
-    trans_labels = [i + '_transformed' for i in config['labels_names']]
     # begin pipeline
     # 1. copy table
     torch.distributed.barrier()
@@ -81,21 +81,10 @@ def angio_predict(cpu, num_workers, config_path, model_path):
             'table_name_input': config['table_name'],
             'table_name_output': output_table_name})
 
-        add_columns({
-            'database': config['database'],
-            'username': config['username'],
-            'password': config['password'],
-            'host': config['host'],
-            'schema_name': config['schema_name'],
-            'table_name': output_table_name,
-            'table_name_output': output_table_name},
-                    trans_labels,
-                    ["int8"] * len(trans_labels))
-
-    config['labels_names'] = trans_labels
+     
 
     # add placeholder for confidences
-    conf = [i + '_confidences' for i in config['labels_names']]
+    confs = [i + '_confidences' for i in config['labels_names']]
 
     # add placeholder for predictions
     preds = [i + '_predictions' for i in config['labels_names']]
@@ -109,8 +98,8 @@ def angio_predict(cpu, num_workers, config_path, model_path):
             'schema_name': config['schema_name'],
             'table_name': output_table_name,
             'table_name_output': output_table_name},
-                    conf,
-                    ["VARCHAR"] * len(conf))
+                    confs,
+                    ["VARCHAR"] * len(confs))
 
         add_columns({
             'database': config['database'],

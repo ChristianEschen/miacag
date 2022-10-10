@@ -34,6 +34,7 @@ from monai.transforms import (
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandScaleIntensityd,
+    DataStatsd,
     ToDeviced)
 
 
@@ -111,6 +112,12 @@ class base_monai_loader(DataloaderBase):
     def getCopy1to3Channels(self):
         copy = RepeatChanneld(keys=self.features, repeats=3)
         return copy
+
+    def getClipChannels(self):
+        clip = Lambdad(
+                    keys=self.features,
+                    func=lambda x: x[0:3, :, :, :])
+        return clip
 
     def getMaybeRandCrop(self):
         if self.config['loaders']['val_method']['type'] == "patches":

@@ -29,6 +29,7 @@ from monai.transforms import (
     NormalizeIntensityd,
     Orientationd,
     RandFlipd,
+    DataStatsd,
     RandCropByPosNegLabeld,
     RandScaleIntensityd,
     RandShiftIntensityd,
@@ -80,6 +81,7 @@ class train_monai_classification_loader(base_monai_loader):
                 DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
+               # self.getClipChannels(),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
@@ -91,6 +93,7 @@ class train_monai_classification_loader(base_monai_loader):
                 self.CropTemporal(),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 DeleteItemsd(keys=self.features),
+                #DataStatsd(keys=self.features, allow_missing_keys=True)
                 ]
         train_transforms = Compose(train_transforms)
         train_transforms.set_random_state(seed=0)
@@ -167,13 +170,15 @@ class val_monai_classification_loader(base_monai_loader):
                 self.maybeDeleteMeta(),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
+                #self.getClipChannels(),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
-                self.maybeDeleteFeatures()
+                self.maybeDeleteFeatures(),
+               # DataStatsd(keys=self.features, allow_missing_keys=True)
                 ]
        # if self.config['loaders']['mode'] != 'testing':
         
@@ -195,7 +200,7 @@ class val_monai_classification_loader(base_monai_loader):
         #     fig_train = plt.figure()
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
-        val_transforms = Compose(val_transforms)
+        val_transforms = Compose(val_transforms, log_stats=True)
         val_transforms.set_random_state(seed=0)
         if self.config['use_DDP'] == 'True':
             self.data_par_val = monai.data.partition_dataset(
@@ -266,14 +271,16 @@ class val_monai_classification_loader_SW(base_monai_loader):
                 self.resampleORresize(),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
+              #  self.getClipChannels(),
                 ScaleIntensityd(keys=self.features),
                 NormalizeIntensityd(keys=self.features,
                                     channel_wise=True),
                 EnsureTyped(keys=self.features, data_type='tensor'),
 
                 ConcatItemsd(keys=self.features, name='inputs'),
+               # DataStatsd(keys=self.features, allow_missing_keys=True)
                 ]
-        val_transforms = Compose(val_transforms)
+        val_transforms = Compose(val_transforms,log_stats=True)
         if self.config['use_DDP'] == 'True':
             self.data_par_val = monai.data.partition_dataset(
                 data=self.data,

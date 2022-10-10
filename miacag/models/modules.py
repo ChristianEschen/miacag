@@ -57,7 +57,7 @@ class EncoderModel(nn.Module):
         super(EncoderModel, self).__init__()
 
         self.encoder, self.in_features = get_encoder(config, device)
-
+        
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
         z = self.encoder(x)

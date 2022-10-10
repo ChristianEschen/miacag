@@ -50,9 +50,18 @@ class ModelBuilder():
                     find_unused_parameters=True if self.config['loaders']['val_method']['saliency'] == "True" else False)
         return model
 
+    def drop_not_encoder_modules(self, state):
+        new_state = state.copy()
+
+        for key in state:
+            if key.startswith('encoder'):
+                pass
+            else:
+                new_state.pop(key, None)
+        return new_state
+
     def get_ImageToScalar_model(self):
         path_model = self.config['model']['pretrain_model']
-        path_encoder = self.config['model']['pretrain_encoder']
         # if self.config['task_type'] == "regression":
         #     from miacag.models.modules import RegressionModel as m
         # elif self.config['task_type'] == "classification":
@@ -63,22 +72,24 @@ class ModelBuilder():
             from miacag.models.milmodel3d import MILModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
-        if path_encoder != 'None':
-            model.module.encoder.load_state_dict(torch.load(path_encoder))
-
-        if path_model != 'None':
-            if self.config["use_DDP"] == "False":
-                #if self.config['use_DDP'] == 'True':
-                model.load_state_dict(
-                    torch.load(os.path.join(path_model, 'model.pt')))
-            else:
-                if torch.distributed.get_rank() == 0:
-                    if self.config['cpu'] == 'True':
-                        model.load_state_dict(
-                            torch.load(os.path.join(path_model, 'model.pt')))
-                    else:
-                        model.module.load_state_dict(
-                            torch.load(os.path.join(path_model, 'model.pt')))
+        # if path_encoder != 'None':
+        #     state = torch.load(os.path.join(path_encoder, 'model.pt'))
+        #     state = self.drop_not_encoder_modules(state)
+        #     model.module.load_state_dict(state)
+        if self.config['loaders']['mode'] in ['testing', 'prediction']:
+            if path_model != 'None':
+                if self.config["use_DDP"] == "False":
+                    #if self.config['use_DDP'] == 'True':
+                    model.load_state_dict(
+                        torch.load(os.path.join(path_model, 'model.pt')))
+                else:
+                    if torch.distributed.get_rank() == 0:
+                        if self.config['cpu'] == 'True':
+                            model.load_state_dict(
+                                torch.load(os.path.join(path_model, 'model.pt')))
+                        else:
+                            model.module.load_state_dict(
+                                torch.load(os.path.join(path_model, 'model.pt')))
         return model
 
     def get_segmentation_model(self):

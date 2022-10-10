@@ -30,6 +30,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
         data = to_device(data, device, ['inputs'])
         data = to_dtype(data, config)
         data = to_device(data, device, config['labels_names'])
+        #print('data shape', data['inputs'].shape)
     elif config['task_type'] == "representation_learning":
         if val_phase is False:
             if config['loaders']['store_memory'] is False:

@@ -13,27 +13,40 @@ class Identity(nn.Module):
 
 
 def getPretrainedWeights(config, model, device):
-    if config['model']['pretrained'] != "None":
+    if config['model']['pretrained'] == "True":
+        if config['model']['backbone'] not in ['debug_3d']:
+            if torch.distributed.get_rank() == 0:
+                dirname = os.path.dirname(__file__)
+                model_path = os.path.join(
+                                dirname,
+                                "torchhub",
+                                config['model']['dimension'],
+                                config['model']['backbone'],
+                                'model.pt')
+                loaded_model = torch.load(
+                        model_path,
+                        map_location=device)
+
+                if config['model']['backbone'] in \
+                        ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
+
+                    model.load_state_dict(loaded_model['model_state'])
+                else:
+                    model.load_state_dict(loaded_model)
+    elif config['model']['pretrained'] == "None":
+        pass
+        
+    else:
         if torch.distributed.get_rank() == 0:
             dirname = os.path.dirname(__file__)
             model_path = os.path.join(
-                            dirname,
-                            "torchhub",
-                            config['model']['dimension'],
-                            config['model']['backbone'],
+                            config['model']['pretrain_model'],
                             'model.pt')
             loaded_model = torch.load(
                     model_path,
                     map_location=device)
 
-            if config['model']['backbone'] in \
-                    ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
-
-                model.load_state_dict(loaded_model['model_state'])
-            else:
-                model.load_state_dict(loaded_model)
-    else:
-        pass
+            model.load_state_dict(loaded_model)
     return model
 
 
@@ -110,6 +123,7 @@ def get_encoder(config, device):
         from miacag.models.cnns import debug_3d
         in_features = 16
         model = debug_3d(in_features)
+        model = getPretrainedWeights(config, model, device)
 
     else:
         raise ValueError('not implemented')

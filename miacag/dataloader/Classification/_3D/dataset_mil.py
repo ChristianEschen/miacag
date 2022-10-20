@@ -50,10 +50,23 @@ pd, _ = optional_import("pandas")
 from monai.transforms import CenterSpatialCropd, RandSpatialCropd, SpatialPad
 
 
+def div_diff_tuple(diff):
+    val1 = diff%2
+    if val1 == 0:
+        return int(diff/2), int(diff/2)
+    else:
+        return int(diff/2)+1, int(diff/2)
+
 def get_random_patches_cache(stacked_data, config):
     nr_patches = config['loaders']['nr_patches_max_cache']
     if nr_patches != "None":
         if stacked_data.shape[0] <= nr_patches:
+            diff = nr_patches - stacked_data.shape[0]
+            pad_tuple = div_diff_tuple(diff)
+            stacked_data = torch.nn.functional.pad(
+                stacked_data,
+                (0, 0, 0, 0, 0, 0, 0, 0, pad_tuple[0], pad_tuple[1]),
+                "constant", 0)
             return stacked_data
         else:
             idx = random.sample(
@@ -830,6 +843,14 @@ class CacheDataset(Dataset):
         Args:
             idx: the index of the input data sequence.
         """
+        cropper = RandSpatialCropd(
+                keys='DcmPathFlatten',
+                roi_size=[
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']],
+                random_size=False)
+        
         data_i_list = []
         data_i = self.data[idx]
         for data_i_i in data_i[self.features[0]]:
@@ -849,7 +870,7 @@ class CacheDataset(Dataset):
                 data_i_i = apply_transform(_transform, data_i_i)
 
             #    transformed_i.append(data_i_i)
-            data_i_list.append(data_i_i)
+            data_i_list.append(cropper(data_i_i))
 
         stacked_data = torch.stack([i[self.features[0]] for i in data_i_list], dim=0)
         stacked_data = get_random_patches_cache(

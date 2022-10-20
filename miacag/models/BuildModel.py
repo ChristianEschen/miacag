@@ -47,7 +47,8 @@ class ModelBuilder():
             model = torch.nn.parallel.DistributedDataParallel(
                     model,
                     device_ids=[self.device] if self.config["cpu"] == "False" else None,
-                    find_unused_parameters=True if self.config['loaders']['val_method']['saliency'] == "True" else False)
+                    find_unused_parameters=True)
+                    #find_unused_parameters=True if self.config['loaders']['val_method']['saliency'] == "True" else False)
         return model
 
     def drop_not_encoder_modules(self, state):

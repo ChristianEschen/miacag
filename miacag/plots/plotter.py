@@ -16,6 +16,7 @@ from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil \
     import reorder_rows
+from decimal import Decimal
 
 
 def map_1abels_to_0neTohree():
@@ -232,6 +233,8 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         est2 = est.fit()
         r = est2.rsquared
         p = est2.pvalues[label_name]
+        p = '%.2E' % Decimal(p)
+
 
         for ax, title in zip(g.axes.flat, [label_name]):
             ax.set_title(title)
@@ -242,7 +245,7 @@ def plotStenoserTrueVsPred(sql_config, label_names,
                     f'R-squared = {r:.3f}',
                     fontsize=9, transform=ax.transAxes)
             ax.text(0.05, 0.9,
-                    f'p-value = {p:.3f}',
+                    "p-value = " + p,
                     fontsize=9,
                     transform=ax.transAxes)
             plt.show()
@@ -267,20 +270,9 @@ def plotRegression(sql_config, label_names,
         label_name_ori = label_name
         prediction_name = prediction_names[c]
         df_plot = df.dropna(
-            subset=[label_name],
+            subset=[label_name, prediction_name],
             how='any')
-        df_plot = df.dropna(
-            subset=[prediction_name],
-            how='any')
-        # proably wrong
-        # df_plot = df.dropna(
-        #     subset=[prediction_name],
-        #     how='any')
-        # if conv_conf == True:
-        #     df_plot = df_plot.drop_duplicates(
-        #             ['PatientID',
-        #             'StudyInstanceUID'])
-        ###
+
         df_plot, label_name = rename_columns(df_plot, label_name)
         df_plot = df_plot.astype({label_name: float})
         
@@ -294,6 +286,8 @@ def plotRegression(sql_config, label_names,
         est2 = est.fit()
         r = est2.rsquared
         p = est2.pvalues[label_name]
+        p = '%.2E' % Decimal(p)
+
 
         for ax, title in zip(g.axes.flat, [label_name]):
             ax.set_title(title)
@@ -302,7 +296,7 @@ def plotRegression(sql_config, label_names,
                     f'R-squared = {r:.3f}',
                     fontsize=9, transform=ax.transAxes)
             ax.text(0.05, 0.9,
-                    f'p-value = {p:.3f}',
+                    "p-value = " + p,
                     fontsize=9,
                     transform=ax.transAxes)
             plt.xlabel("True")

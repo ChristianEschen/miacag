@@ -1,7 +1,7 @@
 import uuid
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 import yaml
 from miacag.preprocessing.split_train_val import splitter
 from miacag.utils.sql_utils import copy_table, add_columns, \
@@ -48,7 +48,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
     if table_name_input is None:
         torch.distributed.init_process_group(
                 backend="nccl" if cpu == "False" else "Gloo",
-                init_method="env://"
+                init_method="env://",
+                timeout=timedelta(seconds=180000),
+                #find_unused_parameters=True
                 )
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]

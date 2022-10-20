@@ -193,6 +193,7 @@ class val_monai_classification_loader(base_monai_loader):
                 LoadImaged(keys=self.features),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
+                self.maybeDeleteMeta(),
                # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),

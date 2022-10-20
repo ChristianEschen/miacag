@@ -45,7 +45,7 @@ class splitter():
     def __init__(self, sql_config, labels_config=None):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
-        self.df = self.df.dropna(subset=sql_config["labels_names"], how='any')
+        #self.df = self.df.dropna(subset=sql_config["labels_names"], how='any')
 
     def groupEntriesPrPatient(self, df):
         '''Grouping entries pr patients'''

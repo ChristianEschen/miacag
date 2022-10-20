@@ -43,7 +43,7 @@ def angio_predict(cpu, num_workers, config_path, model_path):
     torch.distributed.init_process_group(
             backend="nccl" if cpu == "False" else "Gloo",
             init_method="env://",
-            timeout=timedelta(seconds=1800)
+            timeout=timedelta(seconds=180000)
             )
     # config_path = [
     #     os.path.join(config_path, i) for i in os.listdir(config_path)]

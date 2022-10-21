@@ -2,6 +2,7 @@ import torch.nn as nn
 from monai.losses import DiceLoss
 from monai.losses import DiceCELoss
 from miacag.model_utils.siam_loss import SimSiamLoss
+from miacag.models.modules import unique_counts
 import torch
 
 
@@ -57,7 +58,8 @@ def mae_loss_with_nans(input, target):
 
 def get_loss_func(config):
     criterions = []
-    for loss in config['loss']['name']:
+    loss_names, loss_name_counts = unique_counts(config)
+    for loss in loss_names:
         if loss == 'CE':
             criterion = nn.CrossEntropyLoss(
                 reduction='mean', ignore_index=99998)

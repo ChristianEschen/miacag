@@ -1,6 +1,7 @@
 from miacag.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
     mkDir, get_loss_metric_class
+from miacag.utils.common_utils import stack_labels
 import torch
 from miacag.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
@@ -147,44 +148,35 @@ def get_loss(config, outputs, labels, criterion):
     return loss
 
 
-def stack_labels(data, config):
-    stacked_data = []
-    for count_idx, label_name in enumerate(config['labels_names']):
-        loss_for_label = config['loss']['name'][count_idx]
-        if loss_for_label in ['MSE', 'L1', 'L1smooth']:
-            stacked_data.append(data[label_name])
-        elif loss_for_label in ['CE']:
-            print('not impleneted jet!!')
-        else:
-            raise ValueError('this loss is not implementeed:', loss_for_label)
-    return torch.stack(stacked_data, 1)
-
 def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
     loss_tot = loss_tot.requires_grad_()
     loss_uniques, count = unique_counts(config, remove_total=True)
+   # labels = stack_labels(data, config)
     for count_idx, loss_name in enumerate(loss_uniques):
-        labels = stack_labels(data, config)
+        labels = stack_labels(data, config, loss_name)
         loss = get_loss(
             config, outputs[count_idx],
             labels, criterion[count_idx])
         if torch.isnan(loss) == torch.tensor(True, device=device):
-            # ugly hack
-            if count_idx == 0:
-                t = torch.tensor([1]).float()
+            raise ValueError('the loss is nan!')
+            # # ugly hack
+            # if count_idx == 0:
+            #     t = torch.tensor([1]).float()
                 
-              #  t.requires_grad_()
-                losses.append(t)
-            else:
-                losses.append(losses[-1])
-            loss_tot = loss_tot
+            #   #  t.requires_grad_()
+            #     losses.append(t)
+            # else:
+            #     losses.append(losses[-1])
+            # loss_tot = loss_tot
 
         else:
             losses.append(loss)
             loss_tot = loss_tot + loss
     losses = [loss_indi.item() for loss_indi in losses]
+    losses = losses + [loss_tot.item()]
     return losses, loss_tot
 
 

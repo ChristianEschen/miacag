@@ -1,5 +1,6 @@
 import os
 from miacag.metrics.metrics import MeanIoU, softmax_transform, corrects_top, corrects_top_batch
+from miacag.utils.common_utils import stack_labels
 import collections
 from monai.metrics import DiceMetric
 from monai.transforms import (
@@ -171,7 +172,7 @@ def get_metrics(outputs,
                         y=torch.tensor((1, 1)).unsqueeze(1))
                     metrics_dicts[metric] = metrics[metric]
             elif metric.startswith('RMSE'):
-                metrics[metric](y_pred=outputs, y=torch.unsqueeze(labels, -1))
+                metrics[metric](y_pred=torch.unsqueeze(outputs, -1), y=torch.unsqueeze(labels, -1))
                 metrics_dicts[metric] = metrics[metric]
             elif metric.startswith('acc_top_5'):
                 metrics_dicts[metric] = \
@@ -263,9 +264,13 @@ def get_loss_metric_class(config,
                     config,
                     metrics
                     )
+    #labels = stack_labels(data, config)
+    for count_loss, loss_type in enumerate(loss_types):
+        labels = stack_labels(data, config, loss_type)
+        running_loss_dict = {loss_type: running_loss[loss_type]}
         losses_metric = get_losses_metric(
-            outputs,
-            data[label_name],
+            outputs[count_loss],
+            labels,
             running_loss,
             losses,
             criterion,
@@ -300,9 +305,10 @@ def normalize_metrics(running_metrics):
 
 def create_loss_dict(config, losses, loss):
     loss_list = []
-    for c, label_name in enumerate(config['labels_names']):
+    loss_types, loss_types_count = unique_counts(config)
+    for c, loss_name in enumerate(loss_types):
         loss_name = config['loss']['name'][c]
-        loss_list.append(loss_name + '_' + label_name)
+        loss_list.append(loss_name)
     loss_list = loss_list + ['total']
     losses = losses + [loss.item()]
     losses = dict(zip(loss_list, losses))

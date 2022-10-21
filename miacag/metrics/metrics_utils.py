@@ -31,6 +31,7 @@ from monai.transforms import (
     EnsureTyped,
     EnsureType,
 )
+from miacag.models.modules import unique_counts
 
 
 def convert_dict_to_str(labels_dict_val):
@@ -73,12 +74,16 @@ def mkDir(directory):
 
 def getMetricForEachLabel(metrics, config, ptype):
     metrics_labels = []
+    if ptype != 'loss':
    # for metric in metrics:
-    for c, label_name in enumerate(config['labels_names']):
-        #if metric != 'total':
-        metrics_labels.append(metrics[c] + '_' + label_name)
-    if ptype == 'loss':
-        metrics_labels = metrics_labels + ['total']
+        for c, label_name in enumerate(config['labels_names']):
+            #if metric != 'total':
+            metrics_labels.append(metrics[c] + '_' + label_name)
+    else:
+        loss_types, counts = unique_counts(config)
+        for c_idx, loss_type in enumerate(loss_types):
+            metrics_labels.append(loss_type)
+       # metrics_labels = metrics_labels + ['total']
     return metrics_labels
 
 
@@ -242,15 +247,22 @@ def get_loss_metric_class(config,
                           criterion):
     metrics = {}
     losses_metric = {}
-    for count, label_name in enumerate(config['labels_names']):
-        metrics = get_metrics(outputs[count],
-                              data[label_name],
-                              label_name,
-                              running_metric,
-                              criterion,
-                              config,
-                              metrics
-                              )
+    loss_types, loss_t_counts = unique_counts(config)
+
+    for count_label, label_name in enumerate(config['labels_names']):
+        loss_name = config['loss']['name'][count_label]
+        for count_loss, loss_type in enumerate(loss_types):
+            if loss_name == loss_type:
+           # output = outputs[count]
+                metrics = get_metrics(
+                    outputs[count_loss][:, count_label],
+                    data[label_name],
+                    label_name,
+                    running_metric,
+                    criterion,
+                    config,
+                    metrics
+                    )
         losses_metric = get_losses_metric(
             outputs,
             data[label_name],

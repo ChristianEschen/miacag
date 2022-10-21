@@ -12,7 +12,7 @@ from miacag.model_utils.grad_cam_utils import prepare_cv2_img
 import numpy as np
 from monai.visualize import CAM, GradCAM
 from miacag.model_utils.grad_cam_utils import calc_saliency_maps
-
+from miacag.models.modules import getCountsLoss, unique_counts
 
 def get_input_shape(config):
     if config['model']['dimension'] in ['2D+T', 3]:
@@ -147,19 +147,32 @@ def get_loss(config, outputs, labels, criterion):
     return loss
 
 
+def stack_labels(data, config):
+    stacked_data = []
+    for count_idx, label_name in enumerate(config['labels_names']):
+        loss_for_label = config['loss']['name'][count_idx]
+        if loss_for_label in ['MSE', 'L1', 'L1smooth']:
+            stacked_data.append(data[label_name])
+        elif loss_for_label in ['CE']:
+            print('not impleneted jet!!')
+        else:
+            raise ValueError('this loss is not implementeed:', loss_for_label)
+    return torch.stack(stacked_data, 1)
+
 def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
     loss_tot = loss_tot.requires_grad_()
-    for count, label_name in enumerate(config['labels_names']):
-
+    loss_uniques, count = unique_counts(config, remove_total=True)
+    for count_idx, loss_name in enumerate(loss_uniques):
+        labels = stack_labels(data, config)
         loss = get_loss(
-            config, outputs[count],
-            data[label_name], criterion[count])
+            config, outputs[count_idx],
+            labels, criterion[count_idx])
         if torch.isnan(loss) == torch.tensor(True, device=device):
             # ugly hack
-            if count == 0:
+            if count_idx == 0:
                 t = torch.tensor([1]).float()
                 
               #  t.requires_grad_()

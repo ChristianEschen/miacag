@@ -119,12 +119,19 @@ def get_encoder(config, device):
         in_features = 128
         model = projection_MLP(config['model']['incomming_features'],
                                in_features)
+    elif config['model']['backbone'] == 'r50':
+        from torchvision.models import resnet50, ResNet50_Weights
+        model = resnet50()
+        if config['loaders']['mode'] != 'testing':
+            model = getPretrainedWeights(config, model, device)
+        in_features = model.fc.in_features
+        model = nn.Sequential(*list(model.children())[:-2])
     elif config['model']['backbone'] == 'debug_3d':
         from miacag.models.cnns import debug_3d
         in_features = 16
         model = debug_3d(in_features)
         model = getPretrainedWeights(config, model, device)
-
+        
     else:
         raise ValueError('not implemented')
     return model, in_features

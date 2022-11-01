@@ -60,18 +60,18 @@ def div_diff_tuple(diff):
 def get_random_patches_cache(stacked_data, config):
     nr_patches = config['loaders']['nr_patches_max_cache']
     if nr_patches != "None":
-        if stacked_data.shape[0] <= nr_patches:
-            diff = nr_patches - stacked_data.shape[0]
+        if stacked_data.shape[-1] <= nr_patches:
+            diff = nr_patches - stacked_data.shape[-1]
             pad_tuple = div_diff_tuple(diff)
             stacked_data = torch.nn.functional.pad(
                 stacked_data,
-                (0, 0, 0, 0, 0, 0, 0, 0, pad_tuple[0], pad_tuple[1]),
+                (pad_tuple[0], pad_tuple[1], 0, 0, 0, 0, 0, 0),
                 "constant", 0)
             return stacked_data
         else:
             idx = random.sample(
-                range(stacked_data.shape[0]), nr_patches)
-            stacked_data = stacked_data[idx]
+                range(stacked_data.shape[-1]), nr_patches)
+            stacked_data = stacked_data[:, :, :, idx]
             return stacked_data
     else:
         return stacked_data
@@ -142,9 +142,6 @@ class Dataset(_TorchDataset):
             for n in self.config['labels_names']:
 
                 data_i_i[n] = data_i[n]
-            # data_i_i = apply_transform(
-            #     self.transform, data_i_i) \
-            #     if self.transform is not None else data_i
             for _transform in self.transform.transforms:
                 # execute all the deterministic transforms
                 if isinstance(_transform, Randomizable) \
@@ -156,8 +153,14 @@ class Dataset(_TorchDataset):
                     isinstance(_transform, ThreadUnsafe) else _transform
                 data_i_i = apply_transform(_xform, data_i_i)
 
+        
             data_i_list.append(data_i_i)
-        stacked_data = torch.stack([i['DcmPathFlatten'] for i in data_i_list], dim=0)
+        stacked_data = torch.concat(
+            [i[self.features[0]] for i in data_i_list], dim=3)
+        # stacked_data = get_random_patches_cache(
+        #     stacked_data,
+        #     self.config)
+        stacked_data = stacked_data.permute(3, 0, 1, 2)
         data_i_i['inputs'] = stacked_data
         data_i_i["rowid"] = data_i["rowid"]
         data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
@@ -166,27 +169,9 @@ class Dataset(_TorchDataset):
         data_i_i["StudyInstanceUID"] = data_i["StudyInstanceUID"]
         data_i_i["PatientID"] = data_i["PatientID"]
         data_i_i['inputs'] = stacked_data
-       # data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
-        data_i_i["rowid"] = data_i["rowid"]
-        if self.config['loaders']['val_method']['saliency'] == 'True':
-            crop = CenterSpatialCropd(
-                        keys='inputs',
-                        roi_size=[
-                            -1,
-                            self.config['loaders']['Crop_height'],
-                            self.config['loaders']['Crop_width'],
-                            self.config['loaders']['Crop_depth']])
-        else:
-            crop = RandSpatialCropd(
-                keys='inputs',
-                roi_size=[
-                    -1,
-                    self.config['loaders']['Crop_height'],
-                    self.config['loaders']['Crop_width'],
-                    self.config['loaders']['Crop_depth']],
-                random_size=False)
-        data_i_i['inputs'] = crop(data_i_i)['inputs']
-       # data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+        if self.config['loaders']['val_method']['max_patches'] != 'None':
+            max_p = self.config['loaders']['val_method']['max_patches']
+            data_i_i['inputs'] = data_i_i['inputs'][0:max_p]
         return data_i_i
 
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
@@ -376,8 +361,14 @@ class PersistentDataset(Dataset):
                     isinstance(_transform, ThreadUnsafe) else _transform
                 data_i_i = apply_transform(_xform, data_i_i)
             data_i_list.append(data_i_i)
-        stacked_data = torch.stack(
-            [i[self.features[0]] for i in data_i_list], dim=0)
+        # stacked_data = torch.stack(
+        #     [i[self.features[0]] for i in data_i_list], dim=0)
+        stacked_data = torch.concat(
+            [i[self.features[0]] for i in data_i_list], dim=3)
+        # stacked_data = get_random_patches_cache(
+        #     stacked_data,
+        #     self.config)
+        stacked_data = stacked_data.permute(3, 0, 1, 2)
         data_i_i['inputs'] = stacked_data
         data_i_i["rowid"] = item_transformed["rowid"]
         data_i_i['DcmPathFlatten_paths'] = item_transformed['DcmPathFlatten']
@@ -403,25 +394,37 @@ class PersistentDataset(Dataset):
         if self.config['loaders']['mode'] not in ['testing', 'prediction']:
             raise ValueError(
                 "persistent loaders is only supported for prediction mode")
-        if self.config['loaders']['val_method']['saliency'] == 'True':
-            crop = CenterSpatialCropd(
-                        keys='inputs',
-                        roi_size=[
-                            -1,
-                            self.config['loaders']['Crop_height'],
-                            self.config['loaders']['Crop_width'],
-                            self.config['loaders']['Crop_depth']])
-        else:
-            crop = RandSpatialCropd(
-                keys='inputs',
-                roi_size=[
-                    -1,
-                    self.config['loaders']['Crop_height'],
-                    self.config['loaders']['Crop_width'],
-                    self.config['loaders']['Crop_depth']],
-                random_size=False)
-        item_transformed['inputs'] = crop(item_transformed)['inputs']
+       # if 
+        # if self.config['loaders']['val_method']['saliency'] == 'True':
+        #     crop = CenterSpatialCropd(
+        #                 keys='inputs',
+        #                 roi_size=[
+        #                     -1,
+        #                     self.config['loaders']['Crop_height'],
+        #                     self.config['loaders']['Crop_width'],
+        #                     self.config['loaders']['Crop_depth']])
+        # else:
+        #     crop = RandSpatialCropd(
+        #         keys='inputs',
+        #         roi_size=[
+        #             -1,
+        #             self.config['loaders']['Crop_height'],
+        #             self.config['loaders']['Crop_width'],
+        #             self.config['loaders']['Crop_depth']],
+        #         random_size=False)
+        item_transformed['inputs'] = item_transformed['inputs']
 
+            # persistant 
+            # if (
+            #     start_post_randomize_run
+            #     or isinstance(_transform, Randomizable)
+            #     or not isinstance(_transform, Transform)
+            # ):
+            #     start_post_randomize_run = True
+            # if isinstance(_transform, Randomizable) or not isinstance(_transform, Transform):
+            #     item_transformed = apply_transform(_transform, item_transformed)
+       # print('ugly hack for prediction mode with mil')
+       # item_transformed['inputs'] = item_transformed['inputs'][:,:, :,:, 0:self.config['loaders']['Crop_depth']]
         return item_transformed
 
     def _cachecheck(self, item_transformed):
@@ -893,12 +896,13 @@ class CacheDataset(Dataset):
                 data_i_i = apply_transform(_transform, data_i_i)
 
             #    transformed_i.append(data_i_i)
-            data_i_list.append(cropper(data_i_i))
+            data_i_list.append(data_i_i)
 
-        stacked_data = torch.stack([i[self.features[0]] for i in data_i_list], dim=0)
+        stacked_data = torch.concat([i[self.features[0]] for i in data_i_list], dim=3)
         stacked_data = get_random_patches_cache(
             stacked_data,
             self.config)
+        stacked_data = stacked_data.permute(3, 0, 1, 2)
         data_i_i[self.features[0]] = stacked_data
 
         if self.as_contiguous:

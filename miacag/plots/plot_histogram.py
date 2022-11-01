@@ -12,7 +12,7 @@ def plot_histogram(x, y, path, label_name):
     plt.barh(x, y)
 
     plt.suptitle('Attention scores for the respective SOPinstanceUIDs')
-    plt.xticks(rotation='82.5')
+    plt.xticks(rotation=82.5)
 
     plt.savefig(os.path.join(path, label_name + '_attentionSOP.png'))
     plt.show()
@@ -23,7 +23,7 @@ def plot_histogram(x, y, path, label_name):
     plt.bar(x, y)
 
     plt.suptitle('Attention scores for the respective instances')
-    plt.xticks(rotation='82.5')
+    plt.xticks(rotation=82.5)
 
     plt.savefig(os.path.join(path, label_name + '_attentionInstance.png'))
     plt.show()

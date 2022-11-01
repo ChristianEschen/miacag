@@ -56,15 +56,17 @@ class TestPipeline():
         stop = time.time()
         print('time for testing:', stop-start)
         for count, label in enumerate(config['labels_names']):
-            csv_files = self.saveCsvFiles(label, confidences[count],
-                                            index, config)
+            csv_files = self.saveCsvFiles(label, confidences,
+                                            index, config, count)
         torch.distributed.barrier()
         if torch.distributed.get_rank() == 0:
             for count, label in enumerate(config['labels_names']):
                 test_loader.val_df = self.buildPandasResults(
                     label,
                     test_loader.val_df,
-                    csv_files
+                    csv_files,
+                    count,
+                    config
                     )
                 #self.resetDataPaths(test_loader, config)
                 self.insert_data_to_db(test_loader, label, config)
@@ -107,7 +109,15 @@ class TestPipeline():
                                        saliency_maps=False)
         testModule()
 
-    def buildPandasResults(self, label_name, val_df, csv_files):
+    def get_output_pr_class(self, outputs, class_idx):
+        outs = []
+        for row in outputs[0]:
+            for idx, value in enumerate(row):
+                if idx == class_idx:
+                    outs.append(value.item())
+        return outs
+
+    def buildPandasResults(self, label_name, val_df, csv_files, count, config):
         filename = os.path.join(csv_files, label_name)
         df_pred = self.appendDataframes(filename)
         df_pred['rowid'] = df_pred['rowid'].astype(float).astype(int)
@@ -128,8 +138,19 @@ class TestPipeline():
         val_df_conf = pd.DataFrame()
         val_df_conf[label_name + '_confidences'] = val_df.groupby(
             'rowid')[label_name + '_confidences'].apply(np.mean)
-        val_df_conf[label_name + '_predictions'] = \
-            val_df_conf[label_name + '_confidences'].apply(np.argmax)
+        if config['loss']['name'][count].startswith('CE'):
+            val_df_conf[label_name + '_predictions'] = \
+                val_df_conf[label_name + '_confidences'].apply(np.argmax)
+        elif config['loss']['name'][count] in ['MSE', 'L1', 'L1smooth']:
+            val_df_conf[label_name + '_predictions'] = \
+                val_df_conf[label_name + '_confidences'].astype(float)
+        elif config['loss']['name'][count] == 'BCE_multilabel':
+            val_df_conf[label_name + '_predictions'] = \
+                val_df_conf[label_name + '_confidences'].apply(
+                    np.round).astype(int)
+        else:
+            raise ValueError(
+                'not implemented loss: ', config['loss']['name'][count])
         val_df = val_df.merge(
             val_df_conf,
             left_on='rowid',
@@ -172,14 +193,25 @@ class TestPipeline():
     def tuple2key(self, t, delimiter=u';'):
         return delimiter.join(t)
 
-    def saveCsvFiles(self, label_name, confidences, index, config):
+    def saveCsvFiles(self, label_name, confidences, index, config, count):
+        if config['loss']['name'][count].startswith('CE'):
+            confidences = confidences[count]
+            confidence_col = [
+                label_name + '_confidence_' +
+                str(i) for i in range(0, config['model']['num_classes'][count])]
+        else:
+            confidences = self.get_output_pr_class(confidences, count)
+            confidences = np.expand_dims(confidences, 1)
+            confidence_col = [
+                label_name + '_confidence_' +
+                str(i) for i in range(0, 1)]
         csv_files = os.path.join(config['output_directory'], 'csv_files_pred')
         mkFolder(csv_files)
         label_name_csv_files = os.path.join(csv_files, label_name)
         mkFolder(label_name_csv_files)
-        array = np.concatenate((confidences.numpy(), np.expand_dims(index.numpy(), 1)), axis=1)
-        confidence_col = [
-            label_name + '_confidence_' + str(i) for i in range(0, confidences.shape[-1])]
+        array = np.concatenate((confidences,
+            np.expand_dims(index.numpy(), 1)), axis=1)
+      
         cols = confidence_col + ['rowid']
         df = pd.DataFrame(
             array,

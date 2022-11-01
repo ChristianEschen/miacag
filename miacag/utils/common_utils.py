@@ -8,9 +8,12 @@ def stack_labels(data, config, loss_name):
         if loss_name == loss_for_label:
             if loss_for_label in ['MSE', 'L1', 'L1smooth']:
                 stacked_data.append(data[label_name])
-            elif loss_for_label in ['CE']:
+            elif loss_for_label in ['BCE_multilabel']:
+                stacked_data.append(data[label_name])
+            elif loss_for_label.startswith('CE'):
                 stacked_data.append(data[label_name])
              #   print('not impleneted jet!!')
+             
             else:
                 raise ValueError('this loss is not implementeed:', loss_for_label)
     return torch.stack(stacked_data, 1)

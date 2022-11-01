@@ -96,6 +96,8 @@ def init_metrics(metrics, config, ptype=None):
     for i in idx:
         if metrics[i].startswith('CE'):
             dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('BCE_multilabel'):
+            dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('L1'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('L1smooth'):
@@ -145,7 +147,8 @@ def get_metrics(outputs,
                 metrics,
                 criterion,
                 config,
-                metrics_dicts):
+                metrics_dicts,
+                num_classes):
     
     #metrics_dicts = {}
     for metric in metrics:
@@ -154,17 +157,25 @@ def get_metrics(outputs,
             if metric.startswith('acc_top_1'):
                 labels, outputs = remove_nans(labels, outputs)
                 if outputs.nelement() != 0:
-                    post_trans = Compose(
-                        [EnsureType(),
-                        Activations(softmax=True),
-                        AsDiscrete(threshold=0.5)]
-                        )
-                    outputs = [post_trans(i) for i in decollate_batch(outputs)]
                     labels = F.one_hot(
                         labels,
-                        num_classes=config['model']['num_classes'])
-                    metrics[metric](y_pred=outputs, y=labels)
-                    metrics_dicts[metric] = metrics[metric]
+                        num_classes=num_classes)
+                    if metric.startswith('acc_top_1_BCE'):
+                        outputs = torch.nn.Sigmoid()(outputs)
+                        outputs = (outputs >= 0.5).float()
+                        metrics[metric](
+                            y_pred=torch.unsqueeze(outputs, -1), y=labels)
+                        metrics_dicts[metric] = metrics[metric]
+                    else:
+                        post_trans = Compose(
+                            [EnsureType(),
+                             Activations(softmax=True),
+                             AsDiscrete(threshold=0.5)]
+                            )
+                        outputs = [post_trans(i) for i in decollate_batch(outputs)]
+                        metrics[metric](y_pred=outputs, y=labels)
+                        metrics_dicts[metric] = metrics[metric]
+
                 else:
                     # this is wrong, but it does not break the pipeline
                     metrics[metric](
@@ -228,6 +239,9 @@ def get_losses_metric(outputs,
         elif loss.startswith('MSE'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
+        elif loss.startswith('BCE'):
+            running_losses[loss].append(losses[loss])
+            losses_metric[loss] = running_losses[loss]
         elif loss.startswith('L1'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
@@ -237,6 +251,19 @@ def get_losses_metric(outputs,
         else:
             raise ValueError("Invalid loss %s" % repr(loss))
     return losses_metric
+
+
+def wrap_outputs(outputs, count_loss, loss_name, count_label):
+    if loss_name.startswith('CE'):
+        return outputs[count_loss]
+    elif loss_name in ['MSE', 'L1', 'L1smooth']:
+        outputs = outputs[count_loss][:, count_label]
+        return outputs
+    elif loss_name in ['BCE_multilabel']:
+        outputs = outputs[count_loss][:, count_label]
+        return outputs
+    else:
+        raise ValueError('loss not implemented:', loss_name)
 
 
 def get_loss_metric_class(config,
@@ -254,15 +281,17 @@ def get_loss_metric_class(config,
         loss_name = config['loss']['name'][count_label]
         for count_loss, loss_type in enumerate(loss_types):
             if loss_name == loss_type:
-           # output = outputs[count]
+                outputs_c = wrap_outputs(outputs, count_loss,
+                                       loss_name, count_label)
                 metrics = get_metrics(
-                    outputs[count_loss][:, count_label],
+                    outputs_c,
                     data[label_name],
                     label_name,
                     running_metric,
                     criterion,
                     config,
-                    metrics
+                    metrics,
+                    config['model']['num_classes'][count_label]
                     )
     #labels = stack_labels(data, config)
     for count_loss, loss_type in enumerate(loss_types):
@@ -285,6 +314,8 @@ def normalize_metrics(running_metrics):
     metric_dict = {}
     for running_metric in running_metrics:
         if running_metric.startswith('CE'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('BCE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('total'):
             metric_tb = running_metrics[running_metric].aggregate().item()

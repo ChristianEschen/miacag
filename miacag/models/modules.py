@@ -20,11 +20,16 @@ def getCountsLoss(losses):
     return count_regression, count_classification
 
 
+def get_num_class_for_loss_group(losses, loss_group, num_classes):
+    for loss in range(0, len(losses)):
+        if losses[loss] == loss_group:
+            return num_classes[loss]
+
+
 def unique_counts(config, remove_total=False):
-    losses = config['loss']['name']
     if remove_total:
-        if 'total' in losses:
-            losses.remove('total')
+        if 'total' in config['loss']['name']:
+            config['loss']['name'].remove('total')
     loss_uniques, count = np.unique(np.array(
         config['loss']['name']), return_counts=True)
     count = count.tolist()
@@ -104,10 +109,19 @@ class ImageToScalarModel(EncoderModel):
         for loss_count_idx, loss_type in enumerate(loss_uniques):
             count_loss = counts[loss_count_idx]
             if count_loss > 0:
-                if loss_type in ['CE']:
+                num_classes = get_num_class_for_loss_group(
+                    self.config['loss']['name'],
+                    loss_type, self.config['model']['num_classes'])
+                if loss_type.startswith('CE'):
                     self.fcs.append(nn.Linear(
                             self.in_features,
-                            count_loss).to(device))
+                            num_classes).to(device))
+                elif loss_type in ['BCE_multilabel']:
+                    self.fcs.append(
+                        nn.Sequential(
+                            nn.Linear(
+                                self.in_features, count_loss)
+                            ).to(device))
                 elif loss_type in ['MSE', 'L1', 'L1smooth']:
                     self.fcs.append(
                         nn.Sequential(
@@ -150,7 +164,7 @@ class ImageToScalarModel(EncoderModel):
             p = p
         else:
             p = p.mean(dim=(-2, -1))
-        ps = self.fc(p)
+        ps = self.fcs[0](p)
         return ps
     
 

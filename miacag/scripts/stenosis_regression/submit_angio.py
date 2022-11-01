@@ -302,8 +302,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             output_plots_train,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']]
                             )
                 plotRegression({
                             'database': config['database'],
@@ -313,11 +313,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_train_plot']},
+                            'query': config['query_train_plot'],
+                            'loss_name': config['loss']['name']
+                            },
                             config['labels_names'],
                             conf,
-                            output_plots_train,
-                            conv_conf=True)
+                            output_plots_train)
                 
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
@@ -332,7 +333,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'query':
                                     config['query_train_plot'],
                                     "num_classes":
-                                    config["model"]["num_classes"]},
+                                    config["model"]["num_classes"],
+                                    'loss_name': config['loss']['name']
+                                    },
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
@@ -356,8 +359,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             cag_segment,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']],
+                            group_aggregated=True
                             )
                 plotRegression({
                             'database': config['database'],
@@ -367,10 +371,13 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_count_stenosis_train']},
+                            'query': config['query_count_stenosis_train'],
+                            'loss_name': config['loss']['name']
+                            },
                             config['labels_names'],
                             conf_agg,
-                            cag_segment)
+                            cag_segment,
+                            group_aggregated=True)
                    
                 # val
                 plot_results({
@@ -388,8 +395,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             output_plots_val,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']]
                             )
                 plotRegression({
                             'database': config['database'],
@@ -399,11 +406,11 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_val_plot']},
+                            'query': config['query_val_plot'],
+                            'loss_name': config['loss']['name']},
                             config['labels_names'],
                             conf,
-                            output_plots_val,
-                            conv_conf=True)
+                            output_plots_val)
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
                 agg = Aggregator({
@@ -417,7 +424,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'query':
                                     config['query_val_plot'],
                                     "num_classes":
-                                    config["model"]["num_classes"]},
+                                    config["model"]["num_classes"],
+                                    'loss_name': config['loss']['name']
+                                    },
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
@@ -441,8 +450,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             cag_segment,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']],
+                            group_aggregated=True
                             )
 
                 plotRegression({
@@ -453,10 +463,14 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_count_stenosis_val']},
+                            'query': config['query_count_stenosis_val'],
+                            'loss_name': config['loss']['name']
+                            },
                             config['labels_names'],
                             conf_agg,
-                            cag_segment)
+                            cag_segment,
+                            group_aggregated=True)
+
 
                 # test
                 plot_results({
@@ -474,8 +488,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             output_plots_test,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']]
                             )
                 plotRegression({
                             'database': config['database'],
@@ -485,11 +499,11 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_test_plot']},
+                            'query': config['query_test_plot'],
+                            'loss_name': config['loss']['name']},
                             config['labels_names'],
                             conf,
-                            output_plots_test,
-                            conv_conf=True)
+                            output_plots_test)
                 # aggregate stenosis for all groups :
                 # entryids or (PatientID, StudyInstanceUID)
 
@@ -504,7 +518,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                                     'query':
                                     config['query_test_plot'],
                                     "num_classes":
-                                    config["model"]["num_classes"]},
+                                    config["model"]["num_classes"],
+                                    'loss_name': config['loss']['name']},
                                  [i + "_confidences" for i in
                                   config['labels_names']])
                 agg()
@@ -528,8 +543,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             cag_segment,
                             config['model']['num_classes'],
                             config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
+                            confidence_names=[i + "_confidences" for i in
+                                              config['labels_names']],
+                            group_aggregated=True
                             )
                 plotRegression({
                             'database': config['database'],
@@ -539,10 +555,13 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             'labels_names': config['labels_names'],
                             'schema_name': config['schema_name'],
                             'table_name': output_table_name,
-                            'query': config['query_count_stenosis_test']},
+                            'query': config['query_count_stenosis_test'],
+                            'loss_name': config['loss']['name']},
                             config['labels_names'],
                             conf_agg,
-                            cag_segment)
+                            cag_segment,
+                            group_aggregated=True)
+
 
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))

@@ -51,18 +51,16 @@ class ClassificationLoader():
                 from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
                     train_monai_classification_loader, val_monai_classification_loader
             elif config['task_type'] in ["mil_classification"]:
-                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
-                    train_monai_classification_loader, val_monai_classification_loader
-
-            # if config['loaders']['val_method']['type'] == 'patches':
-            #     from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
-            #         val_monai_classification_loader
-            # elif config['loaders']['val_method']['type'] == 'sliding_window':
-            #     from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import \
-            #         val_monai_classification_loader_SW as val_monai_classification_loader
-            # else:
-            #     raise ValueError("Invalid validation moode %s" % repr(
-            #         config['loaders']['val_method']['type']))
+                if config['model']['dimension'] in ['2D+T']:
+                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                        train_monai_classification_loader
+                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                        val_monai_classification_loader
+                elif config['model']['dimension'] in ['2D']:
+                    from miacag.dataloader.Classification._2D.dataloader_monai_classification_2D_mil import \
+                        train_monai_classification_loader, val_monai_classification_loader
+                else:
+                    raise ValueError('model dimension is not implemented')
         elif config['loaders']['format'] in ['db']:
             from \
                 miacag.dataloader.Classification.tabular.dataloader_monai_classification_tabular import \
@@ -137,8 +135,14 @@ class ClassificationLoader():
                     self.val_df,
                     config)
             elif config['task_type'] in ["mil_classification"]:
-                from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
-                    train_monai_classification_loader, val_monai_classification_loader
+                if config['model']['dimension'] in ['2D']:
+                    from miacag.dataloader.Classification._2D.dataloader_monai_classification_2D_mil import \
+                        val_monai_classification_loader
+                elif config['model']['dimension'] in ['2D+T']:
+                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                        val_monai_classification_loader
+                else:
+                    raise ValueError('this dimension is not implemented')
                 self.val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)

@@ -383,20 +383,40 @@ class base_monai_loader(DataloaderBase):
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
+        elif self.config['model']['backbone'] in ['r50']:
+            normalize = NormalizeIntensityd(
+                keys=self.features,
+                subtrahend=(0.485, 0.456, 0.406),
+                divisor=(0.229, 0.224, 0.225),
+                channel_wise=True)
         else:
             raise ValueError('not implemented')
 
         return normalize
 
     def CropTemporal(self):
+        if self.config['task_type'] in ["classification",
+                                        "regression"]:
+            crop = self.CropTemporalNormal()
+        elif self.config['task_type'] in ["mil_classification"]:
+            if self.config['model']['dimension'] == '2D+T':
+                crop = self.CropTemporalMIL()
+            elif self.config['model']['dimension'] == '2D':
+                crop = self.CropTemporalMIL2d()
+            else:
+                raise ValueError('model dimension is not implemented')
+        else:
+            raise ValueError('task type is not implemented')
+        return crop
+
+    def CropTemporalNormal(self):
         crop = RandSpatialCropd(
-            keys=self.features,
-            roi_size=[
-               # -1,
-                self.config['loaders']['Crop_height'],
-                self.config['loaders']['Crop_width'],
-                self.config['loaders']['Crop_depth']],
-            random_size=False)
+                keys=self.features,
+                roi_size=[
+                    self.config['loaders']['Crop_height'],
+                    self.config['loaders']['Crop_width'],
+                    self.config['loaders']['Crop_depth']],
+                random_size=False)
         return crop
 
     def CropTemporalMIL(self):
@@ -407,6 +427,16 @@ class base_monai_loader(DataloaderBase):
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
                 self.config['loaders']['Crop_depth']],
+            random_size=False)
+        return crop
+
+    def CropTemporalMIL2d(self):
+        crop = RandSpatialCropd(
+            keys=self.features,
+            roi_size=[
+                -1,
+                self.config['loaders']['Crop_height'],
+                self.config['loaders']['Crop_width']],
             random_size=False)
         return crop
 

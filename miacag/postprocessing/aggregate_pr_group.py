@@ -38,7 +38,7 @@ class Aggregator:
             agg_field = aggregated_cols_list[count]
             confidences = df_field[field]
             confidences = convertConfFloats(confidences,
-                                            self.sql_config["num_classes"])
+                                            self.sql_config["loss_name"][count])
             df_new = df_field.copy()
            # self.df[agg_field] = confidences
             df_new[agg_field] = confidences

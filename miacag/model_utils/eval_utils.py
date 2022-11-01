@@ -1,6 +1,7 @@
 from miacag.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
     mkDir, get_loss_metric_class
+from miacag.utils.common_utils import stack_labels
 import torch
 from miacag.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
@@ -12,7 +13,7 @@ from miacag.model_utils.grad_cam_utils import prepare_cv2_img
 import numpy as np
 from monai.visualize import CAM, GradCAM
 from miacag.model_utils.grad_cam_utils import calc_saliency_maps
-
+from miacag.models.modules import getCountsLoss, unique_counts
 
 def get_input_shape(config):
     if config['model']['dimension'] in ['2D+T', 3]:
@@ -136,12 +137,12 @@ def eval_one_step_knn(get_data_from_loader,
     return top1
 
 
-def get_loss(config, outputs, labels, criterion):
+def get_loss(config, outputs, labels, criterion, loss_name):
     if 'Siam' in config['loss']['name']:
         loss = criterion(outputs)
-   # elif 'CE' in config['loss']['name']:
-       #labels = torch.nan_to_num(labels, nan=99998)
-       # loss = criterion(outputs, labels)
+    elif loss_name.startswith('CE'):
+        labels = torch.reshape(labels, (labels.shape[0], ))
+        loss = criterion(outputs, labels)
     else:
         loss = criterion(outputs, labels)
     return loss
@@ -152,26 +153,30 @@ def get_losses_class(config, outputs, data, criterion, device):
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
     loss_tot = loss_tot.requires_grad_()
-    for count, label_name in enumerate(config['labels_names']):
-
+    loss_uniques, count = unique_counts(config, remove_total=True)
+   # labels = stack_labels(data, config)
+    for count_idx, loss_name in enumerate(loss_uniques):
+        labels = stack_labels(data, config, loss_name)
         loss = get_loss(
-            config, outputs[count],
-            data[label_name], criterion[count])
+            config, outputs[count_idx],
+            labels, criterion[count_idx], loss_name)
         if torch.isnan(loss) == torch.tensor(True, device=device):
-            # ugly hack
-            if count == 0:
-                t = torch.tensor([1]).float()
+            raise ValueError('the loss is nan!')
+            # # ugly hack
+            # if count_idx == 0:
+            #     t = torch.tensor([1]).float()
                 
-              #  t.requires_grad_()
-                losses.append(t)
-            else:
-                losses.append(losses[-1])
-            loss_tot = loss_tot
+            #   #  t.requires_grad_()
+            #     losses.append(t)
+            # else:
+            #     losses.append(losses[-1])
+            # loss_tot = loss_tot
 
         else:
             losses.append(loss)
             loss_tot = loss_tot + loss
     losses = [loss_indi.item() for loss_indi in losses]
+    losses = losses + [loss_tot.item()]
     return losses, loss_tot
 
 
@@ -282,9 +287,7 @@ def val_one_epoch_test(
         rowidsS.append(rowids)
     logitsS = [item for sublist in logitsS for item in sublist]
     rowidsS = [item for sublist in rowidsS for item in sublist]
-    logitsS = getListOfLogits(logitsS,
-                              config['labels_names'],
-                              len(validation_loader)*samples)
+    logitsS = getListOfLogits(logitsS)
     rowids = torch.cat(rowidsS, dim=0)
     if config['task_type'] != "representation_learning":
         running_metric_val, metric_tb = normalize_metrics(
@@ -300,34 +303,40 @@ def val_one_epoch_test(
 def maybe_softmax_transform(logits, config):
     logits_return = []
     for c, logit in enumerate(logits):
-        if config['loss']['name'][c] == 'CE':
+        if config['loss']['name'][c].startswith('CE'):
             logits_return.append(softmax_transform(logit.float()))
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
         elif config['loss']['name'][c] in ['L1', 'L1smooth']:
             logits_return.append(logit.float())
+        elif config['loss']['name'][c].startswith('BCE'):
+            logits_return.append(torch.nn.Sigmoid()(logit.float()))
+        else:
+            raise(ValueError('this loss type is not implemented'))
     return logits_return
 
 
-def getListOfLogits(logits, label_names, data_len):
-    '''
-    reorder logits from list of samples of list of labels of logits to
-    list of tensor samples X logits. Each element of the list is a label
-    '''
-    label_liste = []
-    for lo in logits:
-        for label in lo:
-            label_liste.append(label)
-    label_liste = np.array(label_liste)
-    uniques = list(range(0, len(label_names)))
-    idxes = uniques*data_len
-    idxes = np.array(idxes)
+def getListOfLogits(logits):
+    unrolled_logits = []
+    for logit in logits:
+        for output_idx in logit[0]:
+            unrolled_logits.append(output_idx)
+    unrolled_logits = torch.vstack(unrolled_logits)
+    return [unrolled_logits]
+    # label_liste = []
+    # for lo in logits:
+    #     for label in lo:
+    #         label_liste.append(label)
+    # label_liste = np.array(label_liste)
+    # uniques = list(range(0, len(label_names)))
+    # idxes = uniques*data_len
+    # idxes = np.array(idxes)
 
-    list_logits = []
-    for un in uniques:
-        un_np_idx = np.where(idxes == un)
-        list_logits.append(torch.vstack(list(label_liste[un_np_idx])))
-    return list_logits
+    # list_logits = []
+    # for un in uniques:
+    #     un_np_idx = np.where(idxes == un)
+    #     list_logits.append(torch.vstack(list(label_liste[un_np_idx])))
+    # return list_logits
 
 
 def val_one_epoch(model, criterion, config,

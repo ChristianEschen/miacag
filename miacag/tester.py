@@ -57,6 +57,7 @@ def test(config):
 
     # Get loss func
     criterion = get_loss_func(config)
+    config['loss']['name'] = config['loss']['name'] + ['total']
     running_loss_test = init_metrics(config['loss']['name'],
                                      config,
                                      ptype='loss')

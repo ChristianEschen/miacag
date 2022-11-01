@@ -6,6 +6,7 @@ from miacag.model_utils.eval_utils import getListOfLogits, \
     maybe_softmax_transform, calc_saliency_maps, prepare_cv2_img
 import shutil
 import os
+import numpy as np
 from miacag.plots.plot_histogram import plot_histogram
 from miacag.metrics.metrics_utils import mkDir
 from miacag.models.BuildModel import ModelBuilder
@@ -49,8 +50,14 @@ class Predictor(TestPipeline):
             print('prediction pipeline done')
         else:
             if self.config['task_type'] == 'mil_classification':
-                saliency_one_step_mil(self.model, self.config,
-                                    self.test_loader.val_loader, self.device)
+                if self.config['model']['dimension'] == '2D+T':
+                    saliency_one_step_mil(self.model, self.config,
+                                        self.test_loader.val_loader, self.device)
+                elif self.config['model']['dimension'] == '2D':
+                    saliency_one_step_mil_2d(self.model, self.config,
+                                        self.test_loader.val_loader, self.device)
+                else:
+                    raise ValueError('Not implemented')
             elif self.config['task_type'] in ['classification', 'regression']:
                 saliency_one_step(self.model, self.config,
                                 self.test_loader.val_loader, self.device)
@@ -133,7 +140,7 @@ def saliency_one_step(model, config, validation_loader, device):
 
 
 def saliency_one_step_mil(model, config, validation_loader, device):
-
+    unqiue_heads = np.unique(config['loss']['name']).tolist()
     for data in validation_loader:
         for c, label_name in enumerate(config['labels_names']):
             a, _ = get_attention_values(model, config, data, device, c)
@@ -150,15 +157,18 @@ def saliency_one_step_mil(model, config, validation_loader, device):
                 path_name = 'correct'
             else:
                 path_name = 'unknown'
+
             path = os.path.join(
-                config['output_directory'],
+                config['model']['pretrain_model'],
                 'saliency',
                 path_name,
                 patientID,
-                studyInstanceUID)
+                studyInstanceUID,
+                seriesInstanceUIDs[c],
+                SOPInstanceUIDs[c],
+                label_name)
             if not os.path.isdir(path):
                 mkDir(path)
-
             plot_histogram(SOPInstanceUIDs, a, path, label_name)
 
             samples = data['inputs'].shape[1]
@@ -188,6 +198,67 @@ def saliency_one_step_mil(model, config, validation_loader, device):
                         SOPInstanceUIDs[c],
                         config)
 
+def saliency_one_step_mil_2d(model, config, validation_loader, device):
+    unqiue_heads = np.unique(config['loss']['name']).tolist()
+    for data in validation_loader:
+        for c, label_name in enumerate(config['labels_names']):
+            a, _ = get_attention_values(model, config, data, device, c)
+            image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
+            SOPInstanceUIDs = [i[0] for i in data['SOPInstanceUID']]
+            data_path = data['DcmPathFlatten_meta_dict']['filename_or_obj']
+            patientID = data['DcmPathFlatten_meta_dict']['0010|0020'][0]
+            studyInstanceUID = data['DcmPathFlatten_meta_dict']['0020|000d'][0]
+            seriesInstanceUIDs = [i[0] for i in data['SeriesInstanceUID']]
+            image_paths = [i[0] for i in data['DcmPathFlatten_paths']]
+            if config['loaders']['val_method']['misprediction'] == 'True':
+                path_name = 'mispredictions'
+            elif config['loaders']['val_method']['misprediction'] == 'False':
+                path_name = 'correct'
+            else:
+                path_name = 'unknown'
+
+            path = os.path.join(
+                config['model']['pretrain_model'],
+                'saliency',
+                path_name,
+                patientID,
+                studyInstanceUID,
+                seriesInstanceUIDs[c],
+                SOPInstanceUIDs[c],
+                label_name)
+            if not os.path.isdir(path):
+                mkDir(path)
+            frame_idxs = [i for i in range(0, data['inputs'].shape[1])]
+            plot_histogram(frame_idxs, a, path, label_name)
+
+            samples = data['inputs'].shape[1]
+            for i in range(0, samples):
+                cam = calc_saliency_maps(
+                    model,
+                    data['inputs'][:, i, :, :, :],
+                    config,
+                    device,
+                    c)
+
+                # Calculate histogram
+            # torch.distributed.barrier()
+                if torch.distributed.get_rank() == 0:
+                    if config['model']['backbone'] not in [
+                            'mvit_base_16x4', 'mvit_base_32x3']:
+                        cam = cam.cpu().numpy()
+                    prepare_cv2_img(
+                        data['inputs'][:, i, :, :, :].cpu().numpy(),
+                        label_name,
+                        cam,
+                        [image_paths[0]],
+                        path_name,
+                        patientID,
+                        studyInstanceUID,
+                        seriesInstanceUIDs[c],
+                        SOPInstanceUIDs[c],
+                        config,
+                        patch=i)
+
 
 def get_attention_values(model, config, data, device, c):
     BuildModel = ModelBuilder(config, device)
@@ -196,7 +267,7 @@ def get_attention_values(model, config, data, device, c):
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[device] if config["cpu"] == "False" else None)
-  #  model = prepare_model_for_sm(model, config, c)
+   # model = prepare_model_for_sm(model, config, c)
     _, a = model.module.module.get_attention(data['inputs'])
     max_index = torch.argmax(a).item()
     if config['cpu'] == 'True':

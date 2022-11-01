@@ -45,26 +45,40 @@ def map_1abels_to_0neTohree():
     return labels_dict
 
 
+def convertConfFloats(confidences, loss_name):
+    confidences_conv = []
+    for conf in confidences:
+        if loss_name.startswith('CE'):
+            confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
+
+        elif loss_name in ['MSE', 'L1', 'L1smooth', 'BCE_multilabel']:
+            confidences_conv.append(float(conf.split("0:")[-1][:-1]))
+        else:
+            raise ValueError('not implemented')
+    return np.array(confidences_conv)
+
+
 def create_empty_csv():
-    df = {'Experiment name': [],
+    df = {
+          'Experiment name': [],
           'Test F1 score on data labels transformed': [],
           'Test F1 score on three class labels': [],
-          'Test acc on three class labels': []}
+          'Test acc on three class labels': []
+          }
     return df
 
-
-def getNormConfMat(df, labels_col, preds_col,
-                   plot_name, f1, output, num_classes, support):
-    labels = [i for i in range(0, num_classes)]
+def getNormConfMat_3class(df, labels_col, preds_col,
+                   plot_name, f1, output, num_classes, support, c):
+    labels = [i for i in range(0, num_classes[c])]
     conf_arr = confusion_matrix(df[labels_col], df[preds_col], labels=labels)
     sum = conf_arr.sum()
     conf_arr = conf_arr * 100.0 / (1.0 * sum)
     df_cm = pd.DataFrame(
         conf_arr,
         index=[
-            str(i) for i in range(0, num_classes)],
+            str(i) for i in range(0, num_classes[c])],
         columns=[
-            str(i) for i in range(0, num_classes)])
+            str(i) for i in range(0, num_classes[c])])
     fig = plt.figure()
     plt.clf()
     ax = fig.add_subplot(111)
@@ -90,84 +104,71 @@ def getNormConfMat(df, labels_col, preds_col,
     return None
 
 
-def plot_results(sql_config, label_names, prediction_names, output_plots,
-                 num_classes, config, confidence_names=False):
-    df, _ = getDataFromDatabase(sql_config)
-    for c, label_name in enumerate(label_names):
-        confidence_name = confidence_names[c]
-        prediction_name = prediction_names[c]
-        df_label = df[df[label_name].notna()]
-        df_label = df_label[df_label[confidence_name].notna()]
-        df_label = df_label[df_label[prediction_name].notna()]
-        support = len(df_label)
-        if num_classes != 1:
-            prediction_name = prediction_names[c]
-            df_label[prediction_name] = \
-                df_label[prediction_name].astype(float).astype(int)
-            df_label[label_name] = df_label[label_name] \
-                .astype(float).astype(int)
-            f1_transformed = f1_score(
-                df_label[label_name],
-                df_label[prediction_name],
-                average='macro')
 
-            getNormConfMat(
-                df_label,
-                label_name,
-                prediction_name,
-                label_name,
-                f1_transformed,
-                output_plots,
-                num_classes,
-                support)
-            df_label = df_label.replace(
-                {label_name: map_1abels_to_0neTohree()})
-            df_label = df_label.replace(
-                {prediction_name: map_1abels_to_0neTohree()})
-            f1 = f1_score(df_label[label_name],
-                        df_label[prediction_name], average='macro')
-            getNormConfMat(df_label, label_name, prediction_name,
-                        'labels_3_classes', f1, output_plots, 3, support)
+def getNormConfMat(df, labels_col, preds_col,
+                   plot_name, f1, output, num_classes, support, c):
+    num_classes_for_plot = num_classes[c]
+    if num_classes_for_plot == 1:
+        num_classes_for_plot = 2
+    labels = [i for i in range(0, num_classes_for_plot)]
+    df[labels_col] = df[labels_col].astype(int)
+    df[preds_col] = df[preds_col].astype(int)
+    conf_arr = confusion_matrix(df[labels_col], df[preds_col], labels=labels)
+    sum = conf_arr.sum()
+    # Normalized confusion matrix???
+    #conf_arr = conf_arr * 100.0 / (1.0 * sum)
+    df_cm = pd.DataFrame(
+        conf_arr,
+        index=[
+            str(i) for i in range(0, num_classes_for_plot)],
+        columns=[
+            str(i) for i in range(0, num_classes_for_plot)])
+    fig = plt.figure()
+    plt.clf()
+    ax = fig.add_subplot(111)
+    ax.set_aspect(1)
+    cmap = sns.cubehelix_palette(light=1, as_cmap=True)
+    res = sns.heatmap(df_cm, annot=True, vmin=0.0, vmax=100.0, fmt='.2f',
+                      square=True, linewidths=0.1, annot_kws={"size": 8},
+                      cmap=cmap)
+    res.invert_yaxis()
+    f1 = np.round(f1, 3)
+    plt.title(
+        plot_name + ': Confusion Matrix, F1-macro:' + str(f1))
+    plt.savefig(os.path.join(output, plot_name + '_cmat.png'), dpi=100,
+                bbox_inches='tight')
+    plt.close()
 
-        if confidence_names is not False:
-            if num_classes <= 2:
-                
-                plot_roc_curve(
-                    df_label[label_name], df_label[confidence_name],
-                    output_plots, label_name, support, num_classes, config)
-
+    plt.title(
+        plot_name + ': Confusion Matrix, F1-macro:' + str(f1) +
+        ',support(N)=' + str(support))
+    plt.savefig(os.path.join(output, plot_name + '_cmat_support.png'), dpi=100,
+                bbox_inches='tight')
+    plt.close()
     return None
 
 
-def convertConfFloats(confidences, num_classes):
-    confidences_conv = []
-    for conf in confidences:
-        if num_classes == 1:
-            confidences_conv.append(float(conf.split("0:")[-1][:-1]))
-        elif num_classes == 2:
-            confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
-        else:
-            raise ValueError('not implemented')
-    return np.array(confidences_conv)
+def threshold_continuois(labels, config, plot_name):
+    labels_copy = labels
+    labels_copy = labels_copy.to_numpy()
+    if 'ffr' in plot_name:
+        thres = config['loaders']['val_method']['threshold_ffr']
+        labels_copy[labels_copy >= thres] = 1
+        labels_copy[labels_copy < thres] = 0
+        labels_copy = np.logical_not(labels_copy).astype(int)
+    elif 'sten' in plot_name:
+        thres = config['loaders']['val_method']['threshold_sten']
+        if 'lm' in plot_name:
+            thres = 0.5
+        labels_copy[labels_copy >= thres] = 1
+        labels_copy[labels_copy < thres] = 0
+    else:
+        pass
+    return labels_copy
 
 
 def plot_roc_curve(labels, confidences, output_plots,
-                   plot_name, support, num_classes, config):
-    labels = labels.to_numpy()
-    confidences = convertConfFloats(confidences, num_classes)
-    if num_classes == 1:
-        if 'ffr' in plot_name:
-            thres = config['loaders']['val_method']['threshold_ffr']
-            labels[labels <= thres] = 1
-            labels[labels > thres] = 0
-        elif 'sten' in plot_name:
-            thres = config['loaders']['val_method']['threshold_sten']
-            if 'lm' in plot_name:
-                thres = 0.5
-            labels[labels >= thres] = 1
-            labels[labels < thres] = 0
-        else:
-            raise ValueError('Not implemented')
+                   plot_name, support, num_classes, config, loss_name):
     fpr, tpr, thresholds = metrics.roc_curve(labels, confidences, pos_label=1)
     roc_auc = metrics.auc(fpr, tpr)
     plt.clf()
@@ -200,6 +201,130 @@ def plot_roc_curve(labels, confidences, output_plots,
         output_plots, plot_name + '_roc_support.png'), dpi=100,
                 bbox_inches='tight')
     plt.close()
+
+
+def plot_results_regression(df_label, confidence_name,
+                            label_name, config, c, support,
+                            output_plots, group_aggregated):
+    if not group_aggregated:
+        df_label[confidence_name] = convertConfFloats(
+            df_label[confidence_name], config['loss']['name'][c])
+    df_label[label_name] = threshold_continuois(
+        df_label[label_name],
+        config,
+        label_name)
+    df_label[confidence_name] = np.clip(
+        df_label[confidence_name], a_min=0, a_max=1)
+    plot_roc_curve(
+        df_label[label_name], df_label[confidence_name],
+        output_plots, label_name, support,
+        config['model']['num_classes'][c], config,
+        config['loss']['name'][c])
+    df_label[confidence_name] = threshold_continuois(
+        df_label[confidence_name],
+        config,
+        confidence_name)
+    f1_transformed = f1_score(
+        df_label[label_name],
+        df_label[confidence_name],
+        average='macro')
+
+    getNormConfMat(
+        df_label,
+        label_name,
+        confidence_name,
+        label_name,
+        f1_transformed,
+        output_plots,
+        config['model']['num_classes'],
+        support,
+        c)
+    return None
+
+
+def plot_results_classification(df_label,
+                                label_name,
+                                prediction_name,
+                                confidence_name,
+                                output_plots,
+                                config,
+                                support,
+                                c,
+                                group_aggregated):
+    f1_transformed = f1_score(
+        df_label[label_name],
+        df_label[prediction_name],
+        average='macro')
+
+    getNormConfMat(
+        df_label,
+        label_name,
+        prediction_name,
+        label_name,
+        f1_transformed,
+        output_plots,
+        config['model']['num_classes'],
+        support,
+        c)
+
+    if not group_aggregated:
+        df_label[confidence_name] = convertConfFloats(
+            df_label[confidence_name], config['loss']['name'][c])
+    df_label[confidence_name] = np.clip(
+        df_label[confidence_name], a_min=0, a_max=1)
+    plot_roc_curve(
+        df_label[label_name], df_label[confidence_name],
+        output_plots, label_name, support,
+        config['model']['num_classes'][c], config,
+        config['loss']['name'][c])
+
+    if config['loss']['name'][c].startswith('CE'):
+        df_label = df_label.replace(
+            {label_name: map_1abels_to_0neTohree()})
+        df_label = df_label.replace(
+            {prediction_name: map_1abels_to_0neTohree()})
+        f1 = f1_score(df_label[label_name],
+                      df_label[prediction_name], average='macro')
+        getNormConfMat(df_label, label_name, prediction_name,
+                       'labels_3_classes', f1, output_plots, [3], support, 0)
+
+    return None
+
+
+def plot_results(sql_config, label_names, prediction_names, output_plots,
+                 num_classes, config, confidence_names,
+                 group_aggregated=False):
+    df, _ = getDataFromDatabase(sql_config)
+    if group_aggregated:
+        confidence_names = [c + '_aggregated' for c in confidence_names]
+    for c, label_name in enumerate(label_names):
+        confidence_name = confidence_names[c]
+        prediction_name = prediction_names[c]
+        df_label = df[df[label_name].notna()]
+        df_label = df_label[df_label[confidence_name].notna()]
+        df_label = df_label[df_label[prediction_name].notna()]
+        if group_aggregated:
+            df_label = df_label.drop_duplicates(
+                subset=['StudyInstanceUID', "PatientID"])
+        support = len(df_label)
+        if config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
+            plot_results_regression(df_label, confidence_name,
+                                    label_name, config, c, support,
+                                    output_plots,
+                                    group_aggregated)
+
+        elif config['loss']['name'][c].startswith('CE') or \
+                config['loss']['name'][c] == 'BCE_multilabel':
+            plot_results_classification(df_label,
+                                        label_name,
+                                        prediction_name,
+                                        confidence_name,
+                                        output_plots,
+                                        config,
+                                        support,
+                                        c,
+                                        group_aggregated)
+    return None
 
 
 def annotate(data, label_name, prediction_name, **kws):
@@ -258,13 +383,8 @@ def plotStenoserTrueVsPred(sql_config, label_names,
 
 
 def plotRegression(sql_config, label_names,
-                   prediction_names, output_folder, conv_conf=False):
+                   prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
-    if conv_conf == False:
-        df = df.drop_duplicates(
-                ['PatientID',
-                'StudyInstanceUID'])
-    
 
     for c, label_name in enumerate(label_names):
         label_name_ori = label_name
@@ -272,13 +392,22 @@ def plotRegression(sql_config, label_names,
         df_plot = df.dropna(
             subset=[label_name, prediction_name],
             how='any')
-
+        if group_aggregated:
+            df_plot = df_plot.drop_duplicates(
+                    ['PatientID',
+                    'StudyInstanceUID'])
         df_plot, label_name = rename_columns(df_plot, label_name)
         df_plot = df_plot.astype({label_name: float})
-        
-        if conv_conf == True:
+
+        if group_aggregated is False:
             df_plot[prediction_name] = \
-                convertConfFloats(df_plot[prediction_name], 1)
+                convertConfFloats(
+                    df_plot[prediction_name],
+                    sql_config['loss_name'][c])
+
+        # df_plot[prediction_name] = np.clip(
+        #     df_plot[prediction_name], a_min=0, a_max=1)
+
         df_plot = df_plot.astype({prediction_name: float})
         g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)
         X2 = sm.add_constant(df_plot[label_name])

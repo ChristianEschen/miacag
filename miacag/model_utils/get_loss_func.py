@@ -2,6 +2,7 @@ import torch.nn as nn
 from monai.losses import DiceLoss
 from monai.losses import DiceCELoss
 from miacag.model_utils.siam_loss import SimSiamLoss
+from miacag.models.modules import unique_counts
 import torch
 
 
@@ -41,6 +42,24 @@ def l1_loss_smooth(predictions, targets, beta=1):
     return loss
 
 
+def bce_with_nans(predictions, targets):
+    mask = torch.isnan(targets)
+    loss = 0
+    predictions = predictions[~mask]
+    targets = targets[~mask]
+    criterion = torch.nn.BCEWithLogitsLoss(reduction='mean')
+    loss = criterion(predictions, targets.float())
+    # for x, y in zip(predictions, targets):
+        
+    #     if abs(x-y) < beta:
+    #         loss += (0.5*(x-y)**2 / beta).mean()
+    #     else:
+    #         loss += (abs(x-y) - 0.5 * beta).mean()
+
+    # loss = loss/predictions.shape[0]
+    return loss
+
+
 def mae_loss_with_nans(input, target):
 
     # Missing data are nan's
@@ -57,10 +76,14 @@ def mae_loss_with_nans(input, target):
 
 def get_loss_func(config):
     criterions = []
-    for loss in config['loss']['name']:
-        if loss == 'CE':
+    loss_names, loss_name_counts = unique_counts(config)
+    for loss in loss_names:
+        if loss.startswith('CE'):
             criterion = nn.CrossEntropyLoss(
                 reduction='mean', ignore_index=99998)
+            criterions.append(criterion)
+        elif loss == 'BCE_multilabel':
+            criterion = bce_with_nans
             criterions.append(criterion)
         elif loss == 'MSE':
 

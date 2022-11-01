@@ -1,8 +1,40 @@
+from enum import unique
 from torch import nn
 from miacag.models.mlps import prediction_MLP, projection_MLP
 from miacag.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
+import numpy as np
+
+
+def getCountsLoss(losses):
+    count_regression = 0
+    count_classification = 0
+    for loss_u in losses:
+        if loss_u in ['CE']:
+            count_classification += 1
+        elif loss_u in ['MSE', 'L1', 'L1smooth']:
+            count_regression += 1
+        else:
+            raise ValueError('this loss is not implementeed:', loss_u)
+    return count_regression, count_classification
+
+
+def get_num_class_for_loss_group(losses, loss_group, num_classes):
+    for loss in range(0, len(losses)):
+        if losses[loss] == loss_group:
+            return num_classes[loss]
+
+
+def unique_counts(config, remove_total=False):
+    if remove_total:
+        if 'total' in config['loss']['name']:
+            config['loss']['name'].remove('total')
+    loss_uniques, count = np.unique(np.array(
+        config['loss']['name']), return_counts=True)
+    count = count.tolist()
+    loss_uniques = loss_uniques.tolist()
+    return loss_uniques, count
 
 
 def maybePermuteInput(x, config):
@@ -71,19 +103,34 @@ class ImageToScalarModel(EncoderModel):
        # self.fcs = ["self.fc" ]
         self.fcs = nn.ModuleList()
         c = 0
-        for head in range(0, len(self.config['labels_names'])):
-            if self.config['loss']['name'][c] in ['CE']:
-                self.fcs.append(nn.Linear(
-                        self.in_features,
-                        config['model']['num_classes']).to(device))
-            elif self.config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
-                self.fcs.append(
-                    nn.Sequential(
-                        nn.Linear(
-                            self.in_features, 1).to(device),
-                        nn.ReLU()))
-            else:
-                raise ValueError('loss not implemented')
+       # uniques = 
+        loss_uniques, counts = unique_counts(self.config)
+
+        for loss_count_idx, loss_type in enumerate(loss_uniques):
+            count_loss = counts[loss_count_idx]
+            if count_loss > 0:
+                num_classes = get_num_class_for_loss_group(
+                    self.config['loss']['name'],
+                    loss_type, self.config['model']['num_classes'])
+                if loss_type.startswith('CE'):
+                    self.fcs.append(nn.Linear(
+                            self.in_features,
+                            num_classes).to(device))
+                elif loss_type in ['BCE_multilabel']:
+                    self.fcs.append(
+                        nn.Sequential(
+                            nn.Linear(
+                                self.in_features, count_loss)
+                            ).to(device))
+                elif loss_type in ['MSE', 'L1', 'L1smooth']:
+                    self.fcs.append(
+                        nn.Sequential(
+                            nn.Linear(
+                                self.in_features,
+                                count_loss).to(device)
+                        ))
+                else:
+                    raise ValueError('loss not implemented')
             c += 1
         self.dimension = config['model']['dimension']
 
@@ -117,7 +164,7 @@ class ImageToScalarModel(EncoderModel):
             p = p
         else:
             p = p.mean(dim=(-2, -1))
-        ps = self.fc(p)
+        ps = self.fcs[0](p)
         return ps
     
 

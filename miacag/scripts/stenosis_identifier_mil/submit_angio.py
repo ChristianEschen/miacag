@@ -335,21 +335,21 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             )
 
                 # append results 
-                csv_results = appendDataFrame(sql_config={
-                                    'labels_names': config['labels_names'],
-                                    'database': config['database'],
-                                    'username': config['username'],
-                                    'password': config['password'],
-                                    'host': config['host'],
-                                    'schema_name': config['schema_name'],
-                                    'table_name': output_table_name,
-                                    'query': config['query_test_plot']},
-                                df_results=df_results,
-                                experiment_name=experiment_name)
+                # csv_results = appendDataFrame(sql_config={
+                #                     'labels_names': config['labels_names'],
+                #                     'database': config['database'],
+                #                     'username': config['username'],
+                #                     'password': config['password'],
+                #                     'host': config['host'],
+                #                     'schema_name': config['schema_name'],
+                #                     'table_name': output_table_name,
+                #                     'query': config['query_test_plot']},
+                #                 df_results=df_results,
+                #                 experiment_name=experiment_name)
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))
-                csv_results = pd.DataFrame(csv_results)
-                csv_results.to_csv(output_csv_test, index=False, header=True)
+                # csv_results = pd.DataFrame(csv_results)
+                # csv_results.to_csv(output_csv_test, index=False, header=True)
 
         if csv_exists:
             return None

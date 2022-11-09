@@ -1,7 +1,7 @@
 import uuid
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 import yaml
 from miacag.preprocessing.split_train_val import splitter
 from miacag.utils.sql_utils import copy_table, add_columns, \
@@ -48,7 +48,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
     if table_name_input is None:
         torch.distributed.init_process_group(
                 backend="nccl" if cpu == "False" else "Gloo",
-                init_method="env://"
+                init_method="env://",
+                timeout=timedelta(seconds=1800000),
                 )
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
@@ -317,7 +318,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             config['labels_names'],
                             conf,
                             output_plots_train,
-                            conv_conf=True)
+                            group_aggregated=False)
                    
                 # val
                 plot_results({
@@ -353,7 +354,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             config['labels_names'],
                             conf,
                             output_plots_val,
-                            conv_conf=True)
+                            group_aggregated=False)
 
                 # test
                 plot_results({
@@ -389,7 +390,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                             config['labels_names'],
                             conf,
                             output_plots_test,
-                            conv_conf=True)
+                            group_aggregated=False)
 
                 print('config files processed', str(i+1))
                 print('config files to process in toal:', len(config_path))

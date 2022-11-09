@@ -16,7 +16,7 @@ class ProcessLabelsOCC():
                     np.where((
                             self.df[top_field] == 1),
                             1, self.df[field_to_change])
-        return
+
 
     def process_fields(self):
         if self.config['dominans'] == 'r_dom':
@@ -195,7 +195,7 @@ class ProcessLabelsOCC():
             'sten_proc_13_midt_lcx_transformed',
             'sten_proc_5_lm_transformed')
         self.processor(
-            'sten_proc_14_om2_transformed'
+            'sten_proc_14_om2_transformed',
             'sten_proc_5_lm_transformed')
         self.processor(
             'sten_proc_15_dist_lcx_transformed',

@@ -49,8 +49,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
         torch.distributed.init_process_group(
                 backend="nccl" if cpu == "False" else "Gloo",
                 init_method="env://",
-                timeout=timedelta(seconds=180000),
-                #find_unused_parameters=True
+                timeout=timedelta(seconds=1800000)
                 )
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]

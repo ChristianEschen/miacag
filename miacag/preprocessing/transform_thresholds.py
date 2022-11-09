@@ -74,16 +74,17 @@ class transformThresholdRegression():
 
     def __call__(self):
         for label_name in self.sql_config['labels_names']:
-            self.df[label_name][self.df[label_name] < 0] = 0
-            self.df[label_name] = \
-                np.where((
-                    (self.df[label_name] >= 100) &
-                    (~np.isnan(self.df[label_name]))),
-                    100, self.df[label_name])
-            self.df[label_name] = \
-                np.where((
-                    (~np.isnan(self.df[label_name]))),
-                    self.df[label_name]/100, self.df[label_name])
+            if label_name in 'sten':
+                self.df[label_name][self.df[label_name] < 0] = 0
+                self.df[label_name] = \
+                    np.where((
+                        (self.df[label_name] >= 100) &
+                        (~np.isnan(self.df[label_name]))),
+                        100, self.df[label_name])
+                self.df[label_name] = \
+                    np.where((
+                        (~np.isnan(self.df[label_name]))),
+                        self.df[label_name]/100, self.df[label_name])
 
         if self.config['process_labels'] == 'True':
             proccoessor = ProcessLabelsOCC(self.df,

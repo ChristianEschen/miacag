@@ -128,13 +128,16 @@ def getNormConfMat(df, labels_col, preds_col,
     ax = fig.add_subplot(111)
     ax.set_aspect(1)
     cmap = sns.cubehelix_palette(light=1, as_cmap=True)
-    res = sns.heatmap(df_cm, annot=True, vmin=0.0, vmax=100.0, fmt='.2f',
+    res = sns.heatmap(df_cm, annot=True, vmin=0.0, fmt='g',
                       square=True, linewidths=0.1, annot_kws={"size": 8},
                       cmap=cmap)
     res.invert_yaxis()
     f1 = np.round(f1, 3)
     plt.title(
         plot_name + ': Confusion Matrix, F1-macro:' + str(f1))
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+
     plt.savefig(os.path.join(output, plot_name + '_cmat.png'), dpi=100,
                 bbox_inches='tight')
     plt.close()
@@ -142,6 +145,9 @@ def getNormConfMat(df, labels_col, preds_col,
     plt.title(
         plot_name + ': Confusion Matrix, F1-macro:' + str(f1) +
         ',support(N)=' + str(support))
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+
     plt.savefig(os.path.join(output, plot_name + '_cmat_support.png'), dpi=100,
                 bbox_inches='tight')
     plt.close()
@@ -405,8 +411,8 @@ def plotRegression(sql_config, label_names,
                     df_plot[prediction_name],
                     sql_config['loss_name'][c])
 
-        # df_plot[prediction_name] = np.clip(
-        #     df_plot[prediction_name], a_min=0, a_max=1)
+        df_plot[prediction_name] = np.clip(
+            df_plot[prediction_name], a_min=0, a_max=1)
 
         df_plot = df_plot.astype({prediction_name: float})
         g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)

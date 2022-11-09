@@ -32,14 +32,17 @@ def l1_loss_smooth(predictions, targets, beta=1):
     loss = 0
     predictions = predictions[~mask]
     targets = targets[~mask]
-    for x, y in zip(predictions, targets):
-        if abs(x-y) < beta:
-            loss += (0.5*(x-y)**2 / beta).mean()
-        else:
-            loss += (abs(x-y) - 0.5 * beta).mean()
-
-    loss = loss/predictions.shape[0]
-    return loss
+    if predictions.shape[0] != 0:
+        for x, y in zip(predictions, targets):
+            if abs(x-y) < beta:
+                loss += (0.5*(x-y)**2 / beta).mean()
+            else:
+                loss += (abs(x-y) - 0.5 * beta).mean()
+        loss = loss/predictions.shape[0]
+        return loss
+    else:
+        loss = torch.tensor(0.0, device=predictions.device)
+        return loss
 
 
 def bce_with_nans(predictions, targets):

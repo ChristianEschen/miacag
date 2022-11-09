@@ -24,4 +24,4 @@ RUN miapath=`python -c "import miacag, os; print(os.path.dirname(miacag.__file__
     mv "MVIT_B_16x4.pyth" "$miapath/models/torchhub/2D+T/mvit_base_16x4/model.pt" && \
     mv "MVIT_B_32x3_f294077834.pyth" "$miapath/models/torchhub/2D+T/mvit_base_32x3/model.pt" && \
     mv "r2plus1d_18-91a641e6.pth" "$miapath/models/torchhub/2D+T/r2plus1_18/model.pt" && \
-    mv "resnet50-11ad3fa6.pth" "$miapath/models/torchhub/2D/r50/model.pt" && \
+    mv "resnet50-11ad3fa6.pth" "$miapath/models/torchhub/2D/r50/model.pt"

@@ -50,6 +50,12 @@ pd, _ = optional_import("pandas")
 from monai.transforms import CenterSpatialCropd, RandSpatialCropd, SpatialPad
 
 
+def cropperCenter(key, h, w, d):
+    cropper = CenterSpatialCropd(
+                    keys=key,
+                    roi_size=[h, w, d])
+    return cropper
+
 def div_diff_tuple(diff):
     val1 = diff%2
     if val1 == 0:
@@ -132,6 +138,11 @@ class Dataset(_TorchDataset):
         """
         Fetch single data item from `self.data`.
         """
+        cropper = cropperCenter(self.features[0],
+                                self.config['loaders']['Crop_height'],
+                                self.config['loaders']['Crop_width'],
+                                self.config['loaders']['Crop_depth']
+                                )
         data_i = self.data[index]
         #post_trans = Compose([ToTensord(keys=["img"])])
         data_i_list = []
@@ -156,7 +167,7 @@ class Dataset(_TorchDataset):
                     isinstance(_transform, ThreadUnsafe) else _transform
                 data_i_i = apply_transform(_xform, data_i_i)
 
-            data_i_list.append(data_i_i)
+            data_i_list.append(cropper(data_i_i))
         stacked_data = torch.stack([i['DcmPathFlatten'] for i in data_i_list], dim=0)
         data_i_i['inputs'] = stacked_data
         data_i_i["rowid"] = data_i["rowid"]
@@ -187,6 +198,10 @@ class Dataset(_TorchDataset):
                 random_size=False)
         data_i_i['inputs'] = crop(data_i_i)['inputs']
        # data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+       
+        if self.config['loaders']['val_method']['max_patches'] != 'None':
+            max_p = self.config['loaders']['val_method']['max_patches']
+            data_i_i['inputs'] = data_i_i['inputs'][0:max_p]
         return data_i_i
 
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
@@ -357,6 +372,11 @@ class PersistentDataset(Dataset):
             the transformed element up to the first identified
             random transform object
         """
+        cropper = cropperCenter(self.features[0],
+                                self.config['loaders']['Crop_height'],
+                                self.config['loaders']['Crop_width'],
+                                self.config['loaders']['Crop_depth']
+                                )
         data_i_list = []
        # data_i = self.data[idx]
         for data_i_i in item_transformed[self.features[0]]:
@@ -375,7 +395,7 @@ class PersistentDataset(Dataset):
                 _xform = deepcopy(_transform) if \
                     isinstance(_transform, ThreadUnsafe) else _transform
                 data_i_i = apply_transform(_xform, data_i_i)
-            data_i_list.append(data_i_i)
+            data_i_list.append(cropper(data_i_i))
         stacked_data = torch.stack(
             [i[self.features[0]] for i in data_i_list], dim=0)
         data_i_i['inputs'] = stacked_data
@@ -385,6 +405,9 @@ class PersistentDataset(Dataset):
         data_i_i["SeriesInstanceUID"] = item_transformed["SeriesInstanceUID"]
         data_i_i["StudyInstanceUID"] = item_transformed["StudyInstanceUID"]
         data_i_i["PatientID"] = item_transformed["PatientID"]
+        if self.config['loaders']['val_method']['max_patches'] != 'None':
+            max_p = self.config['loaders']['val_method']['max_patches']
+            data_i_i['inputs'] = data_i_i['inputs'][0:max_p]
 
         return data_i_i
 

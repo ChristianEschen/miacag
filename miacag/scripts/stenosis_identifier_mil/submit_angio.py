@@ -45,10 +45,16 @@ parser.add_argument(
 
 def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
     if table_name_input is None:
+        print('world', os.environ['WORLD_SIZE'])
+        print('rank', os.environ['RANK'])
+        print('local rank', os.environ['LOCAL_RANK'])
+        print('hostname', socket.gethostname())
         torch.distributed.init_process_group(
                 backend="nccl" if cpu == "False" else "Gloo",
                 init_method="env://",
                 timeout=timedelta(seconds=1800000),
+                world_size=int(os.environ['WORLD_SIZE']),
+                rank=int(os.environ['RANK'])
                 )
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]

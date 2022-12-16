@@ -77,7 +77,7 @@ def get_final_layer(config,  device, in_features):
                 nn.Sequential(
                     nn.Linear(
                         in_features, 1).to(device),
-                    nn.ReLU()))
+                    nn.Sigmoid()))
         else:
             raise ValueError('loss not implemented')
         c += 1
@@ -123,12 +123,22 @@ class ImageToScalarModel(EncoderModel):
                                 self.in_features, count_loss)
                             ).to(device))
                 elif loss_type in ['MSE', 'L1', 'L1smooth']:
+                   # if config['model']['sigm'] == 'True':
                     self.fcs.append(
                         nn.Sequential(
                             nn.Linear(
                                 self.in_features,
-                                count_loss).to(device)
+                                count_loss).to(device),
+                            nn.ReLU()
                         ))
+                    # else:
+                    #     self.fcs.append(
+                    #         nn.Sequential(
+                    #             nn.Linear(
+                    #                 self.in_features,
+                    #                 count_loss).to(device),
+                    #             nn.ReLU()
+                    #         ))
                 else:
                     raise ValueError('loss not implemented')
             c += 1

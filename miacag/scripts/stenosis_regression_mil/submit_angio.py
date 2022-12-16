@@ -1,6 +1,7 @@
 import uuid
 import os
 import socket
+import time
 from datetime import datetime, timedelta
 import yaml
 from miacag.preprocessing.split_train_val import splitter
@@ -60,12 +61,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config = yaml.load(file, Loader=yaml.FullLoader)
         mkFolder(config['output'])
         csv_exists, output_csv_test = checkCsvExists(config['output'])
-        if csv_exists is False:
-            trans_label = \
-                [i + '_transformed' for i in config['labels_names']]
-            df_results = create_empty_csv(output_csv_test, trans_label)
-        else:
-            df_results = pd.read_csv(output_csv_test)
+        # if csv_exists is False:
+        #     trans_label = \
+        #         [i + '_transformed' for i in config['labels_names']]
+        #     df_results = create_empty_csv(output_csv_test, trans_label)
+        # else:
+        #     df_results = pd.read_csv(output_csv_test)
 
         exp_exists = checkExpExists(config_path[i], config['output'])
         if exp_exists is False:
@@ -142,6 +143,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
 
             torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
+                start = time.time()
                 add_columns({
                     'database': config['database'],
                     'username': config['username'],
@@ -215,8 +217,10 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'table_name_output': output_table_name},
                             ["antalsignifikantestenoser_pred"],
                             ["float8"])
-
+                print(
+                    'done add columns, time elapsed: {}'.format(time.time() - start))
                 # 3. split train and validation , and map labels
+                start = time.time()
                 trans = transformMissingFloats({
                     'labels_names': config['labels_names'],
                     'database': config['database'],
@@ -228,7 +232,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'query': config['query_transform'],
                     'TestSize': config['TestSize']})
                 trans()
-
+                print('done transform missing floats, time elapsed: {}'.format(time.time() - start))
+                start = time.time()
                 trans_thres = transformThresholdRegression({
                     'labels_names': config['labels_names'],
                     'database': config['database'],
@@ -241,8 +246,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                     'TestSize': config['TestSize']},
                     config)
                 trans_thres()
-
+                print('done transform threshold regression, time elapsed: {}'.format(time.time() - start))
                 # change dtypes for label
+                start = time.time()
                 changeDtypes(
                     {'database': config["database"],
                         'username': config["username"],
@@ -253,6 +259,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'query': config['query_transform']},
                     trans_label,
                     ["float8"] * len(trans_label))
+                print('done change dtypes, time elapsed: {}'.format(time.time() - start))
+                start = time.time()
                 splitter_obj = splitter(
                     {
                         'labels_names': config['labels_names'],
@@ -265,6 +273,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'query': config['query_split'],
                         'TestSize': config['TestSize']})
                 splitter_obj()
+                print('done split, time elapsed: {}'.format(time.time() - start))
                 # ...and map data['labels'] test
             # 4. Train model
             torch.distributed.barrier()

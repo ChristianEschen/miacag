@@ -2,6 +2,7 @@ import psycopg2
 import pandas as pd
 import psycopg2.extras
 import numpy as np
+from tqdm import tqdm
 
 
 def getDataFromDatabase(sql_config):
@@ -19,7 +20,7 @@ def getDataFromDatabase(sql_config):
     df = pd.read_sql_query(sql, connection)
     if len(df) == 0:
         print('The requested query does not have any data!')
-
+    
     return df, connection
 
 
@@ -60,6 +61,34 @@ def update_cols(con, records, sql_config, cols, page_size=2):
     )
     con.commit()
 
+# def update_cols(conn, records, sql_config, cols, page_size=2):
+#     values = []
+#     for record in records:
+#         value = tuple([record[i] for i in cols+['rowid']])
+#         values.append(value)
+#     values = tuple(values)
+#     string = cols_to_set(cols)
+#     update_query = """
+#     UPDATE "{schema_name}"."{table_name}" AS t
+#     SET {cols_to_set}
+#     FROM (VALUES %s) AS e({cols})
+#     WHERE e.rowid = t.rowid;""".format(
+#         schema_name=sql_config['schema_name'],
+#         table_name=sql_config['table_name'],
+#         cols=', '.join(cols+['rowid']),
+#         cols_to_set=string)
+#     cur = conn.cursor()
+#     n = 100
+#     print('len(values): ', len(values))
+#     with tqdm(total=len(values)) as pbar:
+#         for i in range(0, len(values), n):
+#             psycopg2.extras.execute_values(
+#                 cur, update_query, values[i:i + n], template=None, page_size=n
+#                 )
+#             conn.commit()
+#             pbar.update(cur.rowcount)
+#     cur.close()
+#     conn.close()
 
 def copy_table(sql_config):
     sql = """
@@ -134,21 +163,26 @@ def changeDtypes(sql_config, columnm_names, data_types):
 def copyCol(sql_config,
             source_column,
             destination_column):
-    df, connection = getDataFromDatabase(sql_config)
-    df[destination_column] = df[source_column]
-    for dest_col in destination_column:
-        df = df.replace({dest_col: {np.nan: None}})
-        df[dest_col] = pd.to_numeric(df[dest_col])
-        # if source_dtype == 'float8':
-        #     df[dest_col] = pd.to_numeric(df[dest_col])
-        # elif source_dtype == 'int8':
-        #     df[dest_col] = pd.to_numeric(df[dest_col])
-        # else:
-        #     raise ValueError(
-        #         f"Not implemented the following dtype:{source_dtype}")
+    connection = psycopg2.connect(
+            host=sql_config['host'],
+            database=sql_config['database'],
+            user=sql_config['username'],
+            password=sql_config['password'])
+    cursor = connection.cursor()
 
-    update_cols(connection,
-                df.to_dict('records'),
-                sql_config,
-                destination_column,)
+    combined = [destination_column[i] +" = " +source_column[i] + ", " for i in range(0, len(destination_column))]
+    updt_part = "".join(combined)
+    updt_part = updt_part[:-2]
+    sql = """
+    UPDATE "{schema_name}"."{table_name}"
+    SET {updt_part};""".format(
+        schema_name=sql_config['schema_name'],
+        table_name=sql_config['table_name'],
+        updt_part=updt_part)
+    print('sql', sql)
+    cursor.execute(sql)
+    cursor.execute("COMMIT;")
+
+    cursor.close()
+    connection.close()
     return None

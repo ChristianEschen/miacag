@@ -41,6 +41,7 @@ def train_one_step(model, data, criterion,
             # losses, loss = get_losses(config, outputs,
             #                           data[config['labels_names']],
             #                           criterion)
+       # if loss != torch.tensor(0.0):
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
@@ -53,7 +54,6 @@ def train_one_step(model, data, criterion,
                                         device)
         loss.backward()
         optimizer.step()
-
     losses = create_loss_dict(config, losses, loss)
     metrics, losses_metric = get_loss_metric_class(
         config, outputs, data, losses, running_metric_train,

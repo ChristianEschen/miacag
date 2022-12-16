@@ -14,9 +14,47 @@ from sklearn import metrics
 import scipy
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
-from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil \
-    import reorder_rows
 from decimal import Decimal
+from miacag.utils.script_utils import mkFolder
+def rename_columns(df, label_name):
+    if '_1_prox' in label_name:
+        value = '1: Proximal RCA'
+    elif '_2_mi' in label_name:
+        value = '2: Mid RCA'
+    elif '_3_dist' in label_name:
+        value = '3: Distale RCA'
+    elif '_4_pda' in label_name:
+        value = '4: PDA'
+    elif '_5_lm' in label_name:
+        value = '5: LM'
+    elif '_6_prox' in label_name:
+        value = '6: Proximal LAD'
+    elif '_7_mi' in label_name:
+        value = '7: Mid LAD'
+    elif '_8_dist' in label_name:
+        value = '8: Distale LAD'
+    elif '_9_d1' in label_name:
+        value = '9: Diagonal 1'
+    elif '_10_d2' in label_name:
+        value = '10: Diagonal 2'
+    elif '_11_prox' in label_name:
+        value = '11: Proximal LCX'
+    elif '_12_om' in label_name:
+        value = '12: Marginal 1'
+    elif '_13_midt' in label_name:
+        value = '13: Mid LCX'
+    elif '_14_om' in label_name:
+        value = '14: Marginal 2'
+    elif '_15_dist' in label_name:
+        value = '15: Distale LCX'
+    elif '_16_pla' in label_name:
+        value = '16: PLA'
+    key = label_name
+    dictionary = {key: value}
+    df = df.rename(columns=dictionary)
+    return df, value
+
+from miacag.plots.plot_roc_auc_all import plot_roc_all
 
 
 def map_1abels_to_0neTohree():
@@ -168,6 +206,7 @@ def threshold_continuois(labels, config, plot_name):
             thres = 0.5
         labels_copy[labels_copy >= thres] = 1
         labels_copy[labels_copy < thres] = 0
+        
     else:
         pass
     return labels_copy
@@ -175,7 +214,15 @@ def threshold_continuois(labels, config, plot_name):
 
 def plot_roc_curve(labels, confidences, output_plots,
                    plot_name, support, num_classes, config, loss_name):
-    fpr, tpr, thresholds = metrics.roc_curve(labels, confidences, pos_label=1)
+    
+    
+    if plot_name.startswith('ffr_'):
+        confidences_trans = confidences.copy()
+        confidences_trans = 1 - confidences_trans
+    else:
+        confidences_trans = confidences
+    fpr, tpr, thresholds = metrics.roc_curve(labels, confidences_trans, pos_label=1)
+    
     roc_auc = metrics.auc(fpr, tpr)
     plt.clf()
     plt.figure()
@@ -215,6 +262,7 @@ def plot_results_regression(df_label, confidence_name,
     if not group_aggregated:
         df_label[confidence_name] = convertConfFloats(
             df_label[confidence_name], config['loss']['name'][c])
+
     df_label[label_name] = threshold_continuois(
         df_label[label_name],
         config,
@@ -296,6 +344,123 @@ def plot_results_classification(df_label,
 
     return None
 
+def select_relevant_columns(label_names, label_type):
+    # select relevant columns starting with "sten"
+    if label_type == 'sten':
+        sten_cols = [i for i in label_names if i.startswith('sten')]
+        return sten_cols
+    elif label_type == 'ffr':
+        ffr_cols = [i for i in label_names if i.startswith('ffr')]
+        return ffr_cols
+    else:
+        raise ValueError('label_type must be either sten or ffr')
+
+
+def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
+                           group_aggregated, config):
+    threshold_ffr = config['loaders']['val_method']['threshold_ffr']
+    threshold_sten = config['loaders']['val_method']['threshold_sten']
+    df_sten = df.copy()
+    sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
+    sten_cols_true = select_relevant_columns(label_names, 'sten')
+    if not group_aggregated:
+        for sten_col_conf in sten_cols_conf:
+            df_sten[sten_col_conf] = convertConfFloats(
+                df[sten_col_conf],
+                config['loss']['name'][0])
+    sten_trues_concat = []      
+    sten_conf_concat = []  
+    #concantenating all stenosis columns
+    # df_sten['stenosis'] = []
+    for idx, label in enumerate(sten_cols_true):
+        sten_trues_concat.append(df_sten[label])
+        sten_conf_concat.append(df_sten[sten_cols_conf[idx]])
+    stenosis = pd.concat(
+        [pd.concat(sten_trues_concat), pd.concat(sten_conf_concat)],
+        axis=1)
+    if len(sten_cols_true) >= 2:
+        plot_col = [0, 1]
+    else:
+        plot_col = [sten_cols_true[0], sten_cols_conf[0]]
+
+    plot_regression_density(x=stenosis[plot_col[0]], y=stenosis[plot_col[1]],
+                            cmap='jet', ylab='prediction', xlab='true',
+                            bins=100,
+                            figsize=(5, 4),
+                            snsbins=60,
+                            plot_type='stenosis',
+                            output_folder=output_plots,
+                            label_name_ori='sten_all')
+    df_ffr = df.copy()
+    ffr_cols_true = select_relevant_columns(label_names, 'ffr')
+    if len(ffr_cols_true) > 0:
+        ffr_cols_conf = select_relevant_columns(confidence_names, 'ffr')
+        if not group_aggregated:
+            for ffr_col_conf in ffr_cols_conf:
+                df_ffr[ffr_col_conf] = convertConfFloats(
+                    df_ffr[ffr_col_conf],
+                    config['loss']['name'][0])
+        ffr_trues_concat = []      
+        ffr_conf_concat = []  
+        #concantenating all stenosis columns
+        # df_sten['stenosis'] = []
+        for idx, label in enumerate(ffr_cols_true):
+            ffr_trues_concat.append(df_ffr[label])
+            ffr_conf_concat.append(df_ffr[ffr_cols_conf[idx]])
+        ffr = pd.concat(
+            [pd.concat(ffr_trues_concat), pd.concat(ffr_conf_concat)],
+            axis=1)
+        
+        if len(ffr_cols_true) >= 2:
+            plot_col = [0, 1]
+        else:
+            plot_col = [ffr_cols_true[0], ffr_cols_conf[0]]
+        plot_regression_density(x=ffr[plot_col[0]], y=ffr[plot_col[1]],
+                                cmap='jet', ylab='Prediction', xlab='True',
+                                bins=100,
+                                figsize=(5, 4),
+                                snsbins=60,
+                                plot_type='Stenosis',
+                                output_folder=output_plots,
+                                label_name_ori='ffr_all')
+    return None 
+
+def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
+                      group_aggregated, config):
+    threshold_ffr = config['loaders']['val_method']['threshold_ffr']
+    threshold_sten = config['loaders']['val_method']['threshold_sten']
+    df_sten = df.copy()
+    sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
+    sten_cols_true = select_relevant_columns(label_names, 'sten')
+    if not group_aggregated:
+        for sten_col_conf in sten_cols_conf:
+            df_sten[sten_col_conf] = convertConfFloats(
+                df[sten_col_conf],
+                config['loss']['name'][0])
+    plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
+                 plot_type='stenosis',
+                 theshold=threshold_sten)
+    df_ffr = df.copy()
+    ffr_cols_true = select_relevant_columns(label_names, 'ffr')
+    if len(ffr_cols_true) > 0:
+        ffr_cols_conf = select_relevant_columns(confidence_names, 'ffr')
+        if not group_aggregated:
+            for ffr_col_conf in ffr_cols_conf:
+                df_ffr[ffr_col_conf] = convertConfFloats(
+                    df_ffr[ffr_col_conf],
+                    config['loss']['name'][0])
+        plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
+                     plot_type='FFR',
+                     theshold=threshold_ffr)
+    # else:
+    #     print('No FFR labels found in database')
+    
+
+
+def remove_suffix(input_string, suffix):
+    if suffix and input_string.endswith(suffix):
+        return input_string[:-len(suffix)]
+    return input_string
 
 def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
@@ -303,6 +468,12 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     df, _ = getDataFromDatabase(sql_config)
     if group_aggregated:
         confidence_names = [c + '_aggregated' for c in confidence_names]
+    wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
+                           group_aggregated, config)    
+    wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
+                      group_aggregated,
+                      config=config)
+
     for c, label_name in enumerate(label_names):
         confidence_name = confidence_names[c]
         prediction_name = prediction_names[c]
@@ -314,10 +485,37 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
         if config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
-            plot_results_regression(df_label, confidence_name,
+            df_to_process = df_label.copy()
+            plot_results_regression(df_to_process, confidence_name,
                                     label_name, config, c, support,
                                     output_plots,
                                     group_aggregated)
+            #if any(item.startswith('ffr') for item in config['labels_names']):
+            if label_name.startswith('sten_'):
+                try:
+                    df_to_process_ffr = df_label.copy()
+                    name = 'ffr' + label_name[4:]
+                    name = remove_suffix(name, "_transformed")
+                    ffr_thres = config[
+                        'loaders']['val_method']['threshold_ffr']
+                    df_to_process_ffr[label_name + '_ffr_corrected'] \
+                        = (df_to_process_ffr[name] <= ffr_thres).astype(int)
+                    df_to_process_ffr = df_to_process_ffr[
+                        df_to_process_ffr[name].notna()]
+                    output_plots_ffr = os.path.join(
+                        output_plots, 'ffr_corrected')
+                    mkFolder(output_plots_ffr)
+                    support = len(df_to_process_ffr)
+                    plot_results_regression(df_to_process_ffr, confidence_name,
+                                            label_name + '_ffr_corrected',
+                                            config, c, support,
+                                            output_plots_ffr,
+                                            group_aggregated)
+                except IndexError:
+                    print('No FFR labels found in database')
+                except:
+                    print('Error in FFR correction')
+
 
         elif config['loss']['name'][c].startswith('CE') or \
                 config['loss']['name'][c] == 'BCE_multilabel':
@@ -388,6 +586,7 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         return None
 
 
+
 def plotRegression(sql_config, label_names,
                    prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
@@ -415,6 +614,16 @@ def plotRegression(sql_config, label_names,
             df_plot[prediction_name], a_min=0, a_max=1)
 
         df_plot = df_plot.astype({prediction_name: float})
+        plot_regression_density(x=df_plot[label_name],
+                                y=df_plot[prediction_name],
+                                cmap='jet', ylab='prediction', xlab='true',
+                                bins=100,
+                                figsize=(5, 4),
+                                snsbins=60,
+                                plot_type='Stenosis' if label_name_ori.startswith('sten') else 'FFR',
+                                output_folder=output_folder,
+                                label_name_ori=label_name_ori)
+    #remove nan
         g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)
         X2 = sm.add_constant(df_plot[label_name])
         est = sm.OLS(df_plot[prediction_name], X2)
@@ -447,40 +656,36 @@ def plotRegression(sql_config, label_names,
     return None
 
 
-def rename_columns(df, label_name):
-    if '_1_prox' in label_name:
-        value = '1: Proximal RCA'
-    elif '_2_mi' in label_name:
-        value = '2: Mid RCA'
-    elif '_3_dist' in label_name:
-        value = '3: Distale RCA'
-    elif '_4_pda' in label_name:
-        value = '4: PDA'
-    elif '_5_lm' in label_name:
-        value = '5: LM'
-    elif '_6_prox' in label_name:
-        value = '6: Proximal LAD'
-    elif '_7_mi' in label_name:
-        value = '7: Mid LAD'
-    elif '_8_dist' in label_name:
-        value = '8: Distale LAD'
-    elif '_9_d1' in label_name:
-        value = '9: Diagonal 1'
-    elif '_10_d2' in label_name:
-        value = '10: Diagonal 2'
-    elif '_11_prox' in label_name:
-        value = '11: Proximal LCX'
-    elif '_12_om' in label_name:
-        value = '12: Marginal 1'
-    elif '_13_midt' in label_name:
-        value = '13: Mid LCX'
-    elif '_14_om' in label_name:
-        value = '14: Marginal 2'
-    elif '_15_dist' in label_name:
-        value = '15: Distale LCX'
-    elif '_16_pla' in label_name:
-        value = '16: PLA'
-    key = label_name
-    dictionary = {key: value}
-    df = df.rename(columns=dictionary)
-    return df, value
+def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
+                            bins=100,
+                            figsize=(5, 4),
+                            snsbins=60,
+                            plot_type=None,
+                            output_folder=None,
+                            label_name_ori=None):
+    #remove nan
+    mask = x.isna()
+    mask = mask | y.isna()
+    x = x[~mask]
+    y = y[~mask]
+    ax1 = sns.jointplot(x=x, y=y, marginal_kws=dict(bins=snsbins))
+    ax1.fig.set_size_inches(figsize[0], figsize[1])
+    ax1.ax_joint.cla()
+    plt.sca(ax1.ax_joint)
+    plt.hist2d(
+        x, y, bins=bins,
+        norm=matplotlib.colors.LogNorm(), cmap=cmap)
+    #plt.title('Density plot')
+    plt.xlabel(plot_type + ' ' + xlab, fontsize=12)
+    plt.ylabel(plot_type + ' ' + ylab, fontsize=12)
+    cbar_ax = ax1.fig.add_axes([1, 0.1, 0.03, 0.7])
+    cb = plt.colorbar(cax=cbar_ax)
+    cb.set_label(r'$\log_{10}$ density of points',
+                 fontsize=13)
+    plt.savefig(os.path.join(output_folder, label_name_ori + '_density.png'),
+                dpi=100, bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, label_name_ori + '_density.pdf'),
+                dpi=100, bbox_inches='tight')
+    plt.close()
+
+    return None

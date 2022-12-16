@@ -27,6 +27,19 @@ def mse_loss_with_nans(input, target):
     return loss
 
 
+# def l1_loss_smooth(predictions, targets, beta=1):
+#     # Compute the absolute difference between predictions and targets
+#     diff = torch.abs(predictions - targets)
+
+#     # Compute the mask for missing values in the targets
+#     mask = torch.isnan(targets)
+
+#     # Replace the missing values in the mask with the value of beta
+#     diff = torch.where(mask, beta, diff)
+
+#     # Compute the loss as the mean of the smooth L1 loss over all samples
+#     return diff.mean()
+
 def l1_loss_smooth(predictions, targets, beta=1):
     mask = torch.isnan(targets)
     loss = 0

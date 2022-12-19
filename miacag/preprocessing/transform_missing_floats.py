@@ -50,7 +50,7 @@ class transformMissingFloats():
             if 'sten' in label_name:
                 self.df[label_name] = self.df[label_name].fillna(0)
 
-        update_cols(self.connection,
+        update_cols(
                     self.df.to_dict('records'),
                     self.sql_config,
                     self.sql_config['labels_names'],)

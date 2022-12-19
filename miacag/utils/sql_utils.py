@@ -20,7 +20,7 @@ def getDataFromDatabase(sql_config):
     df = pd.read_sql_query(sql, connection)
     if len(df) == 0:
         print('The requested query does not have any data!')
-    
+    connection.close()
     return df, connection
 
 
@@ -38,30 +38,8 @@ def cols_to_set(cols):
     return string
 
 
-def update_cols(con, records, sql_config, cols, page_size=2):
-    cur = con.cursor()
-    values = []
-    for record in records:
-        value = tuple([record[i] for i in cols+['rowid']])
-        values.append(value)
-    values = tuple(values)
-    string = cols_to_set(cols)
-    update_query = """
-    UPDATE "{schema_name}"."{table_name}" AS t
-    SET {cols_to_set}
-    FROM (VALUES %s) AS e({cols})
-    WHERE e.rowid = t.rowid;""".format(
-        schema_name=sql_config['schema_name'],
-        table_name=sql_config['table_name'],
-        cols=', '.join(cols+['rowid']),
-        cols_to_set=string)
-
-    psycopg2.extras.execute_values(
-        cur, update_query, values, template=None, page_size=100
-    )
-    con.commit()
-
-# def update_cols(conn, records, sql_config, cols, page_size=2):
+# def update_cols(con, records, sql_config, cols, page_size=2):
+#     cur = con.cursor()
 #     values = []
 #     for record in records:
 #         value = tuple([record[i] for i in cols+['rowid']])
@@ -77,18 +55,45 @@ def update_cols(con, records, sql_config, cols, page_size=2):
 #         table_name=sql_config['table_name'],
 #         cols=', '.join(cols+['rowid']),
 #         cols_to_set=string)
-#     cur = conn.cursor()
-#     n = 100
-#     print('len(values): ', len(values))
-#     with tqdm(total=len(values)) as pbar:
-#         for i in range(0, len(values), n):
-#             psycopg2.extras.execute_values(
-#                 cur, update_query, values[i:i + n], template=None, page_size=n
-#                 )
-#             conn.commit()
-#             pbar.update(cur.rowcount)
-#     cur.close()
-#     conn.close()
+
+#     psycopg2.extras.execute_values(
+#         cur, update_query, values, template=None, page_size=100
+#     )
+#     con.commit()
+
+def update_cols(records, sql_config, cols, page_size=2):
+    conn = psycopg2.connect(
+        host=sql_config['host'],
+        database=sql_config['database'],
+        user=sql_config['username'],
+        password=sql_config['password'])
+    values = []
+    for record in records:
+        value = tuple([record[i] for i in cols+['rowid']])
+        values.append(value)
+    values = tuple(values)
+    string = cols_to_set(cols)
+    update_query = """
+    UPDATE "{schema_name}"."{table_name}" AS t
+    SET {cols_to_set}
+    FROM (VALUES %s) AS e({cols})
+    WHERE e.rowid = t.rowid;""".format(
+        schema_name=sql_config['schema_name'],
+        table_name=sql_config['table_name'],
+        cols=', '.join(cols+['rowid']),
+        cols_to_set=string)
+    cur = conn.cursor()
+    n = 10000
+    print('len(values): ', len(values))
+    with tqdm(total=len(values)) as pbar:
+        for i in range(0, len(values), n):
+            psycopg2.extras.execute_values(
+                cur, update_query, values[i:i + n], template=None, page_size=n
+                )
+            conn.commit()
+            pbar.update(cur.rowcount)
+    cur.close()
+    conn.close()
 
 def copy_table(sql_config):
     sql = """
@@ -141,7 +146,11 @@ def add_columns(sql_config, column_names, data_types):
 def changeDtypes(sql_config, columnm_names, data_types):
 
     for count, columnm_name in enumerate(columnm_names):
-        _, connection = getDataFromDatabase(sql_config)
+        connection = psycopg2.connect(
+            host=sql_config['host'],
+            database=sql_config['database'],
+            user=sql_config['username'],
+            password=sql_config['password'])
         data_type = data_types[count]
         sql = """
         ALTER TABLE "{schema_name}"."{table_name}"

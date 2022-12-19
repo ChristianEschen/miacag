@@ -60,7 +60,7 @@ class transformThreshold():
                 self.df[label_name][self.df[label_name] < thres] = 0
             else:
                 raise ValueError('Not implemented')
-        update_cols(self.connection,
+        update_cols(
                     self.df.to_dict('records'),
                     self.sql_config,
                     self.sql_config['labels_names'],)
@@ -101,7 +101,7 @@ class transformThresholdRegression():
                                            self.sql_config['labels_names'],
                                            self.config)
             self.df = proccoessor()
-        update_cols(self.connection,
+        update_cols(
                     self.df.to_dict('records'),
                     self.sql_config,
                     self.sql_config['labels_names'],)

@@ -48,7 +48,7 @@ class transformMissingFloats():
         self.df[config['labels_names']] = self.df[self.config["labels_names"]]
         self.df = self.df.replace({config['labels_names']: self.labels_config})
 
-        update_cols(self.connection,
+        update_cols(
                     self.df.to_dict('records'),
                     self.sql_config,
                     ['phase', config['labels_names']],)

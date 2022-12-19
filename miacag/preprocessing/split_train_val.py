@@ -72,11 +72,11 @@ class splitter():
         train_df = train_df[
             ['phase', 'rowid'] + self.sql_config['labels_names']]
 
-        update_cols(self.connection,
+        update_cols(
                     val_df.to_dict('records'),
                     self.sql_config,
                     ['phase'] + self.sql_config['labels_names'],)
-        update_cols(self.connection,
+        update_cols(
                     train_df.to_dict('records'),
                     self.sql_config,
                     ['phase'] + self.sql_config['labels_names'])

@@ -87,10 +87,16 @@ def convertConfFloats(confidences, loss_name):
     confidences_conv = []
     for conf in confidences:
         if loss_name.startswith('CE'):
-            confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
+            if conf is None:
+                confidences_conv.append(np.nan)
+            else:
+                confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
 
         elif loss_name in ['MSE', 'L1', 'L1smooth', 'BCE_multilabel']:
-            confidences_conv.append(float(conf.split("0:")[-1][:-1]))
+            if conf is None:
+                confidences_conv.append(np.nan)
+            else:
+                confidences_conv.append(float(conf.split("0:")[-1][:-1]))
         else:
             raise ValueError('not implemented')
     return np.array(confidences_conv)
@@ -429,6 +435,8 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                       group_aggregated, config):
     threshold_ffr = config['loaders']['val_method']['threshold_ffr']
     threshold_sten = config['loaders']['val_method']['threshold_sten']
+    #if config['task_type'] == 'mil_classification':
+        
     df_sten = df.copy()
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
     sten_cols_true = select_relevant_columns(label_names, 'sten')
@@ -668,7 +676,7 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     mask = mask | y.isna()
     x = x[~mask]
     y = y[~mask]
-    ax1 = sns.jointplot(x=x, y=y, marginal_kws=dict(bins=snsbins))
+    ax1 = sns.jointplot(x=x.to_numpy(), y=y.to_numpy(), marginal_kws=dict(bins=snsbins))
     ax1.fig.set_size_inches(figsize[0], figsize[1])
     ax1.ax_joint.cla()
     plt.sca(ax1.ax_joint)

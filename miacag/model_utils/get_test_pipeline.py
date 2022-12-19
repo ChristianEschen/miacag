@@ -168,7 +168,7 @@ class TestPipeline():
             test_loader.val_df[label_name + '_confidences'].to_list())
         test_loader.val_df[label_name + '_confidences'] = confidences
         records = test_loader.val_df.to_dict('records')
-        update_cols(test_loader.connection,
+        update_cols(
                     records, config,
                     [label_name + '_predictions', label_name + '_confidences'])
 

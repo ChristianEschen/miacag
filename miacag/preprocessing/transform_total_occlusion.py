@@ -56,7 +56,7 @@ class transformTotalOcclusion_right():
             'sten_procent_3_dist_rca_transformed'] = 100
 
 
-        update_cols(self.connection,
+        update_cols(
                     self.df.to_dict('records'),
                     self.sql_config,
                     self.sql_config['labels_names'],)

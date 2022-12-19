@@ -69,8 +69,7 @@ class labelsMap():
             replace_dict = dict(zip(trans_names, label_c_list))
             self.df = self.df.replace(replace_dict)
 
-        update_cols(self.connection,
-                    self.df.to_dict('records'),
+        update_cols(self.df.to_dict('records'),
                     self.sql_config,
                     trans_names,)
         return trans_names

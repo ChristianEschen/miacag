@@ -60,12 +60,7 @@ class Aggregator:
         return records
 
     def update_colum_wrap(self, records, cols) -> None:
-        self.conn = psycopg2.connect(
-            host=self.sql_config['host'],
-            database=self.sql_config['database'],
-            user=self.sql_config['username'],
-            password=self.sql_config['password'])
-        update_cols(self.conn, records, self.sql_config, cols, page_size=2)
+        update_cols(records, self.sql_config, cols, page_size=2)
 
     def __call__(self):
         self.get_df_from_query()

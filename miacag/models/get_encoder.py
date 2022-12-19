@@ -120,7 +120,7 @@ def get_encoder(config, device):
         model = projection_MLP(config['model']['incomming_features'],
                                in_features)
     elif config['model']['backbone'] == 'r50':
-        from torchvision.models import resnet50, ResNet50_Weights
+        from torchvision.models import resnet50
         model = resnet50()
         if config['loaders']['mode'] != 'testing':
             model = getPretrainedWeights(config, model, device)

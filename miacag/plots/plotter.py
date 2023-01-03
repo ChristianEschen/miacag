@@ -1,6 +1,9 @@
 import os
 import numpy as np
 from miacag.utils.sql_utils import getDataFromDatabase
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
+
 from sklearn.metrics import f1_score, \
      accuracy_score, confusion_matrix, plot_confusion_matrix
 import pandas as pd
@@ -11,6 +14,7 @@ import matplotlib
 from matplotlib.ticker import MaxNLocator
 matplotlib.use('Agg')
 from sklearn import metrics
+import math
 import scipy
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
@@ -55,6 +59,7 @@ def rename_columns(df, label_name):
     return df, value
 
 from miacag.plots.plot_roc_auc_all import plot_roc_all
+from miacag.plots.plot_roc_auc_all import select_relevant_data
 
 
 def map_1abels_to_0neTohree():
@@ -447,6 +452,7 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                 config['loss']['name'][0])
     plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
                  plot_type='stenosis',
+                 config=config,
                  theshold=threshold_sten)
     df_ffr = df.copy()
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
@@ -459,6 +465,7 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                     config['loss']['name'][0])
         plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
                      plot_type='FFR',
+                     config=config,
                      theshold=threshold_ffr)
     # else:
     #     print('No FFR labels found in database')
@@ -594,7 +601,10 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         return None
 
 
-
+def getmetrics(df, label_name, prediction_name):
+    copy_df = df.copy()
+    if 'pla' in label_name:
+        copy_df[["dominas"]]
 def plotRegression(sql_config, label_names,
                    prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
@@ -609,21 +619,29 @@ def plotRegression(sql_config, label_names,
             df_plot = df_plot.drop_duplicates(
                     ['PatientID',
                     'StudyInstanceUID'])
-        df_plot, label_name = rename_columns(df_plot, label_name)
-        df_plot = df_plot.astype({label_name: float})
+        # df_plot_rep, _ = select_relevant_data(
+        #     df_plot, prediction_name, label_name)
+        df_plot_rep = df_plot.copy()
+        mask1 = df_plot_rep[prediction_name].isna()
+        mask2 = df_plot_rep[label_name].isna()
+        mask = mask1 | mask2
+        df_plot_rep = df_plot_rep[~mask]
+        
+        df_plot_rep, label_name = rename_columns(df_plot_rep, label_name)
+        df_plot_rep = df_plot_rep.astype({label_name: float})
 
         if group_aggregated is False:
-            df_plot[prediction_name] = \
+            df_plot_rep[prediction_name] = \
                 convertConfFloats(
-                    df_plot[prediction_name],
+                    df_plot_rep[prediction_name],
                     sql_config['loss_name'][c])
 
-        df_plot[prediction_name] = np.clip(
-            df_plot[prediction_name], a_min=0, a_max=1)
+        df_plot_rep[prediction_name] = np.clip(
+            df_plot_rep[prediction_name], a_min=0, a_max=1)
 
-        df_plot = df_plot.astype({prediction_name: float})
-        plot_regression_density(x=df_plot[label_name],
-                                y=df_plot[prediction_name],
+        df_plot_rep = df_plot_rep.astype({prediction_name: float})
+        plot_regression_density(x=df_plot_rep[label_name],
+                                y=df_plot_rep[prediction_name],
                                 cmap='jet', ylab='prediction', xlab='true',
                                 bins=100,
                                 figsize=(5, 4),
@@ -632,13 +650,15 @@ def plotRegression(sql_config, label_names,
                                 output_folder=output_folder,
                                 label_name_ori=label_name_ori)
     #remove nan
-        g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot)
-        X2 = sm.add_constant(df_plot[label_name])
-        est = sm.OLS(df_plot[prediction_name], X2)
+        g = sns.lmplot(x=label_name, y=prediction_name, data=df_plot_rep)
+        X2 = sm.add_constant(df_plot_rep[label_name])
+        est = sm.OLS(df_plot_rep[prediction_name], X2)
         est2 = est.fit()
         r = est2.rsquared
         p = est2.pvalues[label_name]
         p = '%.2E' % Decimal(p)
+        rmse = math.sqrt(mean_squared_error(df_plot_rep[label_name], df_plot_rep[prediction_name]))
+        mae = mean_absolute_error(df_plot_rep[label_name], df_plot_rep[prediction_name])
 
 
         for ax, title in zip(g.axes.flat, [label_name]):
@@ -661,6 +681,13 @@ def plotRegression(sql_config, label_names,
                 output_folder, label_name_ori + '_scatter.png'), dpi=100,
             bbox_inches='tight')
         plt.close()
+        
+        df2 = pd.DataFrame(
+            np.array([[mae, rmse, p, r]]),
+            columns=['MAE', 'RMSE', 'p-value', 'R-squared'])
+        df2.to_csv(
+            os.path.join
+            (output_folder, label_name_ori + '_regression.csv'))
     return None
 
 

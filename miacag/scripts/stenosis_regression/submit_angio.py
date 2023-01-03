@@ -60,12 +60,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config = yaml.load(file, Loader=yaml.FullLoader)
         mkFolder(config['output'])
         csv_exists, output_csv_test = checkCsvExists(config['output'])
-        if csv_exists is False:
-            trans_label = \
-                [i + '_transformed' for i in config['labels_names']]
-            df_results = create_empty_csv(output_csv_test, trans_label)
-        else:
-            df_results = pd.read_csv(output_csv_test)
+        # if csv_exists is False:
+        #     trans_label = \
+        #         [i + '_transformed' for i in config['labels_names']]
+        #     df_results = create_empty_csv(output_csv_test, trans_label)
+        # else:
+        #     df_results = pd.read_csv(output_csv_test)
 
         exp_exists = checkExpExists(config_path[i], config['output'])
         if exp_exists is False:
@@ -280,9 +280,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['model']['pretrain_model'] = output_directory
             test({**config, 'query': config["query_test"], 'TestSize': 1})
 
+            print('kill gpu processes')
+            torch.distributed.barrier()
+            torch.cuda.empty_cache()
+            torch.distributed.destroy_process_group()
 
             # plotting results
-            torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:
                 # 6 plot results:
                 # train

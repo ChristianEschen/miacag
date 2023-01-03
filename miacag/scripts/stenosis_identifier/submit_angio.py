@@ -268,6 +268,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['model']['pretrain_model'] = output_directory
             test({**config, 'query': config["query_test"], 'TestSize': 1})
 
+
+
+            torch.distributed.barrier()
+            torch.distributed.destroy_process_group()
+            torch.cuda.empty_cache()
+
             # plotting results
             torch.distributed.barrier()
             if torch.distributed.get_rank() == 0:

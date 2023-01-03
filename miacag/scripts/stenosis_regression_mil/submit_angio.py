@@ -61,12 +61,7 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config = yaml.load(file, Loader=yaml.FullLoader)
         mkFolder(config['output'])
         csv_exists, output_csv_test = checkCsvExists(config['output'])
-        # if csv_exists is False:
-        #     trans_label = \
-        #         [i + '_transformed' for i in config['labels_names']]
-        #     df_results = create_empty_csv(output_csv_test, trans_label)
-        # else:
-        #     df_results = pd.read_csv(output_csv_test)
+
 
         exp_exists = checkExpExists(config_path[i], config['output'])
         if exp_exists is False:
@@ -289,120 +284,124 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             config['model']['pretrain_model'] = output_directory
             test({**config, 'query': config["query_test"], 'TestSize': 1})
 
+            torch.distributed.barrier()
+            torch.cuda.empty_cache()
+            torch.distributed.destroy_process_group()
+
 
             # plotting results
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                # 6 plot results:
-                # train
-                plot_results({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_train_plot']},
-                            config['labels_names'],
-                            [i + "_predictions" for i in
-                             config['labels_names']],
-                            output_plots_train,
-                            config['model']['num_classes'],
-                            config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
-                            )
+            #torch.distributed.barrier()
+            #if torch.distributed.get_rank() == 0:
+            # 6 plot results:
+            # train
+            plot_results({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_train_plot']},
+                        config['labels_names'],
+                        [i + "_predictions" for i in
+                            config['labels_names']],
+                        output_plots_train,
+                        config['model']['num_classes'],
+                        config,
+                        [i + "_confidences" for i in
+                            config['labels_names']]
+                        )
 
-                plotRegression({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_train_plot'],
-                            'loss_name': config['loss']['name']},
-                            config['labels_names'],
-                            conf,
-                            output_plots_train,
-                            group_aggregated=False)
-                   
-                # val
-                plot_results({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_val_plot']},
-                            config['labels_names'],
-                            [i + "_predictions" for i in
-                             config['labels_names']],
-                            output_plots_val,
-                            config['model']['num_classes'],
-                            config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
-                            )
+            plotRegression({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_train_plot'],
+                        'loss_name': config['loss']['name']},
+                        config['labels_names'],
+                        conf,
+                        output_plots_train,
+                        group_aggregated=False)
+                
+            # val
+            plot_results({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_val_plot']},
+                        config['labels_names'],
+                        [i + "_predictions" for i in
+                            config['labels_names']],
+                        output_plots_val,
+                        config['model']['num_classes'],
+                        config,
+                        [i + "_confidences" for i in
+                            config['labels_names']]
+                        )
 
-                plotRegression({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_val_plot'],
-                            'loss_name': config['loss']['name']
-                            },
-                            config['labels_names'],
-                            conf,
-                            output_plots_val,
-                            group_aggregated=False)
+            plotRegression({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_val_plot'],
+                        'loss_name': config['loss']['name']
+                        },
+                        config['labels_names'],
+                        conf,
+                        output_plots_val,
+                        group_aggregated=False)
 
-                # test
-                plot_results({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_test_plot']},
-                            config['labels_names'],
-                            [i + "_predictions" for i in
-                             config['labels_names']],
-                            output_plots_test,
-                            config['model']['num_classes'],
-                            config,
-                            [i + "_confidences" for i in
-                             config['labels_names']]
-                            )
+            # test
+            plot_results({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_test_plot']},
+                        config['labels_names'],
+                        [i + "_predictions" for i in
+                            config['labels_names']],
+                        output_plots_test,
+                        config['model']['num_classes'],
+                        config,
+                        [i + "_confidences" for i in
+                            config['labels_names']]
+                        )
 
-                plotRegression({
-                            'database': config['database'],
-                            'username': config['username'],
-                            'password': config['password'],
-                            'host': config['host'],
-                            'labels_names': config['labels_names'],
-                            'schema_name': config['schema_name'],
-                            'table_name': output_table_name,
-                            'query': config['query_test_plot'],
-                            'loss_name': config['loss']['name']
-                            },
-                            config['labels_names'],
-                            conf,
-                            output_plots_test,
-                            group_aggregated=False)
+            plotRegression({
+                        'database': config['database'],
+                        'username': config['username'],
+                        'password': config['password'],
+                        'host': config['host'],
+                        'labels_names': config['labels_names'],
+                        'schema_name': config['schema_name'],
+                        'table_name': output_table_name,
+                        'query': config['query_test_plot'],
+                        'loss_name': config['loss']['name']
+                        },
+                        config['labels_names'],
+                        conf,
+                        output_plots_test,
+                        group_aggregated=False)
 
-                print('config files processed', str(i+1))
-                print('config files to process in toal:', len(config_path))
+            print('config files processed', str(i+1))
+            print('config files to process in toal:', len(config_path))
 
         if csv_exists:
             return None

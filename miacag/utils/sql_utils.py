@@ -83,7 +83,7 @@ def update_cols(records, sql_config, cols, page_size=2):
         cols=', '.join(cols+['rowid']),
         cols_to_set=string)
     cur = conn.cursor()
-    n = 10000
+    n = 10000   
     print('len(values): ', len(values))
     with tqdm(total=len(values)) as pbar:
         for i in range(0, len(values), n):

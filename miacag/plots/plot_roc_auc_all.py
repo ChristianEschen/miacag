@@ -123,13 +123,17 @@ def transform_confidences_to_by_label_type(confidences, name):
     return confidences
 
 
-def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plot_type, theshold=0.5):
+def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plot_type, config, theshold=0.5):
        # Define a result table as a DataFrame
     roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc'])
 
     idx = 0
     for seg in confidences_names:
-        result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        if config['task_type'] != 'mil_classification':
+            result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        else:
+            result_table_copy = result_table.copy()
+            maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
         result_table_copy[trues_names[idx]] = threshold_continues(
@@ -195,11 +199,14 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
             
     if maybeRCA:
         location = 'RCA'
+    elif maybeRCA == "":
+        location = ""
     else:
         location = 'LCA'
     fig = plt.figure(figsize=(8,6))
 
     for i in roc_result_table_2.index:
+        #     df_plot, prediction_name, label_name)
         plt.plot(roc_result_table_2.loc[i]['fpr'], 
                 roc_result_table_2.loc[i]['tpr'], 
                 label="{}, AUC={:.3f}".format(i, roc_result_table_2.loc[i]['auc']))
@@ -229,7 +236,9 @@ if __name__ == '__main__':
     mkFolder(output_plots)
     result_table, confidences_names, \
         trues_names, dom_name, label_pred_names = generate_data()
+    config = dict()
     plot_roc_all(result_table, trues_names, confidences_names,
                  output_plots, plot_type='stenosis',
+                 config=config,
                  theshold=0.5)
  

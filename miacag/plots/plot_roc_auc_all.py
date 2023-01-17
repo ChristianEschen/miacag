@@ -136,6 +136,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
             maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
+   #    if config['loss']['name'][0] in ['MSE', 'L1', 'L1smooth']:
         result_table_copy[trues_names[idx]] = threshold_continues(
             result_table_copy[trues_names[idx]], threshold=theshold, name=seg)
         y_test = result_table_copy[trues_names[idx]].values

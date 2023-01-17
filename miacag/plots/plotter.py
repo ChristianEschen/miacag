@@ -438,9 +438,13 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
 
 def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                       group_aggregated, config):
+    #if config['loss']['name'][0] in ['MSE', 'L1', 'L1smooth']:
     threshold_ffr = config['loaders']['val_method']['threshold_ffr']
     threshold_sten = config['loaders']['val_method']['threshold_sten']
-    #if config['task_type'] == 'mil_classification':
+    # else:
+    #     threshold_ffr = 0.5
+    #     threshold_sten = 0.5
+
         
     df_sten = df.copy()
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
@@ -601,10 +605,6 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         return None
 
 
-def getmetrics(df, label_name, prediction_name):
-    copy_df = df.copy()
-    if 'pla' in label_name:
-        copy_df[["dominas"]]
 def plotRegression(sql_config, label_names,
                    prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
@@ -619,9 +619,11 @@ def plotRegression(sql_config, label_names,
             df_plot = df_plot.drop_duplicates(
                     ['PatientID',
                     'StudyInstanceUID'])
-        # df_plot_rep, _ = select_relevant_data(
-        #     df_plot, prediction_name, label_name)
-        df_plot_rep = df_plot.copy()
+        if sql_config['task_type'] != 'regression':
+            df_plot_rep, _ = select_relevant_data(
+                df_plot, prediction_name, label_name)
+        else:
+            df_plot_rep = df_plot.copy()
         mask1 = df_plot_rep[prediction_name].isna()
         mask2 = df_plot_rep[label_name].isna()
         mask = mask1 | mask2

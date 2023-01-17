@@ -66,8 +66,7 @@ class TestPipeline():
                     test_loader.val_df,
                     csv_files,
                     count,
-                    config
-                    )
+                    config)
                 #self.resetDataPaths(test_loader, config)
                 self.insert_data_to_db(test_loader, label, config)
                 if config['loss']['name'] == 'CE':

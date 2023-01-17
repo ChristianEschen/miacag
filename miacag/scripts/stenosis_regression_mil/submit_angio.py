@@ -322,7 +322,9 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'schema_name': config['schema_name'],
                         'table_name': output_table_name,
                         'query': config['query_train_plot'],
-                        'loss_name': config['loss']['name']},
+                        'loss_name': config['loss']['name'],
+                        'task_type': config['task_type']
+                        },
                         config['labels_names'],
                         conf,
                         output_plots_train,
@@ -357,7 +359,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'schema_name': config['schema_name'],
                         'table_name': output_table_name,
                         'query': config['query_val_plot'],
-                        'loss_name': config['loss']['name']
+                        'loss_name': config['loss']['name'],
+                        'task_type': config['task_type']
                         },
                         config['labels_names'],
                         conf,
@@ -393,7 +396,8 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         'schema_name': config['schema_name'],
                         'table_name': output_table_name,
                         'query': config['query_test_plot'],
-                        'loss_name': config['loss']['name']
+                        'loss_name': config['loss']['name'],
+                        'task_type': config['task_type']
                         },
                         config['labels_names'],
                         conf,

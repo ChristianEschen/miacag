@@ -129,7 +129,7 @@ class ImageToScalarModel(EncoderModel):
                             nn.Linear(
                                 self.in_features,
                                 count_loss).to(device),
-                            nn.ReLU()
+                          #  nn.ReLU()
                         ))
                     # else:
                     #     self.fcs.append(

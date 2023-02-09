@@ -127,6 +127,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
        # Define a result table as a DataFrame
     roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc'])
 
+    probas = []
+    trues = []
     idx = 0
     for seg in confidences_names:
         if config['task_type'] != 'mil_classification':
@@ -149,7 +151,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         yproba = np.clip(yproba, a_min=0, a_max=1)
         fpr, tpr, _ = roc_curve(y_test,  yproba)
         auc = roc_auc_score(y_test, yproba)
-        
+        probas.append(yproba)
+        trues.append(y_test)
         roc_result_table = roc_result_table.append({'segments':seg,
                                             'fpr':fpr, 
                                             'tpr':tpr, 
@@ -157,6 +160,13 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         
         idx += 1
     roc_result_table.set_index('segments', inplace=True)
+    # concatenate list of numpy arrays for trues and probas
+    probas = np.concatenate(probas)
+    trues = np.concatenate(trues)
+    # put them together in a dataframe
+    dataframe = pd.DataFrame({'probas': probas, 'trues': trues})
+    # save the dataframe to a csv file
+    dataframe.to_csv(os.path.join(output_plots, 'probas_trues.csv'), index=False)
     # rename row values for segments based on part of the name:
     dictionary = {'sten_proc_1_': '1 Proximal RCA',
                   'sten_proc_2_': '2 Mid RCA',

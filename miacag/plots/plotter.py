@@ -700,12 +700,20 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
                             plot_type=None,
                             output_folder=None,
                             label_name_ori=None):
+
     #remove nan
     mask = x.isna()
     mask = mask | y.isna()
     x = x[~mask]
     y = y[~mask]
-    ax1 = sns.jointplot(x=x.to_numpy(), y=y.to_numpy(), marginal_kws=dict(bins=snsbins))
+    
+    x = x.to_numpy()
+    y = y.to_numpy()
+    y = np.clip(
+            y, a_min=0, a_max=1)
+    x = np.clip(
+            x, a_min=0, a_max=1)
+    ax1 = sns.jointplot(x=x, y=y, marginal_kws=dict(bins=snsbins))
     ax1.fig.set_size_inches(figsize[0], figsize[1])
     ax1.ax_joint.cla()
     plt.sca(ax1.ax_joint)
@@ -726,3 +734,155 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     plt.close()
 
     return None
+
+
+def combine_plots(path_rca, path_lca):
+    rca = pd.read_csv(path_rca)
+    lca = pd.read_csv(path_lca)
+    # concatenate csv files
+    combined = pd.concat([rca, lca])
+    return combined
+    
+    
+def plot_combined_roc(combined_bce, combined_reg, output_path):
+    from sklearn.metrics import roc_curve, roc_auc_score
+    y_test = combined_bce['trues']
+    yproba = combined_bce['probas']
+    
+    y_test_reg = combined_reg['trues']
+    yprobareg = combined_reg['probas']
+    fpr, tpr, _ = roc_curve(y_test,  yproba)
+    auc = roc_auc_score(y_test, yproba)
+    
+    fpr_reg, tpr_reg, _ = roc_curve(y_test_reg,  yprobareg)
+    auc_reg = roc_auc_score(y_test_reg, yprobareg)
+    plt.figure(figsize=(16, 12))
+    plt.plot(fpr_reg,
+             tpr_reg,
+             label="Regression model, mean AUC={:.3f}".format(auc_reg))
+
+    plt.plot(fpr,
+             tpr,
+             label="Classification model, mean AUC={:.3f}".format(auc))
+    plt.plot([0, 1], [0, 1], color='orange', linestyle='--')
+
+    plt.xticks(np.arange(0.0, 1.1, step=0.1))
+    plt.xlabel("False Positive Rate (1 - Specificity)", fontsize=15)
+
+    plt.yticks(np.arange(0.0, 1.1, step=0.1))
+    plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
+
+    plt.title('ROC Curve Analysis', fontweight='bold', fontsize=15)
+    plt.legend(prop={'size': 13}, loc='lower right')
+
+    plt.show()
+    plt.savefig(os.path.join(
+        output_path, '_roc_all.png'), dpi=100,
+                bbox_inches='tight')
+    plt.savefig(os.path.join(
+        output_path, '_roc_all.pdf'), dpi=100,
+                bbox_inches='tight')
+    plt.close()
+
+
+def plot_combined_roc_mean_vs_max(combined_bce, combined_reg, combine_bce_max, combine_reg_max, output_path):
+    from sklearn.metrics import roc_curve, roc_auc_score
+    y_test = combined_bce['trues']
+    yproba = combined_bce['probas']
+    
+    y_test_reg = combined_reg['trues']
+    yprobareg = combined_reg['probas']
+    
+    y_test_reg_max = combine_reg_max['trues']
+    yprobareg_max = combine_reg_max['probas']
+    y_test_bce_max = combine_bce_max['trues']
+    yprobabce_max = combine_bce_max['probas']
+    
+    fpr_reg_max, tpr_reg_max, _ = roc_curve(y_test_reg_max,  yprobareg_max)
+    auc_reg_max = roc_auc_score(y_test_reg_max, yprobareg_max)
+    
+    fpr_bce_max, tpr_bce_max, _ = roc_curve(y_test_bce_max,  yprobabce_max)
+    auc_bce_max = roc_auc_score(y_test_bce_max, yprobabce_max)
+    
+    fpr, tpr, _ = roc_curve(y_test,  yproba)
+    auc = roc_auc_score(y_test, yproba)
+    
+    fpr_reg, tpr_reg, _ = roc_curve(y_test_reg,  yprobareg)
+    auc_reg = roc_auc_score(y_test_reg, yprobareg)
+    
+    
+    
+    plt.figure(figsize=(16, 12))
+    plt.plot(fpr_reg,
+             tpr_reg,
+             label="Regression model (mean aggregated), mean AUC={:.3f}".format(auc_reg))
+
+    plt.plot(fpr_reg_max,
+             tpr_reg_max,
+             label="Regression model (max aggregated), mean AUC={:.3f}".format(auc_reg_max))
+
+    plt.plot(fpr,
+             tpr,
+             label="Classification model (mean aggregated), mean AUC={:.3f}".format(auc))
+    
+
+    
+    plt.plot(fpr_bce_max,
+             tpr_bce_max,
+             label="Classification model (max aggregated), mean AUC={:.3f}".format(auc_bce_max))
+    
+    plt.plot([0, 1], [0, 1], color='orange', linestyle='--')
+
+    plt.xticks(np.arange(0.0, 1.1, step=0.1))
+    plt.xlabel("False Positive Rate (1 - Specificity)", fontsize=15)
+
+    plt.yticks(np.arange(0.0, 1.1, step=0.1))
+    plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
+
+    plt.title('ROC Curve Analysis', fontweight='bold', fontsize=15)
+    plt.legend(prop={'size': 13}, loc='lower right')
+
+    plt.show()
+    plt.savefig(os.path.join(
+        output_path, '_roc_all.png'), dpi=100,
+                bbox_inches='tight')
+    plt.savefig(os.path.join(
+        output_path, '_roc_all.pdf'), dpi=100,
+                bbox_inches='tight')
+    plt.close()
+
+
+
+def make_plots(path_rca_bce, path_lca_bce, path_rca, path_lca, output_path):
+    combined_bce = combine_plots(path_rca_bce, path_lca_bce)
+    combined_reg = combine_plots(path_rca, path_lca)
+    mkFolder(output_path)
+    plot_combined_roc(combined_bce, combined_reg, output_path)
+    return None
+
+def make_plots_compare_max_mean(path_rca_bce,
+                                path_lca_bce,
+                                path_rca_bce_max,
+                                path_lca_bce_max,
+                                path_rca,
+                                path_lca,
+                                path_rca_max,
+                                path_lca_max,
+                                output_path):
+    combined_bce = combine_plots(path_rca_bce, path_lca_bce)
+    combined_reg = combine_plots(path_rca, path_lca)
+    combine_plots_bce_max = combine_plots(path_rca_bce_max, path_lca_bce_max)
+    combine_plots_reg_max = combine_plots(path_rca_max, path_lca_max)
+    
+    mkFolder(output_path)
+    plot_combined_roc_mean_vs_max(combined_bce, combined_reg, combine_plots_bce_max, combine_plots_reg_max, output_path)
+    return None
+
+if __name__ == '__main__':
+    path_rca_bce = "/home/alatar/miacag/output/outputs_stenosis_identi/classification_config_angio_SEP_Jan21_15-32-06/plots/train/probas_trues.csv"
+    path_lca_bce = "/home/alatar/miacag/output/outputs_stenosis_identi/classification_config_angio_SEP_Jan21_15-37-00/plots/train/probas_trues.csv"
+    path_lca = "/home/alatar/miacag/output/outputs_stenosis_reg/classification_config_angio_SEP_Jan21_15-19-24/plots/train/probas_trues.csv"
+    path_rca = "/home/alatar/miacag/output/outputs_stenosis_reg/classification_config_angio_SEP_Jan21_15-38-35/plots/train/probas_trues.csv"
+    output_path = "/home/alatar/miacag/output/outputs_stenosis_identi/classification_config_angio_SEP_Jan21_15-32-06/plots/comb"
+    make_plots(path_rca_bce, path_lca_bce, path_rca, path_lca, output_path)
+    

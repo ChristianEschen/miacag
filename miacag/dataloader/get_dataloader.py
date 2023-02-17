@@ -10,7 +10,7 @@ def to_dtype(data, config):
         elif config['loss']['name'][c] == 'BCE_multilabel':
             data[label_name] = torch.nan_to_num(data[label_name], nan=99998)
             data[label_name] = data[label_name].long()
-        elif config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
+        elif config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth']:
             data[label_name] = data[label_name].float()
         else:
             raise ValueError("model dimension not implemented")

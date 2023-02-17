@@ -97,7 +97,7 @@ def convertConfFloats(confidences, loss_name):
             else:
                 confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
 
-        elif loss_name in ['MSE', 'L1', 'L1smooth', 'BCE_multilabel']:
+        elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel']:
             if conf is None:
                 confidences_conv.append(np.nan)
             else:
@@ -438,7 +438,7 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
 
 def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                       group_aggregated, config):
-    #if config['loss']['name'][0] in ['MSE', 'L1', 'L1smooth']:
+    #if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth']:
     threshold_ffr = config['loaders']['val_method']['threshold_ffr']
     threshold_sten = config['loaders']['val_method']['threshold_sten']
     # else:
@@ -503,7 +503,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
-        if config['loss']['name'][c] in ['MSE', 'L1', 'L1smooth']:
+        if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth']:
             df_to_process = df_label.copy()
             plot_results_regression(df_to_process, confidence_name,
                                     label_name, config, c, support,

@@ -14,6 +14,7 @@ from miacag.model_utils.eval_utils import val_one_epoch
 import time
 import torch.distributed as dist
 from monai.utils import set_determinism
+from miacag.models.modules import get_loss_names_groups
 
 
 def train(config):
@@ -31,6 +32,20 @@ def train(config):
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
 
+    # Get metrics
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+        config['loss']['group_idx'], config['groups_weights'] \
+        = get_loss_names_groups(config)
+    running_loss_train = init_metrics(config['loss']['name'], config,
+                                      ptype='loss')
+    running_metric_train = init_metrics(
+            config['eval_metric_train']['name'], config)
+    running_loss_val = init_metrics(config['loss']['name'], config,
+                                    ptype='loss')
+    running_metric_val = init_metrics(
+                config['eval_metric_val']['name'], config)
+
+    # Get model
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
 
@@ -53,17 +68,6 @@ def train(config):
         train_ds.start()
 
     starter = time.time()
-
-    config['loss']['name'] = config['loss']['name'] + ['total']
-    running_loss_train = init_metrics(config['loss']['name'], config,
-                                      ptype='loss')
-    running_metric_train = init_metrics(
-            config['eval_metric_train']['name'], config)
-    running_loss_val = init_metrics(config['loss']['name'], config,
-                                    ptype='loss')
-    running_metric_val = init_metrics(
-                config['eval_metric_val']['name'], config)
-
     #  ---- Start training loop ----#
     for epoch in range(0, config['trainer']['epochs']):
         print('epoch nr', epoch)

@@ -6,13 +6,6 @@ from miacag.models.modules import unique_counts
 import torch
 
 
-# def mse_loss(self, input, target, ignored_index, reduction):
-#     mask = target == ignored_index
-#     out = (input[~mask]-target[~mask])**2
-#     if reduction == "mean":
-#         return out.mean()
-#     elif reduction == "None":
-#         return out
 def mse_loss_with_nans(input, target):
 
     # Missing data are nan's
@@ -92,43 +85,42 @@ def mae_loss_with_nans(input, target):
 
 def get_loss_func(config):
     criterions = []
-    loss_names, loss_name_counts = unique_counts(config)
-    for loss in loss_names:
+    for loss in config['loss']['groups_names']:
         if loss.startswith('CE'):
             criterion = nn.CrossEntropyLoss(
                 reduction='mean', ignore_index=99998)
             criterions.append(criterion)
-        elif loss == 'BCE_multilabel':
+        elif loss.startswith('BCE_multilabel'):
             criterion = bce_with_nans
             criterions.append(criterion)
-        elif loss == 'MSE':
+        elif loss.startswith('MSE'):
 
             #criterion = torch.nn.MSELoss(reduce=True, reduction='mean')
             criterion = mse_loss_with_nans  # (input, target)
             criterions.append(criterion)
-        elif loss == 'L1':
+        elif loss.startswith('_L1'):
             criterion = mae_loss_with_nans  # (input, target)
             criterions.append(criterion)
-        elif loss == 'L1smooth':
+        elif loss.startswith('L1smooth'):
             criterion = l1_loss_smooth
             l1_loss_smooth.__defaults__=(config['loss']['beta'],)
             criterions.append(criterion)
-        elif loss == 'dice_loss':
+        elif loss.startswith('dice_loss'):
             criterion = DiceLoss(
                 include_background=False,
                 to_onehot_y=False, sigmoid=False,
                 softmax=True, squared_pred=True)
             criterions.append(criterion)
-        elif loss == 'diceCE_loss':
+        elif loss.startswith('diceCE_loss'):
             criterion = DiceCELoss(
                 include_background=True,
                 to_onehot_y=False, sigmoid=False,
                 softmax=True, squared_pred=True)
             criterions.append(criterion)
-        elif loss == 'Siam':
+        elif loss.startswith('Siam'):
             criterion = SimSiamLoss('original')
             criterions.append(criterion)
-        elif loss == 'total':
+        elif loss.startswith('total'):
             pass
         else:
             raise ValueError("Loss type is not implemented")

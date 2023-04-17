@@ -47,7 +47,7 @@ class TestPipeline():
                                          running_loss_test):
         start = time.time()
         print('starting inference:')
-        metrics, confidences, index = val_one_epoch(
+        metrics, df_results = val_one_epoch(
             model, criterion, config,
             test_loader.val_loader, device,
             running_metric_val=running_metric_test,
@@ -56,8 +56,7 @@ class TestPipeline():
         stop = time.time()
         print('time for testing:', stop-start)
         for count, label in enumerate(config['labels_names']):
-            csv_files = self.saveCsvFiles(label, confidences,
-                                            index, config, count)
+            csv_files = self.saveCsvFiles(label, df_results, config, count)
         torch.distributed.barrier()
         if torch.distributed.get_rank() == 0:
             for count, label in enumerate(config['labels_names']):
@@ -67,7 +66,6 @@ class TestPipeline():
                     csv_files,
                     count,
                     config)
-                #self.resetDataPaths(test_loader, config)
                 self.insert_data_to_db(test_loader, label, config)
                 if config['loss']['name'] == 'CE':
                     acc = {
@@ -140,7 +138,7 @@ class TestPipeline():
         if config['loss']['name'][count].startswith('CE'):
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].apply(np.argmax)
-        elif config['loss']['name'][count] in ['MSE', 'L1', 'L1smooth']:
+        elif config['loss']['name'][count] in ['MSE', '_L1', 'L1smooth']:
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].astype(float)
         elif config['loss']['name'][count] == 'BCE_multilabel':
@@ -192,15 +190,15 @@ class TestPipeline():
     def tuple2key(self, t, delimiter=u';'):
         return delimiter.join(t)
 
-    def saveCsvFiles(self, label_name, confidences, index, config, count):
+    def saveCsvFiles(self, label_name, df, config, count):
         if config['loss']['name'][count].startswith('CE'):
             confidences = confidences[count]
             confidence_col = [
                 label_name + '_confidence_' +
                 str(i) for i in range(0, config['model']['num_classes'][count])]
         else:
-            confidences = self.get_output_pr_class(confidences, count)
-            confidences = np.expand_dims(confidences, 1)
+            confidences = label_name + '_confidence'
+         #   df[confidences] = np.expand_dims(df[confidences], 1)
             confidence_col = [
                 label_name + '_confidence_' +
                 str(i) for i in range(0, 1)]
@@ -208,8 +206,9 @@ class TestPipeline():
         mkFolder(csv_files)
         label_name_csv_files = os.path.join(csv_files, label_name)
         mkFolder(label_name_csv_files)
-        array = np.concatenate((confidences,
-            np.expand_dims(index.numpy(), 1)), axis=1)
+        array = np.concatenate(
+            (np.expand_dims(df[confidences].to_numpy(), 1),
+             np.expand_dims(df["rowid"].to_numpy(), 1)), axis=1)
       
         cols = confidence_col + ['rowid']
         df = pd.DataFrame(

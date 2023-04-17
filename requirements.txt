@@ -33,5 +33,5 @@ tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.7.0
 tqdm==4.64.0
 statsmodels==0.13.2
-opencv-python==4.6.0.66
-miacag==0.0.79
+opencv-python==4.6.0
+miacag==0.0.80

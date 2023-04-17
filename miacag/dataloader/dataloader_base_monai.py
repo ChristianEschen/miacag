@@ -371,7 +371,12 @@ class base_monai_loader(DataloaderBase):
 
     def maybeNormalize(self):
         if self.config['model']['backbone'] in [
-            'x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3', 'debug_3d']:
+            'x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3', 'debug_3d',
+            "pretrain_videomae_base_patch16_224",
+            'pretrain_videomae_small_patch16_224',
+            "vit_base_patch16_224", 
+            "vit_large_patch16_224", 
+            "vit_small_patch16_224"]:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),

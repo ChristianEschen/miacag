@@ -148,8 +148,8 @@ class ImageToScalarModel(EncoderModel):
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(
-                        nn.Linear(
-                            self.in_features, self.in_features),
+                        # nn.Linear(
+                        #     self.in_features, self.in_features),
                         nn.Linear(
                             self.in_features, count_loss)
                         ).to(device))
@@ -159,8 +159,8 @@ class ImageToScalarModel(EncoderModel):
                 # if config['model']['sigm'] == 'True':
                 self.fcs.append(
                     nn.Sequential(
-                        nn.Linear(
-                            self.in_features, self.in_features),
+                        # nn.Linear(
+                        #     self.in_features, self.in_features),
                         nn.Linear(
                             self.in_features,
                             count_loss).to(device)
@@ -168,15 +168,20 @@ class ImageToScalarModel(EncoderModel):
  
             else:
                 raise ValueError('loss not implemented')
+            
+        
         self.dimension = config['model']['dimension']
-
+        
+        
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
             if self.config['model']['backbone'] not in [
                 "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
-                "vit_small_patch16_224", "vit_large_patch16_224"]:
+                "vit_small_patch16_224", "vit_large_patch16_224",
+                "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
+                "vit_huge_patch14"]:
                 p = p.mean(dim=(-3, -2, -1))
             else:
                 pass

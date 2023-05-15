@@ -2,8 +2,8 @@ from monai.networks import nets
 from torch import nn
 import torch
 import os
-from timm.models import create_model
-from models import modeling_finetune
+#from timm.models import create_model
+#from models import modeling_finetune
 from collections import OrderedDict
 
 
@@ -133,6 +133,16 @@ def get_encoder(config, device):
         in_features = model.fc_norm.normalized_shape[0]
         if config['loaders']['mode'] != 'testing':
             model = getPretrainedWeights(config, model, device)
+            
+    elif config['model']['backbone'] in ['vit_small_patch16',
+            'vit_base_patch16', 'vit_large_patch16']:
+        import miacag.models.mae_st_util.models_vit as models_vit
+        config['num_frames'] = config['loaders']['Crop_depth']
+        model = models_vit.__dict__[config['model']['backbone']](**config)
+        in_features = model.head.in_features
+        model.head = Identity()
+      #  print('not implemented jet'    )
+        
     elif config['model']['backbone'] == 'linear':
         from miacag.models.backbone_encoders.tabular.base_encoders \
             import LinearEncoder
@@ -159,6 +169,8 @@ def get_encoder(config, device):
         
     else:
         raise ValueError('not implemented')
+
+            
     return model, in_features
 
 
@@ -169,7 +181,11 @@ def modelsRequiredPermute():
         'pretrain_videomae_base_patch16_224',
         'vit_base_patch16_224',
         "vit_large_patch16_224", 
-        "vit_small_patch16_224"]
+        "vit_small_patch16_224",
+        "vit_small_patch16",
+        "vit_base_patch16",
+        "vit_large_patch16",
+        "vit_huge_patch14"]
     return model_list
 
 

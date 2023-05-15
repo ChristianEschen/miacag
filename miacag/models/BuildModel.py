@@ -141,6 +141,15 @@ class ModelBuilder():
             model = self.get_ImageToScalar_model()
         elif self.config['task_type'] == "segmentation":
             model = self.get_segmentation_model()
+            
+            
+    
+        # maybe freeze backbone
+        if self.config['model']['freeze_backbone']:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.fcs.parameters():
+                param.requires_grad = True
         return model
 
     def __call__(self):

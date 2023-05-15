@@ -376,7 +376,11 @@ class base_monai_loader(DataloaderBase):
             'pretrain_videomae_small_patch16_224',
             "vit_base_patch16_224", 
             "vit_large_patch16_224", 
-            "vit_small_patch16_224"]:
+            "vit_small_patch16_224",
+            'vit_base_patch16',
+            'vit_small_patch16',
+            'vit_large_patch16',
+            'vit_huge_patch14']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),

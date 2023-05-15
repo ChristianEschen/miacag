@@ -13,7 +13,7 @@ def getCountsLoss(losses):
     for loss_u in losses:
         if loss_u in ['CE']:
             count_classification += 1
-        elif loss_u in ['MSE', 'L1', 'L1smooth']:
+        elif loss_u in ['MSE', '_L1', 'L1smooth']:
             count_regression += 1
         else:
             raise ValueError('this loss is not implementeed:', loss_u)
@@ -35,6 +35,39 @@ def unique_counts(config, remove_total=False):
     count = count.tolist()
     loss_uniques = loss_uniques.tolist()
     return loss_uniques, count
+
+
+def get_index_for_labels_names_in_loss_group(config, group_name_unique):
+    # store indexes of labels_names in a dict of dict
+    indexes = {}
+    indexes['loss_group'] = [[] for i in range(len(group_name_unique))]
+    for group_idx, group_name in enumerate(group_name_unique):
+       # idx_count = 0
+        for idx, label_name in enumerate(config['labels_names']):
+            if label_name.partition("_")[0] == group_name:
+                indexes['loss_group'][group_idx].append(idx)
+    return indexes
+
+
+def get_loss_names_groups(config):
+    group_name_unique,  indexes, counts = get_group_names(config)
+    loss_group_names = []
+    loss_lambda_weights = []
+    for idx_c, index in enumerate(indexes):
+        loss_group_names.append(
+            config['loss']['name'][index] + '_' + group_name_unique[idx_c])
+        loss_lambda_weights.append(config['loss']['lambda_weights'][index])
+    indexes = get_index_for_labels_names_in_loss_group(config,
+                                                       group_name_unique)
+    return loss_group_names, counts, indexes, loss_lambda_weights
+
+
+def get_group_names(config):
+    group_names = [i.partition("_")[0] for i in config['labels_names']]
+    group_names_uniques, index, count = np.unique(np.array(
+        group_names), return_counts=True, return_index=True)
+    group_names_uniques = group_names_uniques.tolist()
+    return group_names_uniques, index.tolist(), count.tolist()
 
 
 def maybePermuteInput(x, config):
@@ -72,7 +105,7 @@ def get_final_layer(config,  device, in_features):
                 nn.Linear(
                     in_features,
                     config['model']['num_classes']).to(device))
-        elif config['loss']['name'][c] in ['MSE', 'L1']:
+        elif config['loss']['name'][c] in ['MSE', '_L1']:
             fcs.append(
                 nn.Sequential(
                     nn.Linear(
@@ -100,55 +133,55 @@ class ImageToScalarModel(EncoderModel):
     def __init__(self, config, device):
         super(ImageToScalarModel, self).__init__(config, device)
         self.config = config
-       # self.fcs = ["self.fc" ]
         self.fcs = nn.ModuleList()
-        c = 0
-       # uniques = 
-        loss_uniques, counts = unique_counts(self.config)
-
-        for loss_count_idx, loss_type in enumerate(loss_uniques):
-            count_loss = counts[loss_count_idx]
-            if count_loss > 0:
-                num_classes = get_num_class_for_loss_group(
-                    self.config['loss']['name'],
-                    loss_type, self.config['model']['num_classes'])
-                if loss_type.startswith('CE'):
-                    self.fcs.append(nn.Linear(
+        for loss_count_idx, loss_type in enumerate(self.config['loss']['groups_names']):
+           # count_loss = counts[loss_count_idx]
+            # if count_loss > 0:
+            #     num_classes = get_num_class_for_loss_group(
+            #         self.config['loss']['name'],
+            #         loss_type, self.config['model']['num_classes'])
+            count_loss = self.config['loss']['groups_counts'][loss_count_idx]
+            if loss_type.startswith('CE'):
+                self.fcs.append(nn.Linear(
+                        self.in_features,
+                        num_classes).to(device))
+            elif loss_type.startswith(tuple(['BCE_multilabel'])):
+                self.fcs.append(
+                    nn.Sequential(
+                        # nn.Linear(
+                        #     self.in_features, self.in_features),
+                        nn.Linear(
+                            self.in_features, count_loss)
+                        ).to(device))
+            # test if loss_type startswith three conditions
+            
+            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth'])):
+                # if config['model']['sigm'] == 'True':
+                self.fcs.append(
+                    nn.Sequential(
+                        # nn.Linear(
+                        #     self.in_features, self.in_features),
+                        nn.Linear(
                             self.in_features,
-                            num_classes).to(device))
-                elif loss_type in ['BCE_multilabel']:
-                    self.fcs.append(
-                        nn.Sequential(
-                            nn.Linear(
-                                self.in_features, count_loss)
-                            ).to(device))
-                elif loss_type in ['MSE', 'L1', 'L1smooth']:
-                   # if config['model']['sigm'] == 'True':
-                    self.fcs.append(
-                        nn.Sequential(
-                            nn.Linear(
-                                self.in_features,
-                                count_loss).to(device),
-                          #  nn.ReLU()
+                            count_loss).to(device)
                         ))
-                    # else:
-                    #     self.fcs.append(
-                    #         nn.Sequential(
-                    #             nn.Linear(
-                    #                 self.in_features,
-                    #                 count_loss).to(device),
-                    #             nn.ReLU()
-                    #         ))
-                else:
-                    raise ValueError('loss not implemented')
-            c += 1
+ 
+            else:
+                raise ValueError('loss not implemented')
+            
+        
         self.dimension = config['model']['dimension']
-
+        
+        
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
+            if self.config['model']['backbone'] not in [
+                "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
+                "vit_small_patch16_224", "vit_large_patch16_224",
+                "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
+                "vit_huge_patch14"]:
                 p = p.mean(dim=(-3, -2, -1))
             else:
                 pass

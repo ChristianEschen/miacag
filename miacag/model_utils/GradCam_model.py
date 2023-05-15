@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 from typing import Callable, List, Tuple
-import cv2
+#import cv2
 
 
 def scale_cam_image(cam, target_size=None):

@@ -5,11 +5,13 @@ from miacag.metrics.metrics_utils import get_metrics, get_losses_metric
 from miacag.metrics.metrics_utils import create_loss_dict, get_loss_metric_class
 from miacag.metrics.metrics_utils import normalize_metrics, write_tensorboard
 from miacag.dataloader.get_dataloader import get_data_from_loader
-from miacag.model_utils.eval_utils import get_loss, get_losses_class
+from miacag.model_utils.eval_utils import get_loss
 from miacag.configs.config import save_config
 from miacag.metrics.metrics_utils import flatten, \
     unroll_list_in_dict
 import os
+from miacag.utils.common_utils import stack_labels, get_loss
+from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict
 
 
 def set_random_seeds(random_seed=0):
@@ -18,6 +20,17 @@ def set_random_seeds(random_seed=0):
     torch.backends.cudnn.benchmark = False
     np.random.seed(random_seed)
     random.seed(random_seed)
+
+
+def get_candiate_label(config, group_idx):
+    label_candidate = [config['labels_names'][i] for i in group_idx]
+    return label_candidate
+
+
+def get_correct_candidate_index(config, candiates, label_name):
+    for candidate in candiates:
+        if candidate == label_name:
+            return candidate
 
 
 def train_one_step(model, data, criterion,
@@ -38,10 +51,7 @@ def train_one_step(model, data, criterion,
                                             data,
                                             criterion,
                                             device)
-            # losses, loss = get_losses(config, outputs,
-            #                           data[config['labels_names']],
-            #                           criterion)
-       # if loss != torch.tensor(0.0):
+
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
@@ -54,6 +64,7 @@ def train_one_step(model, data, criterion,
                                         device)
         loss.backward()
         optimizer.step()
+    outputs = wrap_outputs_to_dict(outputs, config)
     losses = create_loss_dict(config, losses, loss)
     metrics, losses_metric = get_loss_metric_class(
         config, outputs, data, losses, running_metric_train,
@@ -162,6 +173,14 @@ def saver(metric_dict_val, writer, config):
     config_tensorboard.update(metric_dict_val)
     save_config(writer, config, 'config.yaml')
     save_config(writer, metric_dict_val, 'metrics.yaml')
+
+    # remove None values and lists
+    for key in list(config_tensorboard.keys()):
+        if config_tensorboard[key] is None:
+            del config_tensorboard[key]
+        elif isinstance(config_tensorboard[key], list):
+            del config_tensorboard[key]
+
     # save tensorboard
     writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()

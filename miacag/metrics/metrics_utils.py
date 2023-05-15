@@ -73,18 +73,26 @@ def mkDir(directory):
         os.makedirs(directory)
 
 
+def inferMetricTypeForGroup(config, metrics):
+    metric_groups = []
+    for g_idx, group in enumerate(config['loss']['groups_names']):
+        idx = config['loss']['group_idx']['loss_group'][g_idx]
+        metric_groups.append(metrics[idx[0]])
+    return metric_groups
+
+
 def getMetricForEachLabel(metrics, config, ptype):
     metrics_labels = []
     if ptype != 'loss':
-   # for metric in metrics:
+        #metric_groups = inferMetricTypeForGroup(config, metrics)
         for c, label_name in enumerate(config['labels_names']):
-            #if metric != 'total':
             metrics_labels.append(metrics[c] + '_' + label_name)
+        # for c_g, group_name in enumerate(config['loss']['groups_names']):
+        #     metrics_labels.append(metric_groups[c_g] + '_' + group_name)
     else:
-        loss_types, counts = unique_counts(config)
+        loss_types = config['loss']['groups_names'] + ['total']
         for c_idx, loss_type in enumerate(loss_types):
             metrics_labels.append(loss_type)
-       # metrics_labels = metrics_labels + ['total']
     return metrics_labels
 
 
@@ -98,7 +106,7 @@ def init_metrics(metrics, config, ptype=None):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('BCE_multilabel'):
             dicts[metrics[i]] = CumulativeAverage()
-        elif metrics[i].startswith('L1'):
+        elif metrics[i].startswith('_L1'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('L1smooth'):
             dicts[metrics[i]] = CumulativeAverage()
@@ -223,15 +231,10 @@ def get_metrics(outputs,
     return metrics_dicts
 
 
-def get_losses_metric(outputs,
-                      labels,
-                      running_losses,
+def get_losses_metric(running_losses,
                       losses,
-                      criterion,
-                      config,
                       losses_metric
                       ):
-    #losses_metric = {}
     for loss in losses:
         if loss.startswith('CE'):
             running_losses[loss].append(losses[loss])
@@ -242,7 +245,10 @@ def get_losses_metric(outputs,
         elif loss.startswith('BCE'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
-        elif loss.startswith('L1'):
+        elif loss.startswith('_L1'):
+            running_losses[loss].append(losses[loss])
+            losses_metric[loss] = running_losses[loss]
+        elif loss.startswith('L1smooth'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
         elif loss.startswith('total'):
@@ -256,7 +262,7 @@ def get_losses_metric(outputs,
 def wrap_outputs(outputs, count_loss, loss_name, count_label):
     if loss_name.startswith('CE'):
         return outputs[count_loss]
-    elif loss_name in ['MSE', 'L1', 'L1smooth']:
+    elif loss_name in ['MSE', '_L1', 'L1smooth']:
         outputs = outputs[count_loss][:, count_label]
         return outputs
     elif loss_name in ['BCE_multilabel']:
@@ -277,38 +283,26 @@ def get_loss_metric_class(config,
     losses_metric = {}
     loss_types, loss_t_counts = unique_counts(config)
 
+    # generate metrics for individual segments
     for count_label, label_name in enumerate(config['labels_names']):
-        loss_name = config['loss']['name'][count_label]
-        for count_loss, loss_type in enumerate(loss_types):
-            if loss_name == loss_type:
-                outputs_c = wrap_outputs(outputs, count_loss,
-                                       loss_name, count_label)
-                metrics = get_metrics(
-                    outputs_c,
-                    data[label_name],
-                    label_name,
-                    running_metric,
-                    criterion,
-                    config,
-                    metrics,
-                    config['model']['num_classes'][count_label]
-                    )
-    #labels = stack_labels(data, config)
-    for count_loss, loss_type in enumerate(loss_types):
-        labels = stack_labels(data, config, loss_type)
-        running_loss_dict = {loss_type: running_loss[loss_type]}
-        losses_metric = get_losses_metric(
-            outputs[count_loss],
-            labels,
-            running_loss,
-            losses,
-            criterion,
-            config,
-            losses_metric
-            )
-
+        metrics = get_metrics(
+                outputs[label_name],
+                data[label_name],
+                label_name,
+                running_metric,
+                criterion,
+                config,
+                metrics,
+                config['model']['num_classes'][count_label]
+                )
+    # wrap losses as metrics for all groups and total
+    losses_metric = get_losses_metric(
+        running_loss,
+        losses,
+        losses_metric
+        )
     return metrics, losses_metric
-        
+
 
 def normalize_metrics(running_metrics):
     metric_dict = {}
@@ -325,7 +319,7 @@ def normalize_metrics(running_metrics):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('L1smooth'):
             metric_tb = running_metrics[running_metric].aggregate().item()
-        elif running_metric.startswith('L1'):
+        elif running_metric.startswith('_L1'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         else:
             metric_tb = running_metrics[running_metric].aggregate()[0].item()
@@ -336,11 +330,8 @@ def normalize_metrics(running_metrics):
 
 def create_loss_dict(config, losses, loss):
     loss_list = []
-    loss_types, loss_types_count = unique_counts(config)
-    for c, loss_name in enumerate(loss_types):
-        loss_name = config['loss']['name'][c]
+    for c, loss_name in enumerate(config['loss']['groups_names']):
         loss_list.append(loss_name)
     loss_list = loss_list + ['total']
-    losses = losses + [loss.item()]
     losses = dict(zip(loss_list, losses))
     return losses

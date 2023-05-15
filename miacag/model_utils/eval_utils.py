@@ -1,7 +1,6 @@
 from miacag.metrics.metrics_utils import normalize_metrics, get_metrics, \
     create_loss_dict, write_tensorboard, get_losses_metric, \
     mkDir, get_loss_metric_class
-from miacag.utils.common_utils import stack_labels
 import torch
 from miacag.dataloader.get_dataloader import get_data_from_loader
 from monai.inferers import sliding_window_inference
@@ -14,6 +13,8 @@ import numpy as np
 from monai.visualize import CAM, GradCAM
 from miacag.model_utils.grad_cam_utils import calc_saliency_maps
 from miacag.models.modules import getCountsLoss, unique_counts
+from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict, get_loss
+import pandas as pd
 
 def get_input_shape(config):
     if config['model']['dimension'] in ['2D+T', 3]:
@@ -58,6 +59,8 @@ def eval_one_step(model, data, device, criterion,
         outputs = maybe_sliding_window(data['inputs'], model, config)
         losses, loss = get_losses_class(config, outputs,
                                         data, criterion, device)
+        outputs = wrap_outputs_to_dict(outputs, config)
+
         losses = create_loss_dict(config, losses, loss)
         metrics, losses_metric = get_loss_metric_class(config, outputs,
                                                         data, losses,
@@ -137,49 +140,6 @@ def eval_one_step_knn(get_data_from_loader,
     return top1
 
 
-def get_loss(config, outputs, labels, criterion, loss_name):
-    if 'Siam' in config['loss']['name']:
-        loss = criterion(outputs)
-    elif loss_name.startswith('CE'):
-        labels = torch.reshape(labels, (labels.shape[0], ))
-        loss = criterion(outputs, labels)
-    else:
-        loss = criterion(outputs, labels)
-    return loss
-
-
-def get_losses_class(config, outputs, data, criterion, device):
-    losses = []
-    loss_tot = torch.tensor([0]).float()
-    loss_tot = loss_tot.to(device)
-    loss_tot = loss_tot.requires_grad_()
-    loss_uniques, count = unique_counts(config, remove_total=True)
-   # labels = stack_labels(data, config)
-    for count_idx, loss_name in enumerate(loss_uniques):
-        labels = stack_labels(data, config, loss_name)
-        loss = get_loss(
-            config, outputs[count_idx],
-            labels, criterion[count_idx], loss_name)
-        if torch.isnan(loss) == torch.tensor(True, device=device):
-            raise ValueError('the loss is nan!')
-            # # ugly hack
-            # if count_idx == 0:
-            #     t = torch.tensor([1]).float()
-                
-            #   #  t.requires_grad_()
-            #     losses.append(t)
-            # else:
-            #     losses.append(losses[-1])
-            # loss_tot = loss_tot
-
-        else:
-            losses.append(loss)
-            loss_tot = loss_tot + loss
-    losses = [loss_indi.item() for loss_indi in losses]
-    losses = losses + [loss_tot.item()]
-    return losses, loss_tot
-
-
 def set_uniform_sample_pct(validation_loader, percentage):
     for i in validation_loader.dataset.transform.transforms:
         if hasattr(i, 'percentage'):
@@ -191,8 +151,9 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                      saliency_maps, running_metric_val,
                      running_loss_val):
     if config['task_type'] != "representation_learning":
-        logits = []
-        rowids = []
+        # initialize pandas dataframe from dict
+        df_results = pd.DataFrame()
+        
         for data in validation_loader:
             data = get_data_from_loader(data, config, device)
 
@@ -204,36 +165,23 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             running_loss_val,
                                             saliency_maps)
             if config['loaders']['mode'] == 'testing':
-                logits.append([out.cpu() for out in outputs])
-                rowids.append(data['rowid'].cpu())
-
-
-    else:
-        metric = eval_one_step_knn(
-            get_data_from_loader,
-            validation_loader,
-            model,
-            device,
-            criterion,
-            config, saliency_maps)
-        running_metric_val[config['eval_metric_val']['name'][0]] = metric
-
-        for data in validation_loader[0]:
-            inputs, data['labels'] = get_data_from_loader(data, config,
-                                                    device)
-            _, loss, _ = eval_one_step(
-                                            model, inputs,
-                                            labels, device,
-                                            criterion,
-                                            config, saliency_maps)
-            # running_metric_val = increment_metrics(running_metric_val,
-            #                                         metrics)
-            #running_loss_val = increment_metrics(loss, running_loss_val)
+                # list comprehension on the dict outputs
+                outputs = {key: value.cpu().numpy().tolist()
+                           for (key, value) in outputs.items()}
+                outputs['rowid'] = data['rowid'].cpu().numpy().tolist()
+                nr_values = len(outputs[[i for i in outputs][0]])
+                for i in range(0, nr_values):
+                    outputs_i = {
+                        key: value[i] for (key, value) in outputs.items()}
+                    # append outputs to dataframe
+                    df_dictionary = pd.DataFrame([outputs_i])
+                    df_results = pd.concat(
+                        [df_results, df_dictionary], ignore_index=True)
 
     if config['loaders']['mode'] == 'training':
         return running_metric_val, running_loss_val, None, None
     else:
-        return running_metric_val, running_loss_val, logits, rowids
+        return running_metric_val, running_loss_val, df_results, None
 
 
 def val_one_epoch_train(
@@ -271,49 +219,47 @@ def val_one_epoch_test(
         validation_loader, device,
         running_metric_val=0.0, running_loss_val=0.0,
         writer=False, epoch=0, saliency_maps=False):
-    # running_metric_vals = []
-    # running_loss_vals = []
-    logitsS = []
-    rowidsS = []
+    df_result = pd.DataFrame()
     samples = config['loaders']['val_method']["samples"]
     for i in range(0, samples):
         eval_outputs = run_val_one_step(
                 model, config, validation_loader, device, criterion,
                 saliency_maps,
                 running_metric_val, running_loss_val)
-        running_metric_val, running_loss_val, logits, rowids = eval_outputs
+        running_metric_val, running_loss_val, df_result_i, _ = eval_outputs
 
-        logitsS.append(logits)
-        rowidsS.append(rowids)
-    logitsS = [item for sublist in logitsS for item in sublist]
-    rowidsS = [item for sublist in rowidsS for item in sublist]
-    logitsS = getListOfLogits(logitsS)
-    rowids = torch.cat(rowidsS, dim=0)
+        df_result = pd.concat(
+                        [df_result, df_result_i], ignore_index=True)
+
     if config['task_type'] != "representation_learning":
         running_metric_val, metric_tb = normalize_metrics(
             running_metric_val)
 
     running_loss_val, loss_tb = normalize_metrics(
         running_loss_val)
-    #confidences = [softmax_transform(logits.float()) for logits in logitsS]
-    confidences = maybe_softmax_transform(logitsS, config)
-    return metric_tb, confidences, rowids
+    df_result = maybe_softmax_transform(df_result, config)
+    return metric_tb, df_result
 
 
-def maybe_softmax_transform(logits, config):
+def maybe_softmax_transform(df, config):
+    cols = df.columns
+    # remove rowid from the list
+    cols = cols.drop('rowid')
     logits_return = []
-    for c, logit in enumerate(logits):
+    for c, logit in enumerate(cols):
+        logit_conf = logit + '_confidence'
         if config['loss']['name'][c].startswith('CE'):
+            raise(ValueError('this transform is not implemented'))
             logits_return.append(softmax_transform(logit.float()))
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
-        elif config['loss']['name'][c] in ['L1', 'L1smooth']:
-            logits_return.append(logit.float())
+        elif config['loss']['name'][c] in ['_L1', 'L1smooth']:
+            df[logit_conf] = df[logit]
         elif config['loss']['name'][c].startswith('BCE'):
             logits_return.append(torch.nn.Sigmoid()(logit.float()))
         else:
             raise(ValueError('this loss type is not implemented'))
-    return logits_return
+    return df
 
 
 def getListOfLogits(logits):
@@ -352,9 +298,9 @@ def val_one_epoch(model, criterion, config,
         return metric_tb
 
     else:
-        metric_tb, confidences, rowid = val_one_epoch_test(
+        metric_tb, df_results = val_one_epoch_test(
             model, criterion, config,
             validation_loader, device,
             running_metric_val, running_loss_val,
             writer, epoch, saliency_maps)
-        return metric_tb, confidences, rowid  # predictions
+        return metric_tb, df_results  # predictions

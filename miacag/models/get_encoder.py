@@ -2,10 +2,12 @@ from monai.networks import nets
 from torch import nn
 import torch
 import os
+from dinov2.models.vision_transformer import \
+    vit_large, vit_small
 #from timm.models import create_model
 #from models import modeling_finetune
 from collections import OrderedDict
-
+#from miacag.models.milmodel_from_features import MILModel
 
 class Identity(nn.Module):
     def __init__(self):
@@ -166,7 +168,15 @@ def get_encoder(config, device):
         in_features = 16
         model = debug_3d(in_features)
         model = getPretrainedWeights(config, model, device)
-        
+    elif config['model']['backbone'] == 'dinov2_vits14':
+        model = vit_small(
+                patch_size=14,
+                img_size=config['loaders']['Resize_height'],
+                init_values=1.0,
+                block_chunks=0)
+        model = getPretrainedWeights(config, model, device)
+        in_features = model.norm.normalized_shape[0]
+       
     else:
         raise ValueError('not implemented')
 
@@ -185,7 +195,8 @@ def modelsRequiredPermute():
         "vit_small_patch16",
         "vit_base_patch16",
         "vit_large_patch16",
-        "vit_huge_patch14"]
+        "vit_huge_patch14",
+        ]
     return model_list
 
 

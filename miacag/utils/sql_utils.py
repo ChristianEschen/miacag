@@ -154,7 +154,8 @@ def changeDtypes(sql_config, columnm_names, data_types):
         data_type = data_types[count]
         sql = """
         ALTER TABLE "{schema_name}"."{table_name}"
-        ALTER COLUMN "{col_name}" TYPE {dtype};""".format(
+        ALTER COLUMN "{col_name}" TYPE {dtype}
+        USING "{col_name}"::{dtype};""".format(
             schema_name=sql_config['schema_name'],
             table_name=sql_config["table_name"],
             col_name=columnm_name,

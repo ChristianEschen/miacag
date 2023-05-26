@@ -59,6 +59,9 @@ class ClassificationLoader():
                 elif config['model']['dimension'] in ['2D']:
                     from miacag.dataloader.Classification._2D.dataloader_monai_classification_2D_mil import \
                         train_monai_classification_loader, val_monai_classification_loader
+                elif config['model']['dimension'] in ['1D']:
+                    from miacag.dataloader.Classification._1D.Feature_vector_dataset import \
+                        train_monai_classification_loader, val_monai_classification_loader
                 else:
                     raise ValueError('model dimension is not implemented')
         elif config['loaders']['format'] in ['db']:
@@ -70,9 +73,14 @@ class ClassificationLoader():
         else:
             raise ValueError("Invalid validation moode %s" % repr(
                     config['loaders']['val_method']['type']))
+       # if config['model']['dimension'] != '1D':
         train_ds = train_monai_classification_loader(
             self.train_df,
             config)
+        # else:
+        #     from miacag.dataloader.Classification._1D.Feature_vector_dataset import FeatureVectorDataset
+        #     train_ds = FeatureVectorDataset(self.train_df, config)
+            
 
 
         if config['weighted_sampler'] == 'True':

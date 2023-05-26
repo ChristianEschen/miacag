@@ -60,10 +60,12 @@ def test(config):
     config['loss']['name'] = config['loss']['name'] + ['total']
     running_loss_test = init_metrics(config['loss']['name'],
                                      config,
+                                     device,
                                      ptype='loss')
     running_metric_test = init_metrics(
                 config['eval_metric_val']['name'],
-                config)
+                config,
+                device)
 
     pipeline = TestPipeline()
     pipeline.get_test_pipeline(model, criterion, config, test_loader,

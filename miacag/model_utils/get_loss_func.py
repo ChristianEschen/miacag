@@ -36,7 +36,8 @@ def mse_loss_with_nans(input, target):
 def l1_loss_smooth(predictions, targets, beta=1):
     mask = torch.isnan(targets)
     loss = 0
-    predictions = predictions[~mask]
+    #predictions = predictions[~mask]
+    predictions = predictions.masked_select(~mask)
     targets = targets[~mask]
     if predictions.shape[0] != 0:
         for x, y in zip(predictions, targets):

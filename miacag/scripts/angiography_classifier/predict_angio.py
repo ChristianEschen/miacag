@@ -29,6 +29,9 @@ parser.add_argument(
             "--local_rank", type=int,
             help="Local rank: torch.distributed.launch.")    
 parser.add_argument(
+            "--local-rank", type=int,
+            help="Local rank: torch.distributed.launch.")
+parser.add_argument(
             "--num_workers", type=int,
             help="Number of cpu workers for training")
 parser.add_argument(

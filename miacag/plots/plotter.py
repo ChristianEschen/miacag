@@ -5,7 +5,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 
 from sklearn.metrics import f1_score, \
-     accuracy_score, confusion_matrix, plot_confusion_matrix
+     accuracy_score, confusion_matrix#, plot_confusion_matrix
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -374,34 +374,35 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
     df_sten = df.copy()
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
     sten_cols_true = select_relevant_columns(label_names, 'sten')
-    if not group_aggregated:
-        for sten_col_conf in sten_cols_conf:
-            df_sten[sten_col_conf] = convertConfFloats(
-                df[sten_col_conf],
-                config['loss']['name'][0])
-    sten_trues_concat = []      
-    sten_conf_concat = []  
-    #concantenating all stenosis columns
-    # df_sten['stenosis'] = []
-    for idx, label in enumerate(sten_cols_true):
-        sten_trues_concat.append(df_sten[label])
-        sten_conf_concat.append(df_sten[sten_cols_conf[idx]])
-    stenosis = pd.concat(
-        [pd.concat(sten_trues_concat), pd.concat(sten_conf_concat)],
-        axis=1)
-    if len(sten_cols_true) >= 2:
-        plot_col = [0, 1]
-    else:
-        plot_col = [sten_cols_true[0], sten_cols_conf[0]]
+    if len(sten_cols_conf) > 0:
+        if not group_aggregated:
+            for sten_col_conf in sten_cols_conf:
+                df_sten[sten_col_conf] = convertConfFloats(
+                    df[sten_col_conf],
+                    config['loss']['name'][0])
+        sten_trues_concat = []      
+        sten_conf_concat = []  
+        #concantenating all stenosis columns
+        # df_sten['stenosis'] = []
+        for idx, label in enumerate(sten_cols_true):
+            sten_trues_concat.append(df_sten[label])
+            sten_conf_concat.append(df_sten[sten_cols_conf[idx]])
+        stenosis = pd.concat(
+            [pd.concat(sten_trues_concat), pd.concat(sten_conf_concat)],
+            axis=1)
+        if len(sten_cols_true) >= 2:
+            plot_col = [0, 1]
+        else:
+            plot_col = [sten_cols_true[0], sten_cols_conf[0]]
 
-    plot_regression_density(x=stenosis[plot_col[0]], y=stenosis[plot_col[1]],
-                            cmap='jet', ylab='prediction', xlab='true',
-                            bins=100,
-                            figsize=(5, 4),
-                            snsbins=60,
-                            plot_type='stenosis',
-                            output_folder=output_plots,
-                            label_name_ori='sten_all')
+        plot_regression_density(x=stenosis[plot_col[0]], y=stenosis[plot_col[1]],
+                                cmap='jet', ylab='prediction', xlab='true',
+                                bins=100,
+                                figsize=(5, 4),
+                                snsbins=60,
+                                plot_type='stenosis',
+                                output_folder=output_plots,
+                                label_name_ori='sten_all')
     df_ffr = df.copy()
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
     if len(ffr_cols_true) > 0:
@@ -449,15 +450,16 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
     df_sten = df.copy()
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
     sten_cols_true = select_relevant_columns(label_names, 'sten')
-    if not group_aggregated:
-        for sten_col_conf in sten_cols_conf:
-            df_sten[sten_col_conf] = convertConfFloats(
-                df[sten_col_conf],
-                config['loss']['name'][0])
-    plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
-                 plot_type='stenosis',
-                 config=config,
-                 theshold=threshold_sten)
+    if len(sten_cols_true) > 0:
+        if not group_aggregated:
+            for sten_col_conf in sten_cols_conf:
+                df_sten[sten_col_conf] = convertConfFloats(
+                    df[sten_col_conf],
+                    config['loss']['name'][0])
+        plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
+                    plot_type='stenosis',
+                    config=config,
+                    theshold=threshold_sten)
     df_ffr = df.copy()
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
     if len(ffr_cols_true) > 0:
@@ -487,8 +489,11 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     df, _ = getDataFromDatabase(sql_config)
     if group_aggregated:
         confidence_names = [c + '_aggregated' for c in confidence_names]
+    # test if a element is a list starts with a string: "sten"
+    stens = select_relevant_columns(label_names, 'sten')
+    
     wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
-                           group_aggregated, config)    
+                        group_aggregated, config)    
     wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                       group_aggregated,
                       config=config)

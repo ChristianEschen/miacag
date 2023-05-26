@@ -96,7 +96,7 @@ def getMetricForEachLabel(metrics, config, ptype):
     return metrics_labels
 
 
-def init_metrics(metrics, config, ptype=None):
+def init_metrics(metrics, config, device, ptype=None):
     metrics = getMetricForEachLabel(metrics, config, ptype)
     dicts = {}
     keys = [0.0] * len(metrics)
@@ -123,6 +123,8 @@ def init_metrics(metrics, config, ptype=None):
         else:
             raise NotImplementedError(
                 'This metric {} is not implemented!'.format(metrics[i]))
+        #dicts[metrics[i]].count = dicts[metrics[i]].count.to(device)
+        #dicts[metrics[i]].sum = dicts[metrics[i]].sum.to(device)
     return dicts
 
 
@@ -141,8 +143,10 @@ def write_tensorboard(losses, metrics, writer, tb_step_writer, phase):
 
 def remove_nans(labels, outputs):
     mask = labels == 99998
-    labels = labels[~mask]
-    outputs = outputs[~mask]
+    mask_outputs = torch.unsqueeze(mask, 1).repeat(1, outputs.shape[1])
+
+    labels = labels.masked_select(~mask_outputs)
+    outputs = outputs.masked_select(~mask_outputs)
     mask_nan = torch.isnan(labels)
     labels = labels[~mask_nan]
     outputs = outputs[~mask_nan]
@@ -163,7 +167,7 @@ def get_metrics(outputs,
         if metric.endswith(label_name):
             c = 0
             if metric.startswith('acc_top_1'):
-                labels, outputs = remove_nans(labels, outputs)
+            #    labels, outputs = remove_nans(labels, outputs)
                 if outputs.nelement() != 0:
                     labels = F.one_hot(
                         labels,
@@ -304,7 +308,7 @@ def get_loss_metric_class(config,
     return metrics, losses_metric
 
 
-def normalize_metrics(running_metrics):
+def normalize_metrics(running_metrics, device):
     metric_dict = {}
     for running_metric in running_metrics:
         if running_metric.startswith('CE'):
@@ -312,12 +316,18 @@ def normalize_metrics(running_metrics):
         elif running_metric.startswith('BCE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('total'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('RMSE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('MSE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('L1smooth'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('_L1'):
             metric_tb = running_metrics[running_metric].aggregate().item()

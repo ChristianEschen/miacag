@@ -101,9 +101,9 @@ def train_one_epoch(model, criterion,
         lr_scheduler.step()
 
     running_metric_train, metric_tb = normalize_metrics(
-        metrics)
+        metrics, device)
     running_loss_train, loss_tb = normalize_metrics(
-        loss_metric)
+        loss_metric, device)
     # running_loss_train = normalize_metrics(
     #     running_loss_train,
     #     config,

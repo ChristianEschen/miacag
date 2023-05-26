@@ -1,7 +1,7 @@
 import yaml
 import torch
 import os
-
+from miacag.models.milmodel_from_features import MILModel
 
 class ModelBuilder():
     def __init__(self, config, device):
@@ -63,20 +63,13 @@ class ModelBuilder():
 
     def get_ImageToScalar_model(self):
         path_model = self.config['model']['pretrain_model']
-        # if self.config['task_type'] == "regression":
-        #     from miacag.models.modules import RegressionModel as m
-        # elif self.config['task_type'] == "classification":
-        #     from miacag.models.modules import ClassificationModel as m
         if self.config['task_type'] in ["classification", "regression"]:
             from miacag.models.modules import ImageToScalarModel as m
         elif self.config['task_type'] in ["mil_classification"]:
             from miacag.models.milmodel3d import MILModel as m
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
-        # if path_encoder != 'None':
-        #     state = torch.load(os.path.join(path_encoder, 'model.pt'))
-        #     state = self.drop_not_encoder_modules(state)
-        #     model.module.load_state_dict(state)
+
         if self.config['loaders']['mode'] in ['testing', 'prediction']:
             if path_model != 'None':
                 if self.config["use_DDP"] == "False":
@@ -141,14 +134,17 @@ class ModelBuilder():
             model = self.get_ImageToScalar_model()
         elif self.config['task_type'] == "segmentation":
             model = self.get_segmentation_model()
-            
-            
-    
+        else:
+            raise ValueError('model not implemented')
         # maybe freeze backbone
         if self.config['model']['freeze_backbone']:
-            for param in model.parameters():
+            for param in model.module.parameters():
                 param.requires_grad = False
-            for param in model.fcs.parameters():
+        #else:
+         #   if self.config['model']['model_name'] in "dinov2_vits14":
+            for param in model.module.fcs.parameters():
+                param.requires_grad = True
+            for param in model.module.attention.parameters():
                 param.requires_grad = True
         return model
 

@@ -199,10 +199,10 @@ def val_one_epoch_train(
     # Normalize the metrics from the entire epoch
     if config['task_type'] != "representation_learning":
         running_metric_val, metric_tb = normalize_metrics(
-            running_metric_val)
+            running_metric_val, device)
 
     running_loss_val, loss_tb = normalize_metrics(
-        running_loss_val)
+        running_loss_val, device)
 
     if writer is not False:
         loss_tb, metric_tb = write_tensorboard(
@@ -233,10 +233,10 @@ def val_one_epoch_test(
 
     if config['task_type'] != "representation_learning":
         running_metric_val, metric_tb = normalize_metrics(
-            running_metric_val)
+            running_metric_val, device)
 
     running_loss_val, loss_tb = normalize_metrics(
-        running_loss_val)
+        running_loss_val, device)
     df_result = maybe_softmax_transform(df_result, config)
     return metric_tb, df_result
 
@@ -249,8 +249,9 @@ def maybe_softmax_transform(df, config):
     for c, logit in enumerate(cols):
         logit_conf = logit + '_confidence'
         if config['loss']['name'][c].startswith('CE'):
-            raise(ValueError('this transform is not implemented'))
-            logits_return.append(softmax_transform(logit.float()))
+            df[logit_conf] = df[logit]
+            #raise(ValueError('this transform is not implemented'))
+            df[logit_conf] = softmax_transform(torch.tensor(df[logit])).tolist()
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
         elif config['loss']['name'][c] in ['_L1', 'L1smooth']:

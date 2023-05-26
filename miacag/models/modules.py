@@ -144,7 +144,7 @@ class ImageToScalarModel(EncoderModel):
             if loss_type.startswith('CE'):
                 self.fcs.append(nn.Linear(
                         self.in_features,
-                        num_classes).to(device))
+                        config['model']['num_classes'][loss_count_idx]).to(device))
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(

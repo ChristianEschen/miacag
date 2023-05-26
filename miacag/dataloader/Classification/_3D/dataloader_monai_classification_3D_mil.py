@@ -161,6 +161,12 @@ class train_monai_classification_loader(base_monai_loader):
                 num_init_workers=int(self.config['num_workers']/2),
                 replace_rate=self.config['replace_rate'],
                 num_replace_workers=int(self.config['num_workers']/2))
+        elif self.config['cache_num'] == 'standard':
+            train_ds = Dataset(
+                        config=self.config,
+                        features=self.features,
+                        data=self.data_par_train, transform=train_transforms
+                    )
         else:
             train_ds = CacheDataset(
                 config=self.config,

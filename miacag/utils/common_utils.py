@@ -20,12 +20,17 @@ def wrap_outputs_to_dict(outputs, config):
     outputs_dict = {}
     for group_count, group in enumerate(config['loss']['groups_names']):
         outputs_group = outputs[group_count]
-        for segment_idx in range(0, outputs_group.shape[-1]):
-            output_segment = outputs_group[:, segment_idx]
-            label_name_idx = config['loss'][
-                'group_idx']['loss_group'][group_count][segment_idx]
-            output_name = config['labels_names'][label_name_idx]
-            outputs_dict[output_name] = output_segment
+        if group.startswith('CE'):
+            dim = 0
+            outputs_dict[config['labels_names'][dim]] = outputs[dim]
+        else:
+            dim = outputs_group.shape[-1]
+            for segment_idx in range(0, dim):
+                output_segment = outputs_group[:, segment_idx]
+                label_name_idx = config['loss'][
+                    'group_idx']['loss_group'][group_count][segment_idx]
+                output_name = config['labels_names'][label_name_idx]
+                outputs_dict[output_name] = output_segment
     return outputs_dict
 
 

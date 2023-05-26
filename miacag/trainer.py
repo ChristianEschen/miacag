@@ -36,14 +36,14 @@ def train(config):
     config['loss']['groups_names'], config['loss']['groups_counts'], \
         config['loss']['group_idx'], config['groups_weights'] \
         = get_loss_names_groups(config)
-    running_loss_train = init_metrics(config['loss']['name'], config,
+    running_loss_train = init_metrics(config['loss']['name'], config, device,
                                       ptype='loss')
     running_metric_train = init_metrics(
-            config['eval_metric_train']['name'], config)
-    running_loss_val = init_metrics(config['loss']['name'], config,
+            config['eval_metric_train']['name'], config, device)
+    running_loss_val = init_metrics(config['loss']['name'], config, device,
                                     ptype='loss')
     running_metric_val = init_metrics(
-                config['eval_metric_val']['name'], config)
+                config['eval_metric_val']['name'], config, device)
 
     # Get model
     BuildModel = ModelBuilder(config, device)

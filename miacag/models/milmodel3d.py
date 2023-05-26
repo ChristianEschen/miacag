@@ -310,7 +310,8 @@ class MILModel(ImageToScalarModel):
             else:
                 pass
         elif self.config['model']['dimension'] in ['2D']:
-            x = x.mean(dim=(-2, -1))
+            if self.config['model']['backbone'] not in ["dinov2_vits14"]:
+                x = x.mean(dim=(-2, -1))
         else:
             raise ValueError('this dimension is not implemented')
         return x

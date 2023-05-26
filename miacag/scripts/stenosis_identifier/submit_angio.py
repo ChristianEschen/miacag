@@ -34,7 +34,10 @@ parser.add_argument(
     help="if cpu 'True' else 'False'")
 parser.add_argument(
             "--local_rank", type=int,
-            help="Local rank: torch.distributed.launch.")    
+            help="Local rank: torch.distributed.launch.")
+parser.add_argument(
+            "--local-rank", type=int,
+            help="Local rank: torch.distributed.launch.")
 parser.add_argument(
             "--num_workers", type=int,
             help="Number of cpu workers for training")    

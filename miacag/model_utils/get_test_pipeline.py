@@ -192,7 +192,8 @@ class TestPipeline():
 
     def saveCsvFiles(self, label_name, df, config, count):
         if config['loss']['name'][count].startswith('CE'):
-            confidences = confidences[count]
+            confidences = label_name + '_confidence'
+           # confidences = confidences[count]
             confidence_col = [
                 label_name + '_confidence_' +
                 str(i) for i in range(0, config['model']['num_classes'][count])]
@@ -211,6 +212,12 @@ class TestPipeline():
              np.expand_dims(df["rowid"].to_numpy(), 1)), axis=1)
       
         cols = confidence_col + ['rowid']
+        if config['loss']['name'][count].startswith('CE'):
+            # convert array with rows with liusts to liste
+            liste = []
+            for i in range(0, config['model']['num_classes'][count]):
+                liste.append(array[i, 0] + [array[i,1]])
+            array = liste
         df = pd.DataFrame(
             array,
             columns=cols)

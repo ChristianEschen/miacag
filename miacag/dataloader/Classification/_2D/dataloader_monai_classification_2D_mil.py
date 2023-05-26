@@ -149,8 +149,8 @@ class train_monai_classification_loader(base_monai_loader):
                 even_divisible=True,
             )[dist.get_rank()]
 
-        # create a training data loader
-        if self.config['cache_num'] != 'None':
+        # create a training data loader'
+        if self.config['cache_num'] not in ['standard', 'None']:
             train_ds = SmartCacheDataset(
                 config=self.config,
                 features=self.features,
@@ -161,6 +161,13 @@ class train_monai_classification_loader(base_monai_loader):
                 num_init_workers=int(self.config['num_workers']/2),
                 replace_rate=self.config['replace_rate'],
                 num_replace_workers=int(self.config['num_workers']/2))
+        
+        elif self.config['cache_num'] == 'standard':
+            train_ds = Dataset(
+                        config=self.config,
+                        features=self.features,
+                        data=self.data_par_train, transform=train_transforms
+                    )
         else:
             train_ds = CacheDataset(
                 config=self.config,
@@ -218,7 +225,7 @@ class val_monai_classification_loader(base_monai_loader):
         )[dist.get_rank()]
         rowids = [i["rowid"] for i in self.data_par_val]
         if self.config['loaders']['mode'] not in ['prediction', 'testing']:
-            if self.config['cache_num'] != 'None':
+            if self.config['cache_num'] not in ['standard', 'None']:
                 val_ds = SmartCacheDataset(
                     config=self.config,
                     features=self.features,
@@ -229,6 +236,12 @@ class val_monai_classification_loader(base_monai_loader):
                     num_init_workers=int(self.config['num_workers']/2),
                     replace_rate=self.config['replace_rate'],
                     num_replace_workers=int(self.config['num_workers']/2))
+            elif self.config['cache_num'] == 'standard':
+                val_ds = Dataset(
+                            config=self.config,
+                            features=self.features,
+                            data=self.data_par_val, transform=val_transforms
+                        )
             else:
                 val_ds = CacheDataset(
                     config=self.config,
@@ -252,6 +265,12 @@ class val_monai_classification_loader(base_monai_loader):
                         features=self.features,
                         data=self.data_par_val, transform=val_transforms
                     )
+            elif self.config['cache_num'] == 'standard':
+                val_ds = Dataset(
+                            config=self.config,
+                            features=self.features,
+                            data=self.data_par_val, transform=val_transforms
+                        )
             elif self.config['cache_test'] == "persistant":
                 cachDir = os.path.join(
                     self.config['model']['pretrain_model'],

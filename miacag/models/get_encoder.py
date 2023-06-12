@@ -21,7 +21,7 @@ def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] == "True":
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
-            "vit_small_patch16_224"]:
+            "vit_small_patch16_224", 'dinov2_vits14']:
             if torch.distributed.get_rank() == 0:
                 dirname = os.path.dirname(__file__)
                 model_path = os.path.join(
@@ -41,11 +41,19 @@ def getPretrainedWeights(config, model, device):
                 else:
                     model.load_state_dict(loaded_model)
         else:
-            model = load_from_checkpoint(
-                model,
-                config['model']['pretrain_model'],
-                config,
-                model_key='model|module')
+            if config['model']['backbone'] in ['dinov2_vits14']:
+                loaded_model = torch.load(
+                        os.path.join(config['model']['pretrain_model'], 'model.pt'),
+                        map_location=device)
+                model.load_state_dict(loaded_model)
+
+            else:
+                raise ValueError('not implemented')
+                # model = load_from_checkpoint(
+                #     model,
+                #     os.path.join(config['model']['pretrain_model'], 'model.pt'),
+                #     config,
+                #     model_key='model|module')
             # loaded_model = torch.load(config['model']['pretrain_model'],
             #                           map_location=device)
             # remove all values from loaded_model dict starting with decoder

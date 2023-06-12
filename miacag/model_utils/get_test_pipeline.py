@@ -138,7 +138,7 @@ class TestPipeline():
         if config['loss']['name'][count].startswith('CE'):
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].apply(np.argmax)
-        elif config['loss']['name'][count] in ['MSE', '_L1', 'L1smooth']:
+        elif config['loss']['name'][count] in ['MSE', '_L1', 'L1smooth', 'NNL']:
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].astype(float)
         elif config['loss']['name'][count] == 'BCE_multilabel':

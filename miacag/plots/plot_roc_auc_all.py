@@ -20,6 +20,8 @@ import os
 from sklearn.metrics import roc_curve, roc_auc_score
 from miacag.utils.script_utils import mkFolder
 from miacag.plots.plotter import rename_columns
+from miacag.plots.plot_utils import get_mean_lower_upper
+import statsmodels.api as sm
 
 def generate_data():
     data = datasets.load_breast_cancer()
@@ -118,6 +120,8 @@ def transform_confidences_to_by_label_type(confidences, name):
         confidences = 1 - confidences
     elif name.startswith('sten'):
         pass
+    elif name.startswith('timi'):
+        pass
     else:
         raise ValueError('name is not ffr or sten')
     return confidences
@@ -125,7 +129,7 @@ def transform_confidences_to_by_label_type(confidences, name):
 
 def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plot_type, config, theshold=0.5):
        # Define a result table as a DataFrame
-    roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc'])
+    roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc', 'auc_lower', 'auc_upper'])
 
     probas = []
     trues = []
@@ -150,13 +154,18 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         yproba = yproba[~mask]
         yproba = np.clip(yproba, a_min=0, a_max=1)
         fpr, tpr, _ = roc_curve(y_test,  yproba)
+        mean_auc, upper_auc, lower_auc = get_mean_lower_upper(yproba, y_test, 'roc_auc_score')
+        upper_auc = np.clip(upper_auc, a_min=0, a_max=1)
+        lower_auc = np.clip(lower_auc, a_min=0, a_max=1)
         auc = roc_auc_score(y_test, yproba)
         probas.append(yproba)
         trues.append(y_test)
         roc_result_table = roc_result_table.append({'segments':seg,
                                             'fpr':fpr, 
                                             'tpr':tpr, 
-                                            'auc':auc}, ignore_index=True)
+                                            'auc':auc,
+                                            'auc_lower':lower_auc,
+                                            'auc_upper': upper_auc}, ignore_index=True)
         
         idx += 1
     roc_result_table.set_index('segments', inplace=True)
@@ -220,7 +229,10 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         #     df_plot, prediction_name, label_name)
         plt.plot(roc_result_table_2.loc[i]['fpr'], 
                 roc_result_table_2.loc[i]['tpr'], 
-                label="{}, AUC={:.3f}".format(i, roc_result_table_2.loc[i]['auc']))
+                label="{}, AUC={:.3f} ({:.3f}-{:-3f})".format(
+                    i, roc_result_table_2.loc[i]['auc'],
+                    roc_result_table_2.loc[i]['auc_lower'],
+                    roc_result_table_2.loc[i]['auc_upper']))
         
     plt.plot([0,1], [0,1], color='orange', linestyle='--')
 
@@ -231,7 +243,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
 
     plt.title('ROC Curve Analysis for ' + plot_type + ' estimation on ' + location, fontweight='bold', fontsize=15)
-    plt.legend(prop={'size':13}, loc='lower right')
+    plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
     plt.savefig(os.path.join(
@@ -241,6 +253,99 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         output_plots, plot_type + '_' + location + '_roc_all.pdf'), dpi=100,
                 bbox_inches='tight')
 
+def plot_regression_all(result_table, trues_names, confidences_names, output_plots, config):
+       # Define a result table as a DataFrame
+    result_table_comb = pd.DataFrame(columns=['segments', 'mse_mean', 'mse_lower', 'mse_upper'])
+
+    # list comprehension to rename suffixes of elements in list from _confidences to _predictions
+    confidences_names = [i.replace('_confidences', '_predictions') for i in confidences_names]
+    probas = []
+    trues = []
+    idx = 0
+    for seg in confidences_names:
+        if config['task_type'] != 'mil_classification':
+            result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        else:
+            result_table_copy = result_table.copy()
+            maybeRCA = ""
+        result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
+            result_table_copy[confidences_names[idx]], seg)
+        y_test = result_table_copy[trues_names[idx]].values
+        yproba = result_table_copy[confidences_names[idx]].values
+        mask_propa = np.isnan(yproba)
+        mask_test = np.isnan(y_test)
+        mask = mask_propa + mask_test
+        y_test = y_test[~mask]
+        yproba = yproba[~mask]
+        #syproba = np.clip(yproba, a_min=0, a_max=1)
+       # fpr, tpr, _ = roc_curve(y_test,  yproba)
+        mean_mse, upper_mse, lower_mse = get_mean_lower_upper(yproba, y_test, 'mse_score')
+       # upper_mse = np.clip(upper_mse, a_min=0, a_max=1)
+       # lower_mse = np.clip(lower_mse, a_min=0, a_max=1)
+       # auc = roc_auc_score(y_test, yproba)
+        probas.append(yproba)
+        trues.append(y_test)
+        result_table_comb = result_table_comb.append({'segments':seg,
+                                            'mse_mean':mean_mse,
+                                            'mse_lower':lower_mse,
+                                            'mse_upper': upper_mse}, ignore_index=True)
+        
+        idx += 1
+
+    result_table_comb['probas'] = probas
+    result_table_comb['trues'] = trues
+#    from miacag.plots.plotter import plot_regression_density
+    label_name_ori = config['labels_names'][0]
+    # cat y_test and yproba to dataframe
+    df = pd.DataFrame({'y_test': y_test, 'yproba': yproba})
+    g = sns.lmplot(x='y_test', y='yproba', data=df)
+    X2 = sm.add_constant(df['y_test'])
+    est = sm.OLS(df['yproba'], X2)
+    est2 = est.fit()
+    r = est2.rsquared
+
+    if label_name_ori.startswith('timi'):
+        label_name = 'TIMI Flow'
+        plot_name = 'timi'
+    elif label_name_ori.startswith('ffr'):
+        plot_name = 'FFR'
+        label_name = 'FFR'
+    elif label_name_ori.startswith('sten'):
+        plot_name = 'stenosis'
+        label_name = 'Stenosis'
+    else:
+        raise ValueError('label_name_ori is not timi, ffr or sten')
+    result_table_comb.to_csv(
+        os.path.join
+        (output_plots, plot_name + '_regression.csv'))
+    for ax, title in zip(g.axes.flat, [label_name]):
+            ax.set_title(title)
+            ax.set_ylim(bottom=0.)
+            ax.text(0.05, 0.85,
+                    f'R-squared = {r:.3f}',
+                    fontsize=9, transform=ax.transAxes)
+            # ax.text(0.05, 0.9,
+            #         "p-value = " + p,
+            #         fontsize=9,
+            #         transform=ax.transAxes)
+            plt.xlabel("True")
+            plt.ylabel("Predicted")
+            plt.show()
+
+    plt.title(label_name)
+    plt.savefig(
+        os.path.join(
+            output_plots, plot_name + '_scatter.png'), dpi=100,
+        bbox_inches='tight')
+    plt.close()
+    # plot_regression_density(x=y_test, y=yproba,
+    #                                 cmap='jet', ylab='prediction', xlab='true',
+    #                                 bins=100,
+    #                                 figsize=(5, 4),
+    #                                 snsbins=60,
+    #                                 plot_type=plot_type,
+    #                                 output_folder=output_plots,
+    #                                 label_name_ori=label_name_ori)
 if __name__ == '__main__':
 
     output_plots = "/home/alatar/miacag/output_plots/"

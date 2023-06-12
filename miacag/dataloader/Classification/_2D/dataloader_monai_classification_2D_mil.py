@@ -48,7 +48,7 @@ from miacag.dataloader.dataloader_base_monai import \
 from monai.data import GridPatchDataset, PatchDataset, PatchIter
 import os
 from miacag.dataloader.Classification._2D.dataset_mil_2d import \
-    Dataset, CacheDataset, SmartCacheDataset, PersistentDataset
+    Dataset, CacheDataset, SmartCacheDataset, PersistentDataset, MILDataset
     #artition_dataset_classes, partition_dataset
 
 
@@ -77,9 +77,14 @@ class train_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
+        if self.config['loss']['name'][0] == 'NNL':
+            event = ['event']
+        else:
+            event = []
         self.data = self.df[
             self.features + config['labels_names'] +
-            ['rowid', "SOPInstanceUID"]]
+            ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
+             "StudyInstanceUID", "PatientID"] + event]
         self.data = self.data.to_dict('records')
 
     def __call__(self):
@@ -163,10 +168,11 @@ class train_monai_classification_loader(base_monai_loader):
                 num_replace_workers=int(self.config['num_workers']/2))
         
         elif self.config['cache_num'] == 'standard':
-            train_ds = Dataset(
+            train_ds = MILDataset(
                         config=self.config,
                         features=self.features,
-                        data=self.data_par_train, transform=train_transforms
+                        data=self.data_par_train, transform=train_transforms,
+                        phase='train'
                     )
         else:
             train_ds = CacheDataset(
@@ -187,11 +193,14 @@ class val_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
-
+        if self.config['loss']['name'][0] == 'NNL':
+            event = ['event']
+        else:
+            event = []
         self.data = self.df[
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", "PatientID",
-             "StudyInstanceUID", "SeriesInstanceUID"]]
+             "StudyInstanceUID", "SeriesInstanceUID","PatientID"] + event]
         self.data = self.data.to_dict('records')
 
 
@@ -237,10 +246,11 @@ class val_monai_classification_loader(base_monai_loader):
                     replace_rate=self.config['replace_rate'],
                     num_replace_workers=int(self.config['num_workers']/2))
             elif self.config['cache_num'] == 'standard':
-                val_ds = Dataset(
+                val_ds = MILDataset(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_val, transform=val_transforms
+                            data=self.data_par_val, transform=val_transforms,
+                            phase='val'
                         )
             else:
                 val_ds = CacheDataset(
@@ -260,16 +270,18 @@ class val_monai_classification_loader(base_monai_loader):
                         copy_cache=True,
                         num_workers=self.config['num_workers'])
             elif self.config['cache_test'] == "False":
-                val_ds = Dataset(
+                val_ds = MILDataset(
                         config=self.config,
                         features=self.features,
-                        data=self.data_par_val, transform=val_transforms
+                        data=self.data_par_val, transform=val_transforms,
+                        phase='val'
                     )
             elif self.config['cache_num'] == 'standard':
-                val_ds = Dataset(
+                val_ds = MILDataset(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_val, transform=val_transforms
+                            data=self.data_par_val, transform=val_transforms,
+                            phase='val'
                         )
             elif self.config['cache_test'] == "persistant":
                 cachDir = os.path.join(

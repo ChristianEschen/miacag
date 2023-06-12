@@ -155,7 +155,7 @@ class ImageToScalarModel(EncoderModel):
                         ).to(device))
             # test if loss_type startswith three conditions
             
-            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth'])):
+            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL'])):
                 # if config['model']['sigm'] == 'True':
                 self.fcs.append(
                     nn.Sequential(

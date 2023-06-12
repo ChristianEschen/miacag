@@ -49,8 +49,9 @@ class splitter():
 
     def groupEntriesPrPatient(self, df):
         '''Grouping entries pr patients'''
-        X = df.drop(self.sql_config['labels_names'], 1)
-        y = df[self.sql_config['labels_names']]
+        # using DcmPathFlatten as dummy for splitting
+        X = df.drop('DcmPathFlatten', 1)
+        y = df['DcmPathFlatten']
         if self.sql_config['TestSize'] == 1:
             return None, df
         else:
@@ -68,18 +69,18 @@ class splitter():
     def addPhase(self, train_df, val_df):
         train_df['phase'] = "train"
         val_df['phase'] = "val"
-        val_df = val_df[['phase', 'rowid'] + self.sql_config['labels_names']]
+        val_df = val_df[['phase', 'rowid']]
         train_df = train_df[
-            ['phase', 'rowid'] + self.sql_config['labels_names']]
+            ['phase', 'rowid']]
 
         update_cols(
                     val_df.to_dict('records'),
                     self.sql_config,
-                    ['phase'] + self.sql_config['labels_names'],)
+                    ['phase'],)
         update_cols(
                     train_df.to_dict('records'),
                     self.sql_config,
-                    ['phase'] + self.sql_config['labels_names'])
+                    ['phase'])
 
     def __call__(self):
         df = self.df[self.df['phase'] != 'test']

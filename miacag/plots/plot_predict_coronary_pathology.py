@@ -22,13 +22,13 @@ from sklearn.metrics import RocCurveDisplay
 from sklearn.metrics import roc_curve
 from sklearn.metrics import auc
 from sklearn.utils import check_matplotlib_support
-
+from miacag.plots.plot_utils import get_mean_lower_upper
 
 
 def run_plotter_ruc_multi_class(y_score, y_onehot_test,
                                 type_outcome, model_name,
                                 save_name, output_path):
-    mean_auc, upper_auc, lower_auc = get_confidence_auc(y_score, y_onehot_test)
+    mean_auc, upper_auc, lower_auc = get_mean_lower_upper(y_score, y_onehot_test, 'roc_auc_score')
     plot_roc_multi_class(y_score, y_onehot_test, mean_auc, lower_auc,
                          upper_auc, type_outcome, model_name,
                          save_name, output_path)
@@ -42,8 +42,12 @@ def plot_roc_multi_class(y_score, y_onehot_test, mean_auc, lower_auc,
     plt.axis("square")
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
+    if type_outcome == 'corornay_pathology':
+        title_name = 'Coronary Pathology'
+    else:
+        raise ValueError('not implemented')
     plt.title("Prediction of " +
-              type_outcome +
+              title_name +
               " One-vs-Rest \nReceiver Operating Characteristic")
     plt.legend(prop={'size': 6})
     ax.legend(loc="lower right")
@@ -79,8 +83,8 @@ def from_predictions(y_true, y_pred,
 def plot_wrap(name, ax, fpr, tpr, mean_auc, lower_auc, upper_auc, type_outcome, model_name, **kwargs):
     line_kwargs = {}
     line_kwargs["label"] = \
-        f"{model_name}, AUC={mean_auc:0.3f} \
-        ({upper_auc:0.3f}-{lower_auc:0.3f})"
+        f"AUC={mean_auc:0.3f} \
+        ({lower_auc:0.3f}-{upper_auc:0.3f})"
     pos_label = None
     (line_,) = ax.plot(fpr, tpr, **line_kwargs)
     info_pos_label = f" (Positive label: {pos_label})" \
@@ -94,38 +98,3 @@ def plot_wrap(name, ax, fpr, tpr, mean_auc, lower_auc, upper_auc, type_outcome, 
     ax_ = ax
     figure_ = ax.figure
     return
-
-
-def get_confidence_auc(y_pred, y_true):
-    bootstrapped_scores = compute_bootstrapped_scores(y_pred, y_true)
-    mean, upper, lower = compute_confidence_auc(bootstrapped_scores)
-    return mean, upper, lower
-
-def compute_bootstrapped_scores(y_pred, y_true):
-    n_bootstraps = 1000
-    rng_seed = 42 # control reproducibility
-
-    bootstrapped_scores = []
-    rng = np.random.RandomState(rng_seed)
-    for i in range (n_bootstraps): 
-        #bootstrap by sampling with replacement on the prediction indices
-        indices = rng.randint(0, len(y_pred), len(y_pred))
-        if len(np.unique(y_true[indices])) < 2:
-            # We need at least one positive and one negative sample for ROC AUC
-            # # to be defined: reject the sample
-            continue
-        micro_roc_auc_ovr = roc_auc_score(
-            y_true[indices],
-            y_pred[indices],
-            multi_class="ovr",
-            average="micro")
-        bootstrapped_scores.append(micro_roc_auc_ovr)
-        # print ("Bootstrap #{} ROC area: {:0.3f}".format(i + 1, score))
-    return bootstrapped_scores
-
-def compute_confidence_auc(bootstrapped_scores):
-    mean = np.mean (bootstrapped_scores)
-    std = np.std(bootstrapped_scores)
-    upper = mean + 2*std
-    lower = mean - 2*std
-    return mean, upper, lower

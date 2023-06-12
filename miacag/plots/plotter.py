@@ -20,6 +20,8 @@ from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from decimal import Decimal
 from miacag.utils.script_utils import mkFolder
+
+
 def rename_columns(df, label_name):
     if '_1_prox' in label_name:
         value = '1: Proximal RCA'
@@ -613,6 +615,10 @@ def plotStenoserTrueVsPred(sql_config, label_names,
 def plotRegression(sql_config, label_names,
                    prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    from miacag.plots.plot_roc_auc_all import plot_regression_all
+    plot_regression_all(df,
+                        label_names, prediction_names,
+                        output_folder, sql_config)
 
     for c, label_name in enumerate(label_names):
         label_name_ori = label_name
@@ -647,13 +653,19 @@ def plotRegression(sql_config, label_names,
             df_plot_rep[prediction_name], a_min=0, a_max=1)
 
         df_plot_rep = df_plot_rep.astype({prediction_name: float})
+        if label_name_ori.startswith('sten'):
+            plot_type = 'Stenosis'
+        elif label_name_ori.startswith('ffr'):
+            plot_type = 'FFR'
+        elif label_name_ori.startswith('timi'):
+            plot_type = 'TIMI flow'
         plot_regression_density(x=df_plot_rep[label_name],
                                 y=df_plot_rep[prediction_name],
                                 cmap='jet', ylab='prediction', xlab='true',
                                 bins=100,
                                 figsize=(5, 4),
                                 snsbins=60,
-                                plot_type='Stenosis' if label_name_ori.startswith('sten') else 'FFR',
+                                plot_type=plot_type,
                                 output_folder=output_folder,
                                 label_name_ori=label_name_ori)
     #remove nan
@@ -674,10 +686,10 @@ def plotRegression(sql_config, label_names,
             ax.text(0.05, 0.85,
                     f'R-squared = {r:.3f}',
                     fontsize=9, transform=ax.transAxes)
-            ax.text(0.05, 0.9,
-                    "p-value = " + p,
-                    fontsize=9,
-                    transform=ax.transAxes)
+            # ax.text(0.05, 0.9,
+            #         "p-value = " + p,
+            #         fontsize=9,
+            #         transform=ax.transAxes)
             plt.xlabel("True")
             plt.ylabel("Predicted")
             plt.show()

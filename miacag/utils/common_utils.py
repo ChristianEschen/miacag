@@ -10,6 +10,8 @@ def stack_labels(data, config, loss_name):
                 stacked_data.append(data[label_name])
             elif loss_name.startswith(tuple(['CE'])):
                 stacked_data.append(data[label_name])
+            elif loss_name.startswith(tuple(['NNL'])):
+                stacked_data.append(data[label_name])
             else:
                 raise ValueError('this loss is not implementeed:', loss_name)
     return torch.stack(stacked_data, 1)
@@ -40,11 +42,15 @@ def get_losses_class(config, outputs, data, criterion, device):
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
     loss_tot = loss_tot.requires_grad_()
+
     for count_idx, loss_name in enumerate(config['loss']['groups_names']):
         labels = stack_labels(data, config, loss_name)
+        event = None
+        if loss_name.startswith('NNL'):
+            event = data['event']
         loss = get_loss(
             config, outputs[count_idx],
-            labels, criterion[count_idx], loss_name)
+            labels, criterion[count_idx], loss_name, event)
         #print('done')
         if torch.isnan(loss) == torch.tensor(True, device=device):
             #raise ValueError('the loss is nan!')
@@ -69,12 +75,15 @@ def get_losses_class(config, outputs, data, criterion, device):
     return losses, loss_tot
 
 # get loss function
-def get_loss(config, outputs, labels, criterion, loss_name):
+def get_loss(config, outputs, labels, criterion, loss_name, event=None):
     if 'Siam' in config['loss']['name']:
         loss = criterion(outputs)
     elif loss_name.startswith('CE'):
         labels = torch.reshape(labels, (labels.shape[0], ))
         loss = criterion(outputs, labels)
+     #   loss = criterion(torch.tensor(outputs), labels)
+    elif loss_name.startswith('NNL'):
+        loss = criterion(outputs, labels, event)
     else:
         loss = criterion(outputs, labels)
     return loss

@@ -64,7 +64,7 @@ def train(config):
         if config['loaders']['use_amp'] else None
     best_val_loss, best_val_epoch = None, None
     early_stop = False
-    if config['cache_num'] != 'None':
+    if config['cache_num'] not in ['standard', 'None']:
         train_ds.start()
 
     starter = time.time()
@@ -79,7 +79,7 @@ def train(config):
                         running_metric_train, running_loss_train,
                         writer, config, scaler)
 
-        if config['cache_num'] != 'None':
+        if config['cache_num'] not in  ['standard', 'None']:
             train_ds.update_cache()
 
         #  validation one epoch (but not necessarily each)
@@ -101,7 +101,7 @@ def train(config):
             if early_stop is True:
                 break
 
-    if config['cache_num'] != 'None':
+    if config['cache_num'] not in ['standard', 'None']:
         train_ds.shutdown()
 
     if early_stop is False:

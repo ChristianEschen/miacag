@@ -12,6 +12,8 @@ from miacag.metrics.metrics_utils import flatten, \
 import os
 from miacag.utils.common_utils import stack_labels, get_loss
 from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict
+from miacag.models.BuildModel import ModelBuilder
+from miacag.models.modules import get_loss_names_groups
 
 
 def set_random_seeds(random_seed=0):
@@ -145,6 +147,25 @@ def get_device(config):
         device = 'cpu'
     device = torch.device(device)
     return device
+
+def fake_saving_ddp_model_wrapper(config, model_file_path):
+    device = get_device(config)
+    config['datasetFingerprintFile'] = None
+    config['loaders']['mode'] = 'training'
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+        config['loss']['group_idx'], config['groups_weights'] \
+        = get_loss_names_groups(config)
+    config['use_DDP'] = 'True'
+    if config["cpu"] == "False":
+        torch.cuda.set_device(device)
+        torch.backends.cudnn.benchmark = True
+
+    BuildModel = ModelBuilder(config, device)
+    model = BuildModel()
+    if config["cpu"] == "False":
+        torch.save(model.module.state_dict(), model_file_path)
+    else:
+        torch.save(model.state_dict(), model_file_path)
 
 
 def save_model(model, writer, config):

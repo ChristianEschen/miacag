@@ -120,6 +120,8 @@ def init_metrics(metrics, config, device, ptype=None):
             dicts[metrics[i]] = ConfusionMatrixMetric(
                 metric_name='accuracy', reduction="mean",
                 include_background=False)
+        elif metrics[i].startswith('NNL'):
+            dicts[metrics[i]] = CumulativeAverage()
         else:
             raise NotImplementedError(
                 'This metric {} is not implemented!'.format(metrics[i]))
@@ -258,6 +260,9 @@ def get_losses_metric(running_losses,
         elif loss.startswith('total'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
+        elif loss.startswith('NNL'):
+            running_losses[loss].append(losses[loss])
+            losses_metric[loss] = running_losses[loss]
         else:
             raise ValueError("Invalid loss %s" % repr(loss))
     return losses_metric
@@ -312,6 +317,9 @@ def normalize_metrics(running_metrics, device):
     metric_dict = {}
     for running_metric in running_metrics:
         if running_metric.startswith('CE'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('BCE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
@@ -330,6 +338,11 @@ def normalize_metrics(running_metrics, device):
             running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('_L1'):
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('NNL'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         else:
             metric_tb = running_metrics[running_metric].aggregate()[0].item()

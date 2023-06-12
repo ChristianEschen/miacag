@@ -57,7 +57,7 @@ class train_monai_classification_loader(base_monai_loader):
             self.getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        self.data = self.df[self.features + config['labels_names'] + ['rowid']]
+        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event']]
         self.data = self.data.to_dict('records')
 
     def transformations(self):

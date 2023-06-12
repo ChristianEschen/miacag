@@ -12,13 +12,18 @@ def to_dtype(data, config):
             data[label_name] = data[label_name].long()
         elif config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth']:
             data[label_name] = data[label_name].float()
+        elif config['loss']['name'][c] in ['NNL']:
+            data[label_name] = data[label_name].float()
+            data['event'] = data['event'].int()
         else:
-            raise ValueError("model dimension not implemented")
+            raise ValueError("model loss not implemented")
     return data
 
 
 def to_device(data, device, fields):
     for field in fields:
+        if field.startswith('duration'):
+            data['event'] = data['event'].to(device)
         data[field] = data[field].to(device)
     return data
 
@@ -33,6 +38,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
         data = to_device(data, device, ['inputs'])
         data = to_dtype(data, config)
         data = to_device(data, device, config['labels_names'])
+       # if 
         #print('data shape', data['inputs'].shape)
     elif config['task_type'] == "representation_learning":
         if val_phase is False:
@@ -92,7 +98,6 @@ def get_dataloader_train(config):
         CL = ClassificationLoader(config)
         train_loader, val_loader, train_ds, val_ds = \
             CL.get_classification_loader_train(config)
-
         val_loader.sampler.data_source.data = \
             val_loader.sampler.data_source.data * \
             config['loaders']['val_method']['samples']

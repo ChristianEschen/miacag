@@ -36,7 +36,11 @@ class ClassificationLoader():
         #     self.df = self.df.dropna(subset=config["labels_names"], how='any')
         if self.config['loaders']['mode'] == 'prediction':
             for col in self.config['labels_names']:
+                #try:
                 self.df[col].values[:] = 0
+                # except:
+                #     print('column not found')
+                #     pass
 
         if self.config['loaders']['mode'] in ['prediction', 'testing']:
             self.val_df = self.df
@@ -102,12 +106,6 @@ class ClassificationLoader():
                 self.val_df,
                 config)
         val_ds = val_ds()
-
-        # if config['task_type'] == 'mil_classification':
-        #     collate = list_data_collate_mil
-        # else:
-        #     collate = pad_list_data_collate
-        
         train_loader = ThreadDataLoader(
             train_ds,
             sampler=sampler,
@@ -116,8 +114,6 @@ class ClassificationLoader():
             num_workers=0, #config['num_workers'],
             collate_fn=pad_list_data_collate,
             pin_memory=False,) #True if config['cpu'] == "False" else False,)
-
-       # return train_loader, val_loader, train_ds, val_ds
         with torch.no_grad():
             val_loader = ThreadDataLoader(
                 val_ds,
@@ -126,7 +122,6 @@ class ClassificationLoader():
                 num_workers=0,
                 collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                 pin_memory=False,)
-      
         return train_loader, val_loader, train_ds, val_ds
 
     def get_classificationloader_patch_lvl_test(self, config):

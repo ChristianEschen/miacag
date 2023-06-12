@@ -4,6 +4,7 @@ from monai.losses import DiceCELoss
 from miacag.model_utils.siam_loss import SimSiamLoss
 from miacag.models.modules import unique_counts
 import torch
+from torch import Tensor
 
 
 def mse_loss_with_nans(input, target):
@@ -19,19 +20,42 @@ def mse_loss_with_nans(input, target):
 
     return loss
 
+def cox_ph_loss(log_h: Tensor, durations: Tensor, events: Tensor, eps: float = 1e-7) -> Tensor:
+    """Loss for CoxPH model. If data is sorted by descending duration, see `cox_ph_loss_sorted`.
 
-# def l1_loss_smooth(predictions, targets, beta=1):
-#     # Compute the absolute difference between predictions and targets
-#     diff = torch.abs(predictions - targets)
+    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,
+    where h = exp(log_h) are the hazards and R is the risk set, and d is event.
 
-#     # Compute the mask for missing values in the targets
-#     mask = torch.isnan(targets)
+    We just compute a cumulative sum, and not the true Risk sets. This is a
+    limitation, but simple and fast.
+    """
+    durations = durations.view(-1)
+    idx = durations.sort(descending=True)[1]
+    events = events[idx]
+    # log_h = log_h[idx] (deprecated)
+    log_h = log_h.index_select(0, idx)
+    return cox_ph_loss_sorted(log_h, events, eps)
 
-#     # Replace the missing values in the mask with the value of beta
-#     diff = torch.where(mask, beta, diff)
 
-#     # Compute the loss as the mean of the smooth L1 loss over all samples
-#     return diff.mean()
+def cox_ph_loss_sorted(log_h: Tensor, events: Tensor, eps: float = 1e-7) -> Tensor:
+    """Requires the input to be sorted by descending duration time.
+    See DatasetDurationSorted.
+
+    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,
+    where h = exp(log_h) are the hazards and R is the risk set, and d is event.
+
+    We just compute a cumulative sum, and not the true Risk sets. This is a
+    limitation, but simple and fast.
+    """
+    if events.dtype is torch.bool:
+        events = events.float()
+    events = events.view(-1)
+    log_h = log_h.view(-1)
+    gamma = log_h.max()
+    log_cumsum_h = log_h.sub(gamma).exp().cumsum(0).add(eps).log().add(gamma)
+    return - log_h.sub(log_cumsum_h).mul(events).sum().div(events.sum())
+
+
 
 def l1_loss_smooth(predictions, targets, beta=1):
     mask = torch.isnan(targets)
@@ -123,6 +147,9 @@ def get_loss_func(config):
             criterions.append(criterion)
         elif loss.startswith('total'):
             pass
+        elif loss.startswith('NNL'):
+            criterion = cox_ph_loss
+            criterions.append(criterion)
         else:
             raise ValueError("Loss type is not implemented")
     return criterions

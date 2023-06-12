@@ -92,6 +92,8 @@ class transformThresholdRegression():
                         (self.df[label_name] >= 1) &
                         (~np.isnan(self.df[label_name]))),
                         1, self.df[label_name])
+            elif label_name.startswith('timi'):
+                pass
             else:
                 raise ValueError(
                     'this type of label to process is not implemented')

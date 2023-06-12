@@ -258,6 +258,8 @@ def maybe_softmax_transform(df, config):
             df[logit_conf] = df[logit]
         elif config['loss']['name'][c].startswith('BCE'):
             logits_return.append(torch.nn.Sigmoid()(logit.float()))
+        elif config['loss']['name'][c].startswith('NNL'):
+            df[logit_conf] = df[logit]
         else:
             raise(ValueError('this loss type is not implemented'))
     return df

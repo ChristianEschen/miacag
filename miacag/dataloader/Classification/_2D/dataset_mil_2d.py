@@ -8,7 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
 
 import collections.abc
 from curses.ascii import SO
@@ -37,7 +37,7 @@ from monai.transforms import Compose, Randomizable, ThreadUnsafe, Transform, app
 from monai.utils import MAX_SEED, deprecated_arg, get_seed, look_up_option, min_version, optional_import
 from monai.utils.misc import first
 from torch.utils.data.dataloader import default_collate
-
+import monai
 if TYPE_CHECKING:
     from tqdm import tqdm
 
@@ -49,6 +49,8 @@ lmdb, _ = optional_import("lmdb")
 pd, _ = optional_import("pandas")
 from monai.transforms import CenterSpatialCropd, RandSpatialCropd, SpatialPad
 
+def replicate_list(lst, m):
+    return (lst * ((m // len(lst)) + 1))[:m]
 
 def div_diff_tuple(diff):
     val1 = diff%2
@@ -95,6 +97,193 @@ def get_random_patches(stacked_data, config):
             return stacked_data
     else:
         return stacked_data
+
+class MILDataset(_TorchDataset):
+    """
+    A generic dataset with a length property and an optional callable data transform
+    when fetching a data sample.
+    If passing slicing indices, will return a PyTorch Subset, for example: `data: Subset = dataset[1:4]`,
+    for more details, please check: https://pytorch.org/docs/stable/data.html#torch.utils.data.Subset
+
+    For example, typical input data can be a list of dictionaries::
+
+        [{                            {                            {
+             'img': 'image1.nii.gz',      'img': 'image2.nii.gz',      'img': 'image3.nii.gz',
+             'seg': 'label1.nii.gz',      'seg': 'label2.nii.gz',      'seg': 'label3.nii.gz',
+             'extra': 123                 'extra': 456                 'extra': 789
+         },                           },                           }]
+    """
+
+    def __init__(self, config: Sequence, features: Sequence,
+                 data: Sequence, transform: Optional[Callable] = None,
+                 phase: str = 'train') -> None:
+        """
+        Args:
+            data: input data to load and transform to generate dataset for model.
+            transform: a callable data transform on input data.
+
+        """
+        self.data = data
+        self.transform = transform
+        self.features = features
+        self.config = config
+        self.phase = phase
+
+        self.pre_transforms = self.get_pretransformers()
+        self.post_transformations = self.post_transforms()
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def get_pretransformers(self):
+        pre_transforms = [
+            monai.transforms.LoadImaged(keys=self.features),
+            monai.transforms.EnsureChannelFirstD(keys=self.features),
+            monai.transforms.RandSpatialCropd(
+                keys=self.features,
+                roi_size=[
+                    -1,
+                    -1,
+                    1],
+                random_size=False),
+            ]
+        if self.phase == 'train':
+            pre_transforms = pre_transforms + [
+                monai.transforms.RandRotate90d(
+                self.features, prob=0.1, max_k=3,
+                spatial_axes=(0, 1))]
+        pre_transforms = Compose(pre_transforms)
+        return pre_transforms
+       # self.pre_transforms = pre_transforms
+    
+    def post_transforms(self):
+        if self.config['cpu'] == 'True':
+            device = 'cpu'
+        else:
+            device = "cuda:{}".format(os.environ['LOCAL_RANK'])
+        post_transforms = [
+            monai.transforms.Resized(
+                        keys=self.features,
+                        spatial_size=(
+                                    self.config['loaders']['Resize_height'],
+                                    self.config['loaders']['Resize_width'],
+                                    self.config['loaders']['nr_patches'])),
+           # monai.transforms.DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+            monai.transforms.SpatialPadd(
+                keys=self.features,
+                spatial_size=[self.config['loaders']['Crop_height'],
+                              self.config['loaders']['Crop_width'],
+                              self.config['loaders']['nr_patches']]),
+            monai.transforms.RepeatChanneld(keys=self.features, repeats=3),
+            monai.transforms.ScaleIntensityd(keys=self.features),
+            monai.transforms.NormalizeIntensityd(
+                keys=self.features,
+                subtrahend=(0.485, 0.456, 0.406),
+                divisor=(0.229, 0.224, 0.225),
+                channel_wise=True),
+           # monai.transforms.ToDeviced(keys=self.features, device=device)
+            ]
+        
+        if self.phase == 'train':
+            phase_transforms = [monai.transforms.RandAffined(
+                        keys=self.features,
+                        mode="bilinear",
+                        prob=0.2,
+                        spatial_size=(self.config['loaders']['Resize_height'],
+                                      self.config['loaders']['Resize_width'],
+                                      self.config['loaders']['nr_patches']),
+                        scale_range=(0.15, 0.15, 0),
+                        padding_mode="zeros"),
+            monai.transforms.RandAffined(
+                    keys=self.features,
+                    mode="bilinear",
+                    prob=0.2,
+                    spatial_size=(self.config['loaders']['Resize_height'],
+                                  self.config['loaders']['Resize_width'],
+                                  self.config['loaders']['nr_patches']),
+                    translate_range=(
+                         int(0.22*self.config['loaders']['Resize_height']),
+                         int(0.22*self.config['loaders']['Resize_width']),
+                         int(0.5*self.config['loaders']['nr_patches'])),
+                    padding_mode="zeros"),
+            monai.transforms.RandAffined(
+                        keys=self.features,
+                        mode="bilinear",
+                        prob=0.2,
+                        rotate_range=(0, 0, 0.17),
+                        spatial_size=(self.config['loaders']['Resize_height'],
+                                      self.config['loaders']['Resize_width'],
+                                      self.config['loaders']['nr_patches']),
+                        padding_mode="zeros"),]
+        else:
+            phase_transforms = []
+
+        post_transforms = post_transforms + phase_transforms + [
+            monai.transforms.ConcatItemsd(keys=self.features, name='inputs'),
+            monai.transforms.DeleteItemsd(keys=self.features),
+            ]
+        post_transforms = Compose(post_transforms)
+        return post_transforms
+
+    def _transform(self, index: int):
+        """
+        Fetch single data item from `self.data`.
+        """
+        data_i = self.data[index]
+        #post_trans = Compose([ToTensord(keys=["img"])])
+        data_i_list = []
+        # replicate list
+        data_i['DcmPathFlatten'] = replicate_list(data_i['DcmPathFlatten'], self.config['loaders']['nr_patches'])
+
+        data_i["SOPInstanceUID"] = replicate_list(data_i["SOPInstanceUID"], self.config['loaders']['nr_patches'])
+        data_i["SeriesInstanceUID"] = replicate_list(data_i["SeriesInstanceUID"], self.config['loaders']['nr_patches'])
+        data_i["StudyInstanceUID"] = replicate_list(data_i["StudyInstanceUID"], self.config['loaders']['nr_patches'])
+
+
+        # start while loop. Should stop when all patches are loaded
+        while len(data_i_list) < self.config['loaders']['nr_patches']:
+            for data_i_i in data_i[self.features[0]]:
+                data_i_i = {
+                    self.features[0]: data_i_i}
+                for n in self.config['labels_names']:
+
+                    data_i_i[n] = data_i[n]
+                 #   data_i_i[n] = self.pre_transforms(data_i_i)
+                    data_idx = self.pre_transforms(data_i_i)
+                    data_i_list.append(data_idx)
+        stacked_data = torch.concat(
+            [i[self.features[0]] for i in data_i_list], dim=3)
+        data_i_i['DcmPathFlatten'] = stacked_data
+        data_i_i = self.post_transformations(data_i_i)
+        
+        # stacked_data = get_random_patches_cache(
+        #     stacked_data,
+        #     self.config)
+        data_i_i['inputs'] = data_i_i['inputs'].permute(3, 0, 1, 2)
+        #data_i_i['inputs'] = stacked_data
+        data_i_i["rowid"] = data_i["rowid"]
+        if self.config['loss']['name'][0] == 'NNL':
+            data_i_i["event"] = data_i["event"]
+        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
+        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
+        data_i_i["SeriesInstanceUID"] = data_i["SeriesInstanceUID"]
+        data_i_i["StudyInstanceUID"] = data_i["StudyInstanceUID"]
+        data_i_i["PatientID"] = data_i["PatientID"]
+      #  if self.config['loaders']['val_method']['max_patches'] != 'None':
+       #     max_p = self.config['loaders']['val_method']['max_patches']
+       #     data_i_i['inputs'] = data_i_i['inputs'][0:max_p]
+        return data_i_i
+
+    def __getitem__(self, index: Union[int, slice, Sequence[int]]):
+        if isinstance(index, slice):
+            # dataset[:42]
+            start, stop, step = index.indices(len(self))
+            indices = range(start, stop, step)
+            return Subset(dataset=self, indices=indices)
+        if isinstance(index, collections.abc.Sequence):
+            # dataset[[1, 3, 4]]
+            return Subset(dataset=self, indices=index)
+        return self._transform(index)
 
 
 class Dataset(_TorchDataset):
@@ -163,6 +352,8 @@ class Dataset(_TorchDataset):
         stacked_data = stacked_data.permute(3, 0, 1, 2)
         data_i_i['inputs'] = stacked_data
         data_i_i["rowid"] = data_i["rowid"]
+        if self.config['loss']['name'][0] == 'NNL':
+            data_i_i["event"] = data_i["event"]
         data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
         data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
         data_i_i["SeriesInstanceUID"] = data_i["SeriesInstanceUID"]
@@ -371,6 +562,7 @@ class PersistentDataset(Dataset):
         stacked_data = stacked_data.permute(3, 0, 1, 2)
         data_i_i['inputs'] = stacked_data
         data_i_i["rowid"] = item_transformed["rowid"]
+        data_i_i["event"] = item_transformed["event"]
         data_i_i['DcmPathFlatten_paths'] = item_transformed['DcmPathFlatten']
         data_i_i["SOPInstanceUID"] = item_transformed["SOPInstanceUID"]
         data_i_i["SeriesInstanceUID"] = item_transformed["SeriesInstanceUID"]
@@ -908,6 +1100,8 @@ class CacheDataset(Dataset):
         if self.as_contiguous:
             data_i_i = convert_to_contiguous(data_i_i, memory_format=torch.contiguous_format)
         data_i_i["rowid"] = data_i["rowid"]
+        if self.config['loss']['name'][0] == 'NNL':
+            data_i_i["event"] = data_i["event"]
        # data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
        # data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
 

@@ -11,6 +11,8 @@ from miacag.plots.plot_histogram import plot_histogram
 from miacag.metrics.metrics_utils import mkDir
 from miacag.models.BuildModel import ModelBuilder
 from miacag.model_utils.grad_cam_utils import prepare_model_for_sm
+import pandas as pd
+
 
 class Predictor(TestPipeline):
     def __init__(self, model, criterion, config, device, test_loader):
@@ -275,3 +277,81 @@ def get_attention_values(model, config, data, device, c):
     else:
         a = a.cpu().detach().numpy()
     return a, max_index
+
+def compute_baseline_hazards(df, max_duration, config):
+        """Computes the Breslow estimates form the data defined by `input` and `target`
+        (if `None` use training data).
+
+        Typically call
+        model.compute_baseline_hazards() after fitting.
+        
+        Keyword Arguments:
+            input  -- Input data (train input) (default: {None})
+            target  -- Target data (train target) (default: {None})
+            max_duration {float} -- Don't compute estimates for duration higher (default: {None})
+            sample {float or int} -- Compute estimates of subsample of data (default: {None})
+            batch_size {int} -- Batch size (default: {8224})
+            set_hazards {bool} -- Set hazards in model object, or just return hazards. (default: {True})
+        
+        Returns:
+            pd.Series -- Pandas series with baseline hazards. Index is duration_col.
+        """
+ 
+        base_haz = _compute_baseline_hazards(df, max_duration, config)
+        #if set_hazards:
+        bch = compute_baseline_cumulative_hazards(set_hazards=True, baseline_hazards_=base_haz)
+        return base_haz, bch
+    
+
+def compute_baseline_cumulative_hazards(set_hazards=True, baseline_hazards_=None):
+    """See `compute_baseline_hazards. This is the cumulative version."""
+
+    bch = (baseline_hazards_
+            .cumsum()
+            .rename('baseline_cumulative_hazards'))
+    return bch
+
+def _compute_baseline_hazards(df_target, max_duration, config):
+    if max_duration is None:
+        max_duration = np.inf
+
+
+    df_target['expg'] = np.exp(df_target[[config['labels_names'][0]+'_predictions']])
+    return (df_target
+            .groupby(config['labels_names'])
+            .agg({'expg': 'sum', 'event': 'sum'})
+            .sort_index(ascending=False)
+            .assign(expg=lambda x: x['expg'].cumsum())
+            .pipe(lambda x: x['event']/x['expg'])
+            .fillna(0.)
+            .iloc[::-1]
+            .loc[lambda x: x.index <= max_duration]
+            .rename('baseline_hazards'))
+
+
+def predict_surv_df(df, baseline_hazards_, bch, config):
+    """Predict survival function for `input`. S(x, t) = exp(-H(x, t))
+    Require computed baseline hazards.
+
+    Arguments:
+        input {np.array, tensor or tuple} -- Input x passed to net.
+
+    Keyword Arguments:
+        max_duration {float} -- Don't compute estimates for duration higher (default: {None})
+        batch_size {int} -- Batch size (default: {8224})
+        baseline_hazards_ {pd.Series} -- Baseline hazards. If `None` used `model.baseline_hazards_` (default: {None})
+        eval_ {bool} -- If 'True', use 'eval' mode on net. (default: {True})
+        num_workers {int} -- Number of workers in created dataloader (default: {0})
+
+    Returns:
+        pd.DataFrame -- Survival estimates. One columns for each individual.
+    """
+    return np.exp(-_predict_cumulative_hazards(df, baseline_hazards_, bch, config))
+    
+def _predict_cumulative_hazards(df, baseline_hazards_, bch, config):
+    max_duration = None
+    max_duration = np.inf if max_duration is None else max_duration
+    bch = bch.loc[lambda x: x.index <= max_duration]
+    df['expg'] = np.exp(df[[config['labels_names'][0]+'_predictions']])
+    return pd.DataFrame(bch.values.reshape(-1, 1).dot(df["expg"].to_numpy().reshape(1,-1)), 
+                        index=bch.index)

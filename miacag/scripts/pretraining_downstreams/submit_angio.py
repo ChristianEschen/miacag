@@ -60,120 +60,120 @@ parser.add_argument(
     help="Number of cpu workers for training")
 parser.add_argument(
     '--config_path', type=str,
-    help="path to folder with config files")
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    help="path to config file for downstream tasks")
+parser.add_argument(
+    '--config_path_pretraining', type=str,
+    help="path to config file for pretraining")
+parser.add_argument("--debugging", action="store_true", help="do debugging")
 
+def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraining, debugging):
+    torch.distributed.init_process_group(
+            backend="nccl" if cpu == "False" else "Gloo",
+            init_method="env://")
+    # config_path = [
+    #     os.path.join(config_path, i) for i in os.listdir(config_path)]
 
-def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
-    if table_name_input is None:
-        torch.distributed.init_process_group(
-                backend="nccl" if cpu == "False" else "Gloo",
-                init_method="env://",
-                timeout=timedelta(seconds=1800000)
-                )
-    config_path = [
-        os.path.join(config_path, i) for i in os.listdir(config_path)]
-
-    for i in range(0, len(config_path)):
-        print('loading config:', config_path[i])
-        with open(config_path[i]) as file:
-            config = yaml.load(file, Loader=yaml.FullLoader)
-        mkFolder(config['output'])
-        config['master_port'] = os.environ['MASTER_PORT']
-        config['num_workers'] = num_workers
-        config['cpu'] = cpu
-        tensorboard_comment = os.path.basename(config_path[i])[:-5]
-        temp_file = os.path.join(config['output'], 'temp.txt')
-        torch.distributed.barrier()
-        if torch.distributed.get_rank() == 0:
-            maybe_remove(temp_file)
-            experiment_name = tensorboard_comment + '_' + \
-                "SEP_" + \
-                datetime.now().strftime('%b%d_%H-%M-%S')
-            write_file(temp_file, experiment_name)
-        torch.distributed.barrier()
-        experiment_name = test_for_file(temp_file)[0]
-        output_directory = os.path.join(
-                    config['output'],
-                    experiment_name)
-        mkFolder(output_directory)
-        output_config = os.path.join(output_directory,
-                                        os.path.basename(config_path[i]))
-        if table_name_input is None:
-            output_table_name = \
-                experiment_name + "_" + config['table_name']
-        else:
-            output_table_name = table_name_input
-
-
-        # begin pipeline
-        # 1. copy table
-        os.system("mkdir -p {output_dir}".format(
-            output_dir=output_directory))
-        torch.distributed.barrier()
-        if torch.distributed.get_rank() == 0:
-            if table_name_input is None:
-                copy_table(sql_config={
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name_input': config['table_name'],
-                    'table_name_output': output_table_name})
-
-            # # 2. copy config
-            os.system(
-                "cp {config_path} {config_file_temp}".format(
-                    config_path=config_path[i],
-                    config_file_temp=output_config))
-
-
-        torch.distributed.barrier()
-        if torch.distributed.get_rank() == 0:
-            # TODO dont split on labels names
-            splitter_obj = splitter(
-                {
-                    'labels_names': config['labels_names'],
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'query': config['query_split'],
-                    'TestSize': config['TestSize']})
-            splitter_obj()
-            # ...and map data['labels'] test
-        # 4.1 Pretrain encoder model
-        ## TODO add pretrain model
-        if config['model']['ssl_pretraining']:
-            print('ssl pretraining')
-            config['model']['pretrain_model'] = 'NEW PATH'
-            # train here...
-        # copy model and change config
-        shutil.copyfile(os.path.join(config['model']['pretrain_model'], 'model.pt'), os.path.join(output_directory, 'model.pt'))
-        config['model']['pretrain_model']  = output_directory
-        config['model']['pretrained'] = "None"
-      #  fake_saving_ddp_model_wrapper(config, os.path.join(output_directory, 'model.pt')
-      #                                )
-        # torch.distributed.barrier()
-        # if torch.distributed.get_rank() == 0:
-        #     # make temporary copy of config to fix bug in test loader
-        #     config_temp = copy.deepcopy(config)
-        #     config_temp['labels_names'] = ["timi_proc_1_prox_rca"]
-        #     feature_forward_dino(config_temp, model_path, output_directory)
-            
-        # loop through all indicator tasks
-        unique_index = list(dict.fromkeys(config['task_indicator']))
-        for task_index in unique_index:
-            config_new = copy.deepcopy(config)
-            run_task(config_new, task_index, output_directory, output_table_name,
-                    cpu)
+    #for i in range(0, len(config_path)):
+    print('loading config:', config_path)
+    
+    with open(config_path) as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
         
+    with open(config_path_pretraining) as file:
+        config_pretraining = yaml.load(file, Loader=yaml.FullLoader)
+    config.update(config_pretraining)
+    mkFolder(config['output'])
+    config['master_port'] = os.environ['MASTER_PORT']
+    config['num_workers'] = num_workers
+    config['cpu'] = cpu
+    config['cpu'] = str(config['cpu'])
 
-    print('config files processed', str(i+1))
-    print('config files to process in toal:', len(config_path))
+    config['debugging'] = debugging
+    tensorboard_comment = os.path.basename(config_path)[:-5]
+    temp_file = os.path.join(config['output'], 'temp.txt')
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        maybe_remove(temp_file)
+        experiment_name = tensorboard_comment + '_' + \
+            "SEP_" + \
+            datetime.now().strftime('%b%d_%H-%M-%S')
+        write_file(temp_file, experiment_name)
+    torch.distributed.barrier()
+    experiment_name = test_for_file(temp_file)[0]
+    output_directory = os.path.join(
+                config['output'],
+                experiment_name)
+    mkFolder(output_directory)
+    output_config = os.path.join(output_directory,
+                                    os.path.basename(config_path))
+    output_table_name = \
+        experiment_name + "_" + config['table_name']
+
+
+    # begin pipeline
+    # 1. copy table
+    os.system("mkdir -p {output_dir}".format(
+        output_dir=output_directory))
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        copy_table(sql_config={
+            'database': config['database'],
+            'username': config['username'],
+            'password': config['password'],
+            'host': config['host'],
+            'schema_name': config['schema_name'],
+            'table_name_input': config['table_name'],
+            'table_name_output': output_table_name})
+
+        # # 2. copy config
+        os.system(
+            "cp {config_path} {config_file_temp}".format(
+                config_path=config_path,
+                config_file_temp=output_config))
+
+
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        # TODO dont split on labels names
+        splitter_obj = splitter(
+            {
+                'labels_names': config['labels_names'],
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_split'],
+                'TestSize': config['TestSize']})
+        splitter_obj()
+        # ...and map data['labels'] test
+    # 4.1 Pretrain encoder model
+    ## TODO add pretrain model
+    if config['model']['ssl_pretraining']:
+        print('ssl pretraining')
+        from ijepa.main_distributed import launch_in_pipeline
+        use_cpu = False if cpu == "False" else True
+        config['logging']['folder'] = output_directory
+        config_pretrain = copy.deepcopy(config)
+        launch_in_pipeline(config_pretrain,
+                           num_workers=num_workers, cpu=use_cpu,
+                           init_ddp=False)
+    else:
+        # copy model
+        shutil.copyfile(
+            os.path.join(config['model']['pretrain_model'], 'model.pt'),
+            os.path.join(output_directory, 'model.pt'))
+    config['model']['pretrain_model']  = output_directory
+    config['model']['pretrained'] = "True"
+
+    # loop through all indicator tasks
+    unique_index = list(dict.fromkeys(config['task_indicator']))
+    for task_index in unique_index:
+        config_new = copy.deepcopy(config)
+        run_task(config_new, task_index, output_directory, output_table_name,
+                cpu)
+    print('pipeline done')
     return None
 
 def run_task(config, task_index, output_directory, output_table_name, cpu):
@@ -241,7 +241,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     train(config_task)
     # 5 eval model
     config_task['model']['pretrain_model'] = config_task['output_directory']
-
+    config['model']['pretrained'] = "None"
     test(config_task)
     print('kill gpu processes')
     torch.distributed.barrier()
@@ -307,6 +307,9 @@ def change_dtype_add_cols_ints(config, output_table_name, trans_label, labels_na
         trans_label)
     if config['labels_names'][0].startswith('timi'):
         dict_map = config['timi_flow_dict']
+    elif config['labels_names'][0].startswith('treatment'):
+        dict_map = config['treatment_dict']
+
     else:
         dict_map = config['labels_dict']
     for lab_name in labels_names_original:
@@ -400,11 +403,13 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
     conn.close()
     df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
     base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
-    
-    phases = [output_plots_train + output_plots_val + output_plots_test]
-    phases_q = ['train', 'val', 'test']
-    phases = [output_plots_train]
-    phases_q = ['train']
+    if config_task['debugging']:
+        phases = [output_plots_train]
+        phases_q = ['train']
+
+    else:
+        phases = [output_plots_train + output_plots_val + output_plots_test]
+        phases_q = ['train', 'val', 'test']
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
         phase_q = phases_q[idx]
@@ -420,9 +425,43 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
 
         out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
+        
         plot_scores(out_dict, phase_plot)
+        if config_task['debugging']:
+            thresholds = [6000, 7000]
+        else:
+            thresholds = [365, 365*5]
+        auc_1_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[0])
+        auc_5_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[1])
+        from miacag.metrics.survival_metrics import plot_auc_surv
+        plot_auc_surv(auc_1_year_dict, auc_5_year_dict, phase_plot)
         
         print('done')
+        
+def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=365):
+    from miacag.model_utils.predict_utils import predict_surv_df
+    survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
+    survival_estimates = survival_estimates.reset_index()
+    # merge two pandas dataframes
+    survival_estimates = pd.merge(survival_estimates, df_target, on=config_task['labels_names'][0], how='inner')
+    surv_preds_observed = pd.DataFrame({i: survival_estimates.loc[i, i] for i in survival_estimates.index}, index=[0])
+    survival_ests = survival_estimates.set_index(config_task['labels_names'][0])
+    
+
+    # Get the first index less than the threshold
+    selected_index = survival_ests.index[survival_ests.index < threshold][-1]
+    # probability at threshold 6000
+    yprobs = survival_ests.loc[selected_index][0:len(surv_preds_observed.columns)]
+    ytest = (survival_estimates[config_task['labels_names'][0]] >threshold).astype(int)
+    from miacag.plots.plot_utils import compute_bootstrapped_scores, compute_mean_lower_upper
+    bootstrapped_auc = compute_bootstrapped_scores(yprobs, ytest, 'roc_auc_score')
+    mean_auc, upper_auc, lower_auc = compute_mean_lower_upper(bootstrapped_auc)
+    variable_dict = {
+        k: v for k, v in locals().items() if k in [
+            "mean_auc", "upper_auc", "lower_auc",
+            "yprobs", "ytest"]}
+    return variable_dict
+
 def plot_scores(out_dict, ouput_path):
 
     mean_brier = out_dict["mean_brier"]
@@ -439,142 +478,75 @@ def plot_scores(out_dict, ouput_path):
     plt.xlabel('Time (days)')
     # add y label
     plt.ylabel('Brier score')
-    # plot with label with new line syntax
-    # plt.plot(out_dict['brier_scores'].index,
-    #             out_dict['brier_scores'].values,
-    #             label=f"brier scores={mean_brier:.3f} ({uper_brier:.3f}-{ower_brier:.3f})\n \ sda")
     # add legend
     plt.legend(loc='lower right')
     plt.show()
     plt.savefig(os.path.join(ouput_path, "brier_scores.png"))
+    plt.close()
 
 def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                           output_plots_val, output_plots_test, conf):
     # 6 plot results:
-    # train
-    if conf[0].startswith(('sten', 'ffr')):
-        plot_results({
-                    'database': config_task['database'],
-                    'username': config_task['username'],
-                    'password': config_task['password'],
-                    'host': config_task['host'],
-                    'labels_names': config_task['labels_names'],
-                    'schema_name': config_task['schema_name'],
-                    'table_name': output_table_name,
-                    'query': config_task['query_train_plot']},
-                    config_task['labels_names'],
-                    [i + "_predictions" for i in
-                        config_task['labels_names']],
-                    output_plots_train,
-                    config_task['model']['num_classes'],
-                    config_task,
-                    [i + "_confidences" for i in
-                        config_task['labels_names']]
-                    )
+    if config_task['debugging']:
+        queries = [config_task['query_train_plot']]
+        plots = [output_plots_train]
+    else:
+        queries = [config_task['query_train_plot'],
+                config_task['query_val_plot'],
+                config_task['query_test_plot'],]
+        plots = [output_plots_train, output_plots_val, output_plots_test]
 
-    plotRegression({
-                'database': config_task['database'],
-                'username': config_task['username'],
-                'password': config_task['password'],
-                'host': config_task['host'],
-                'labels_names': config_task['labels_names'],
-                'schema_name': config_task['schema_name'],
-                'table_name': output_table_name,
-                'query': config_task['query_train_plot'],
-                'loss_name': config_task['loss']['name'],
-                'task_type': config_task['task_type']
-                },
-                config_task['labels_names'],
-                conf,
-                output_plots_train,
-                group_aggregated=False)
+               # config_task['query_test_large_plot']]
+    for idx, query in enumerate(queries):
+        if conf[0].startswith(('sten', 'ffr')):
+            plot_results({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query},
+                        config_task['labels_names'],
+                        [i + "_predictions" for i in
+                            config_task['labels_names']],
+                        plots[idx],
+                        config_task['model']['num_classes'],
+                        config_task,
+                        [i + "_confidences" for i in
+                            config_task['labels_names']]
+                        )
+
+            plotRegression({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query,
+                        'loss_name': config_task['loss']['name'],
+                        'task_type': config_task['task_type']
+                        },
+                        config_task['labels_names'],
+                        conf,
+                        plots[idx],
+                        group_aggregated=False)
         
-    # # val
-  #  if conf[0].startswith(('sten', 'ffr')):
-
-    # plot_results({
-    #             'database': config_task['database'],
-    #             'username': config_task['username'],
-    #             'password': config_task['password'],
-    #             'host': config_task['host'],
-    #             'labels_names': config_task['labels_names'],
-    #             'schema_name': config_task['schema_name'],
-    #             'table_name': output_table_name,
-    #             'query': config_task['query_val_plot']},
-    #             config_task['labels_names'],
-    #             [i + "_predictions" for i in
-    #                 config_task['labels_names']],
-    #             output_plots_val,
-    #             config_task['model']['num_classes'],
-    #             config_task,
-    #             [i + "_confidences" for i in
-    #                 config_task['labels_names']]
-    #             )
-
-    # plotRegression({
-    #             'database': config_task['database'],
-    #             'username': config_task['username'],
-    #             'password': config_task['password'],
-    #             'host': config_task['host'],
-    #             'labels_names': config_task['labels_names'],
-    #             'schema_name': config_task['schema_name'],
-    #             'table_name': output_table_name,
-    #             'query': config_task['query_val_plot'],
-    #             'loss_name': config_task['loss']['name'],
-    #             'task_type': config_task['task_type']
-    #             },
-    #             config_task['labels_names'],
-    #             conf,
-    #             output_plots_val,
-    #             group_aggregated=False)
-
-    # # test
-    #if conf[0].startswith(('sten', 'ffr')):
-
-    # plot_results({
-    #             'database': config_task['database'],
-    #             'username': config_task['username'],
-    #             'password': config_task['password'],
-    #             'host': config_task['host'],
-    #             'labels_names': config_task['labels_names'],
-    #             'schema_name': config_task['schema_name'],
-    #             'table_name': output_table_name,
-    #             'query': config_task['query_test_plot']},
-    #             config_task['labels_names'],
-    #             [i + "_predictions" for i in
-    #                 config_task['labels_names']],
-    #             output_plots_test,
-    #             config_task['model']['num_classes'],
-    #             config_task,
-    #             [i + "_confidences" for i in
-    #                 config_task['labels_names']]
-    #             )
-
-    # plotRegression({
-    #             'database': config_task['database'],
-    #             'username': config_task['username'],
-    #             'password': config_task['password'],
-    #             'host': config_task['host'],
-    #             'labels_names': config_task['labels_names'],
-    #             'schema_name': config_task['schema_name'],
-    #             'table_name': output_table_name,
-    #             'query': config_task['query_test_plot'],
-    #             'loss_name': config_task['loss']['name'],
-    #             'task_type': config_task['task_type']
-    #             },
-    #             config_task['labels_names'],
-    #             conf,
-    #             output_plots_test,
-    #             group_aggregated=False)
 
 
 def plot_classification_tasks(config,
                              output_table_name,
                              output_plots_train, output_plots_val, output_plots_test):
-    phases = [output_plots_train + output_plots_val + output_plots_test]
-    phases_q = ['train', 'val', 'test']
-    phases = [output_plots_train]
-    phases_q = ['train']
+    if config['debugging']:
+        phases = [output_plots_train]
+        phases_q = ['train']
+    else:
+        phases = [output_plots_train + output_plots_val + output_plots_test]
+        phases_q = ['train', 'val', 'test']
+    
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
         phase_q = phases_q[idx]
@@ -596,7 +568,15 @@ def plot_classification_tasks(config,
             raise ValueError("No confidence column found in database")
             
         df = df.dropna(subset=[labels_names], how="any")
-        y_scores = convert_string_to_numpy(df, column='koronarpatologi_nativekar_udfyldesforallept__transformed_confid')
+        if config['labels_names'][0].startswith('koronarpatologi'):
+            col = 'koronarpatologi_nativekar_udfyldesforallept__transformed_confid'
+            pred_name = "corornay_pathology"
+            save_name = "roc_curve_coronar"
+        else:
+            col = "treatment_transformed_confidences"
+            pred_name = "treatment"
+            save_name = "roc_curve_treatment"
+        y_scores = convert_string_to_numpy(df, column=col)
         label_binarizer = LabelBinarizer().fit(df[config['labels_names']])
         y_onehot_test = label_binarizer.transform(df[config['labels_names']])
         random_array = np.random.rand(4, 3)
@@ -605,15 +585,10 @@ def plot_classification_tasks(config,
         label_binarizer = LabelBinarizer().fit(y_onehot_test)
         y_onehot_test = label_binarizer.transform(y_onehot_test)
         run_plotter_ruc_multi_class(y_scores, y_onehot_test,
-                                    "corornay_pathology", "model",
-                                    "roc_curve_coronar",
-                                    output_plots_train)
-    
-    
-    #(y_score, y_onehot_test,
-                             #   type_outcome, model_name,
-                             #   ax, save_name, output_path):
-    #print('hej')
+                                    pred_name, "model",
+                                    save_name,
+                                    phase_plot)
+
     return None
 
 
@@ -634,7 +609,8 @@ if __name__ == '__main__':
     start_time = timeit.default_timer()
 
     args = parser.parse_args()
-    stenosis_identifier(args.cpu, args.num_workers, args.config_path)
+    pretraining_downstreams(args.cpu, args.num_workers, args.config_path,
+                            args.config_path_pretraining, args.debugging)
     elapsed = timeit.default_timer() - start_time
     print('cpu', args.cpu)
     print(f"Execution time: {elapsed} seconds")

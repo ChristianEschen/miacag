@@ -157,6 +157,9 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         mean_auc, upper_auc, lower_auc = get_mean_lower_upper(yproba, y_test, 'roc_auc_score')
         upper_auc = np.clip(upper_auc, a_min=0, a_max=1)
         lower_auc = np.clip(lower_auc, a_min=0, a_max=1)
+        if config['debugging']:
+            y_test[0] = 1
+            y_test[1] = 0
         auc = roc_auc_score(y_test, yproba)
         probas.append(yproba)
         trues.append(y_test)

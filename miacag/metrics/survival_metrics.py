@@ -7,6 +7,13 @@ import scipy
 from miacag.model_utils.predict_utils import predict_surv_df
 from miacag.plots.plot_utils import compute_mean_lower_upper
 from sksurv.metrics import concordance_index_censored
+from sklearn.metrics import roc_curve, roc_auc_score
+import matplotlib.pyplot as plt
+from matplotlib import ticker
+import matplotlib
+from matplotlib.ticker import MaxNLocator
+matplotlib.use('Agg')
+import os
 
 def idx_at_times(index_surv, times, steps='pre', assert_sorted=True):
     """Gives index of `index_surv` corresponding to `time`, i.e. 
@@ -512,7 +519,29 @@ class EvalSurv:
                                            self.censor_surv.index_surv, max_weight, self.steps,
                                            self.censor_surv.steps)
 
-def compute_metrics_survival(df_target, base_haz, bch, config_task):
+
+
+def compute_concordance(df_target, base_haz, bch, config_task):
+    survival_etimates = predict_surv_df(df_target, base_haz, bch, config_task)
+    survival_etimates = survival_etimates.reset_index()
+    # merge two pandas dataframes
+    survival_etimates = pd.merge(survival_etimates, df_target, on=config_task['labels_names'][0], how='inner')
+    #df_new = pd.DataFrame({i: survival_etimates.loc[i, i] for i in survival_etimates.index}, index=[0])
+    surv_preds_observed = pd.DataFrame({i: survival_etimates.loc[i, i] for i in survival_etimates.index}, index=[0])
+    #auc_1_year = get_roc_auc_ytest_1_year_surv(survival_etimates, config_task, len(surv_preds_observed.columns))
+    if config_task['debugging']:
+        try:
+            c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
+        except:
+            c_index = [0.5]
+    else:
+        c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
+    c_index = c_index[0]
+
+
+    return c_index, None
+
+def compute_brier(df_target, base_haz, bch, config_task):
     survival_etimates = predict_surv_df(df_target, base_haz, bch, config_task)
 
     ev = EvalSurv(survival_etimates, df_target[config_task['labels_names'][0]].to_numpy(), df_target['event'].to_numpy(), censor_surv='km')
@@ -522,46 +551,42 @@ def compute_metrics_survival(df_target, base_haz, bch, config_task):
     time_grid = np.linspace(df_target[config_task['labels_names'][0]].min(), df_target[config_task['labels_names'][0]].max(), 100)
     brier_scores = ev.brier_score(time_grid)
     ibs = ev.integrated_brier_score(time_grid)
-    survival_etimates = survival_etimates.reset_index()
-    # merge two pandas dataframes
-    survival_etimates = pd.merge(survival_etimates, df_target, on=config_task['labels_names'][0], how='inner')
-    #df_new = pd.DataFrame({i: survival_etimates.loc[i, i] for i in survival_etimates.index}, index=[0])
-    surv_preds_observed = pd.DataFrame({i: survival_etimates.loc[i, i] for i in survival_etimates.index}, index=[0])
+    return ibs, brier_scores
 
-    try:
-        c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
-        c_index = c_index[0]
-    except:
-        c_index = 0.5
-
-    return c_index, ibs, brier_scores
-
-
-def compute_bootstrapped_scores(df_target, base_haz, bch, config_task):
+def compute_bootstrapped_scores(df_target, base_haz, bch, config_task, flag='concordance'):
     n_bootstraps = 1000
     rng_seed = 42 # control reproducibility
 
-    bootstrapped_scores_conc = []
-    bootstrapped_scores_ibs = []
+    bootstrapped_scores = []
     rng = np.random.RandomState(rng_seed)
-    _, _, brier_scores = compute_metrics_survival(df_target, base_haz, bch, config_task)
     for i in range (n_bootstraps): 
         #bootstrap by sampling with replacement on the prediction indices
         indices = rng.randint(0, len(df_target), len(df_target))
-        concordance, ibs, _ = compute_metrics_survival(df_target.iloc[indices], base_haz, bch, config_task)
-        
-        bootstrapped_scores_conc.append(concordance)
-        bootstrapped_scores_ibs.append(ibs)
-    
-    bootstrapped_scores_ibs = [x for x in bootstrapped_scores_ibs if not np.isnan(x)]
-    bootstrapped_scores_conc = [x for x in bootstrapped_scores_conc if not np.isnan(x)]
+       # if flag == 'concordance':
+        if len(np.unique(df_target['event'].iloc[indices])) < 2:
+            # We need at least one positive and one negative sample for ROC AUC
+            # # to be defined: reject the sample
+            continue
+        if flag == 'concordance':
+          #  if len(np.unique(df_target['event'].iloc[indices])) < 2:
+                
+            scores, _ = compute_concordance(df_target.iloc[indices], base_haz, bch, config_task)
+        else:
+            scores, _ = compute_brier(df_target.iloc[indices], base_haz, bch, config_task)
+        bootstrapped_scores.append(scores)
 
-    return bootstrapped_scores_conc, bootstrapped_scores_ibs, brier_scores
+    
+
+
+    return bootstrapped_scores
 
 
 def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
-    compute_bootstrapped_scores_conc, compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores(
-        df_target, base_haz, bch, config_task)
+    compute_bootstrapped_scores_conc = compute_bootstrapped_scores(
+        df_target, base_haz, bch, config_task, flag='concordance')
+    compute_bootstrapped_scores_ibs = compute_bootstrapped_scores(
+        df_target, base_haz, bch, config_task, flag='brier')
+    _, brier_scores = compute_brier(df_target, base_haz, bch, config_task)
     mean_conc, upper_conc, lower_conc = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
     mean_brier, upper_brier, lower_brier = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
     variable_dict = {
@@ -569,4 +594,38 @@ def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
             "mean_conc", "upper_conc", "lower_conc",
             "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
     return variable_dict
-    
+
+def plot_auc_surv(variable_dict_1_year, variable_dict_5_year, output_plots):
+
+    #"mean_auc", "upper_auc", "lower_auc",
+       #     "yprobs", "ytest"]
+   # plt.figure()
+    fig = plt.figure(figsize=(16,14))
+    count = 0
+    legende = ['1 year survival', '5 year survival']
+    for variable_dict in [variable_dict_1_year, variable_dict_5_year]:
+        fpr, tpr, _ = roc_curve(variable_dict["ytest"],  variable_dict["yprobs"])
+        plt.plot(fpr, 
+            tpr, 
+            label="{}, AUC={:.3f} ({:.3f}-{:-3f})".format(
+                legende[count],
+                variable_dict["mean_auc"], variable_dict["lower_auc"], variable_dict_1_year["upper_auc"]))
+        count += 1
+    plt.plot([0,1], [0,1], color='orange', linestyle='--')
+
+    plt.xticks(np.arange(0.0, 1.1, step=0.1))
+    plt.xlabel("False Positive Rate (1 - Specificity)", fontsize=15)
+
+    plt.yticks(np.arange(0.0, 1.1, step=0.1))
+    plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
+
+    plt.title('ROC Curve Analysis for survival', fontweight='bold', fontsize=15)
+    plt.legend(prop={'size':10}, loc='lower right')
+
+    plt.show()
+    plt.savefig(os.path.join(
+        output_plots, 'survival_1_5_year' + '.png'), dpi=100,
+                bbox_inches='tight')
+    plt.savefig(os.path.join(
+        output_plots, 'survival_1_5_year'  + '.pdf'), dpi=100,
+                bbox_inches='tight')

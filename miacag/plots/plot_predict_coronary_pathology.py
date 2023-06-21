@@ -44,6 +44,8 @@ def plot_roc_multi_class(y_score, y_onehot_test, mean_auc, lower_auc,
     plt.ylabel("True Positive Rate")
     if type_outcome == 'corornay_pathology':
         title_name = 'Coronary Pathology'
+    elif type_outcome == 'treatment':
+        title_name = 'Treatment'
     else:
         raise ValueError('not implemented')
     plt.title("Prediction of " +

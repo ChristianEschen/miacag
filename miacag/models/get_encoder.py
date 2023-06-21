@@ -2,6 +2,7 @@ from monai.networks import nets
 from torch import nn
 import torch
 import os
+import miacag.models.vision_transformer as vit
 from dinov2.models.vision_transformer import \
     vit_large, vit_small
 #from timm.models import create_model
@@ -21,7 +22,7 @@ def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] == "True":
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
-            "vit_small_patch16_224", 'dinov2_vits14']:
+            "vit_small_patch16_224", 'dinov2_vits14', "vit_small"]:
             if torch.distributed.get_rank() == 0:
                 dirname = os.path.dirname(__file__)
                 model_path = os.path.join(
@@ -41,10 +42,13 @@ def getPretrainedWeights(config, model, device):
                 else:
                     model.load_state_dict(loaded_model)
         else:
-            if config['model']['backbone'] in ['dinov2_vits14']:
+            if config['model']['backbone'] in ['dinov2_vits14', "vit_small"]:
                 loaded_model = torch.load(
                         os.path.join(config['model']['pretrain_model'], 'model.pt'),
                         map_location=device)
+                if config['model']['backbone'] in ['vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
+                    if config['loaders']['mode'] != 'testing':
+                        loaded_model = {k.replace("module.", ""): v for k, v in loaded_model['target_encoder'].items()}
                 model.load_state_dict(loaded_model)
 
             else:
@@ -184,7 +188,16 @@ def get_encoder(config, device):
                 block_chunks=0)
         model = getPretrainedWeights(config, model, device)
         in_features = model.norm.normalized_shape[0]
-       
+    
+    elif config['model']['backbone'] in ['vit_small',
+                                         'vit_large',
+                                         'vit_huge',
+                                         'vit_giant']:
+        model = vit.__dict__[config['model']['backbone']](
+            img_size=[config['loaders']['Resize_height']],
+            patch_size=config['mask']['patch_size'])
+        model = getPretrainedWeights(config, model, device)
+        in_features = model.norm.normalized_shape[0]
     else:
         raise ValueError('not implemented')
 

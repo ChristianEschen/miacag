@@ -6,7 +6,7 @@ from miacag.models.get_encoder import get_encoder, modelsRequiredPermute
 from miacag.models.modules import maybePermuteInput, get_final_layer
 from monai.utils.module import optional_import
 from miacag.models.modules import unique_counts
-
+import torch.nn.functional as F
 models, _ = optional_import("torchvision.models")
 
 
@@ -310,8 +310,16 @@ class MILModel(ImageToScalarModel):
             else:
                 pass
         elif self.config['model']['dimension'] in ['2D']:
-            if self.config['model']['backbone'] not in ["dinov2_vits14"]:
+            if self.config['model']['backbone'] not in ["dinov2_vits14",
+                                                        'vit_small', 'vit_large',
+                                                        'vit_huge', 'vit_giant']:
                 x = x.mean(dim=(-2, -1))
+            elif self.config['model']['backbone'] in ['vit_small', 'vit_large',
+                                                      'vit_huge', 'vit_giant']:
+                x = F.layer_norm(x, (x.size(-1),))
+                x = x.mean(dim=(-2))
+            else:
+                raise ValueError('not implemented for this backbone')
         else:
             raise ValueError('this dimension is not implemented')
         return x

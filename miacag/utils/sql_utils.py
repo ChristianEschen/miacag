@@ -38,28 +38,33 @@ def cols_to_set(cols):
     return string
 
 
-# def update_cols(con, records, sql_config, cols, page_size=2):
-#     cur = con.cursor()
-#     values = []
-#     for record in records:
-#         value = tuple([record[i] for i in cols+['rowid']])
-#         values.append(value)
-#     values = tuple(values)
-#     string = cols_to_set(cols)
-#     update_query = """
-#     UPDATE "{schema_name}"."{table_name}" AS t
-#     SET {cols_to_set}
-#     FROM (VALUES %s) AS e({cols})
-#     WHERE e.rowid = t.rowid;""".format(
-#         schema_name=sql_config['schema_name'],
-#         table_name=sql_config['table_name'],
-#         cols=', '.join(cols+['rowid']),
-#         cols_to_set=string)
+def update_cols_no_batch(con, records, sql_config, cols, page_size=2):
+    con = psycopg2.connect(
+        host=sql_config['host'],
+        database=sql_config['database'],
+        user=sql_config['username'],
+        password=sql_config['password'])
+    cur = con.cursor()
+    values = []
+    for record in records:
+        value = tuple([record[i] for i in cols+['rowid']])
+        values.append(value)
+    values = tuple(values)
+    string = cols_to_set(cols)
+    update_query = """
+    UPDATE "{schema_name}"."{table_name}" AS t
+    SET {cols_to_set}
+    FROM (VALUES %s) AS e({cols})
+    WHERE e.rowid = t.rowid;""".format(
+        schema_name=sql_config['schema_name'],
+        table_name=sql_config['table_name'],
+        cols=', '.join(cols+['rowid']),
+        cols_to_set=string)
 
-#     psycopg2.extras.execute_values(
-#         cur, update_query, values, template=None, page_size=100
-#     )
-#     con.commit()
+    psycopg2.extras.execute_values(
+        cur, update_query, values, template=None, page_size=100
+    )
+    con.commit()
 
 def update_cols(records, sql_config, cols, page_size=2):
     conn = psycopg2.connect(

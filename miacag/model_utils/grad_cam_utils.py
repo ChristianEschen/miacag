@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import cv2
+#import cv2
 import os
 import numpy as np
 from miacag.metrics.metrics_utils import mkDir

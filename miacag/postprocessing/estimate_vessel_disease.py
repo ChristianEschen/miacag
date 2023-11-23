@@ -132,3 +132,47 @@ order by "PatientID\", \"StudyInstanceUID\";"""
     df = pd.DataFrame(data=d)
     count = CountSignificantStenoses(sql_config, fields_to_count, output_dir)
     count()
+
+
+
+the values to update from
+
+        'timei_proc_1_prox_rca'
+        'timei_proc_2_midt_rca'
+        'timei_proc_3_dist_rca'
+        'timei_proc_4_pda'
+        'timei_proc_5_lm'
+        'timei_proc_6_prox_lad'
+        'timei_proc_7_midt_lad'
+        'timei_proc_8_dist_lad'
+        'timei_proc_9_d1'
+        'timei_proc_10_d2'
+        'timei_proc_11_prox_lcx'
+        'timei_proc_12_om1'
+        'timei_proc_13_midt_lcx'
+        'timei_proc_14_om2'
+        'timei_proc_15_dist_lcx'
+        'timei_proc_16_pla_rca'
+
+the values to update
+        'timei_proc_1_prox_rca_transformed'
+        'timei_proc_2_midt_rca_transformed'
+        'timei_proc_3_dist_rca_transformed'
+        'timei_proc_4_pda_transformed'
+        'timei_proc_5_lm_transformed'
+        'timei_proc_6_prox_lad_transformed'
+        'timei_proc_7_midt_lad_transformed'
+        'timei_proc_8_dist_lad_transformed'
+        'timei_proc_9_d1_transformed'
+        'timei_proc_10_d2_transformed'
+        'timei_proc_11_prox_lcx_transformed'
+        'timei_proc_12_om1_transformed'
+        'timei_proc_13_midt_lcx_transformed'
+        'timei_proc_14_om2_transformed'
+        'timei_proc_15_dist_lcx_transformed'
+        'timei_proc_16_pla_rca_transformed'
+        
+        
+
+SELECT time_proc_1_prox_rca_transformed, sten_proc_1_prox_rca
+FROM cag."dicom_pats_v15";

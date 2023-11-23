@@ -3,12 +3,7 @@ from torch import nn
 import torch
 import os
 import miacag.models.vision_transformer as vit
-from dinov2.models.vision_transformer import \
-    vit_large, vit_small
-#from timm.models import create_model
-#from models import modeling_finetune
 from collections import OrderedDict
-#from miacag.models.milmodel_from_features import MILModel
 
 class Identity(nn.Module):
     def __init__(self):
@@ -22,7 +17,7 @@ def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] == "True":
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
-            "vit_small_patch16_224", 'dinov2_vits14', "vit_small"]:
+            "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
             if torch.distributed.get_rank() == 0:
                 dirname = os.path.dirname(__file__)
                 model_path = os.path.join(
@@ -42,7 +37,7 @@ def getPretrainedWeights(config, model, device):
                 else:
                     model.load_state_dict(loaded_model)
         else:
-            if config['model']['backbone'] in ['dinov2_vits14', "vit_small"]:
+            if config['model']['backbone'] in ['dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
                 loaded_model = torch.load(
                         os.path.join(config['model']['pretrain_model'], 'model.pt'),
                         map_location=device)

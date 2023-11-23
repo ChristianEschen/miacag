@@ -77,11 +77,14 @@ def create_duration_col(config, duration):
     
     
     df, conn = getDataFromDatabase(config)
-    
-    df['individual_end_dates'] = df[['status_date','end_of_data_date']].min(axis=1)
+    mask = (df['status'] == 90)
+
+    df['individual_end_dates'] = df['end_of_data_date']
+    df.loc[mask, 'individual_end_dates'] = df.loc[mask, 'status_date']
 
     df[duration] = (df['individual_end_dates'] - df['TimeStamp']).dt.days
-    
+    # value counts
+   # print('value counts', df[duration].value_counts())
     update_cols(
                 df.to_dict('records'),
                 config,

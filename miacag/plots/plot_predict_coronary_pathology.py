@@ -28,7 +28,7 @@ from miacag.plots.plot_utils import get_mean_lower_upper
 def run_plotter_ruc_multi_class(y_score, y_onehot_test,
                                 type_outcome, model_name,
                                 save_name, output_path):
-    mean_auc, upper_auc, lower_auc = get_mean_lower_upper(y_score, y_onehot_test, 'roc_auc_score')
+    mean_auc, lower_auc, upper_auc  = get_mean_lower_upper(y_score, y_onehot_test, 'roc_auc_score')
     plot_roc_multi_class(y_score, y_onehot_test, mean_auc, lower_auc,
                          upper_auc, type_outcome, model_name,
                          save_name, output_path)

@@ -26,7 +26,7 @@ from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, 
 from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
-
+import timeit
 
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -45,15 +45,12 @@ parser.add_argument(
 parser.add_argument(
     '--config_path', type=str,
     help="path to folder with config files")
+parser.add_argument(
+    '--table_name_input', type=str,
+    help="table name path", default=None)
 
 
 def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
-    if table_name_input is None:
-        torch.distributed.init_process_group(
-                backend="nccl" if cpu == "False" else "Gloo",
-                init_method="env://",
-                timeout=timedelta(seconds=1800000)
-                )
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
 
@@ -132,9 +129,12 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
                         config_path=config_path[i],
                         config_file_temp=output_config))
             # rename labels and add columns;
-            trans_label = [i + '_transformed' for i in config['labels_names']]
+            if not config['is_already_trained']:
+
+                trans_label = [i + '_transformed' for i in config['labels_names']]
+                config['labels_names'] = trans_label
             labels_names_original = config['labels_names']
-            config['labels_names'] = trans_label
+
             # add placeholder for confidences
             conf = [i + '_confidences' for i in config['labels_names']]
             conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
@@ -143,150 +143,28 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
             # add placeholder for predictions
             pred = [i + '_predictions' for i in config['labels_names']]
 
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            trans_label,
-                            ["float8"] * len(trans_label))
-                # copy content of labels
-                copyCol(
-                    {'database': config["database"],
-                        'username': config["username"],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_transform']},
-                    labels_names_original,
-                    trans_label)
-
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            conf,
-                            ["VARCHAR"] * len(conf))
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            pred,
-                            ["float8"] * len(pred))
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            conf_agg,
-                            ["float8"] * len(conf))
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            conf_agg_t,
-                            ["float8"] * len(conf))
-                
-                add_columns({
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'table_name_output': output_table_name},
-                            ["antalsignifikantestenoser_pred"],
-                            ["float8"])
-
-                # 3. split train and validation , and map labels
-                trans = transformMissingFloats({
-                    'labels_names': config['labels_names'],
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'query': config['query_transform'],
-                    'TestSize': config['TestSize']})
-                trans()
-
-                trans_thres = transformThresholdRegression({
-                    'labels_names': config['labels_names'],
-                    'database': config['database'],
-                    'username': config['username'],
-                    'password': config['password'],
-                    'host': config['host'],
-                    'schema_name': config['schema_name'],
-                    'table_name': output_table_name,
-                    'query': config['query_transform'],
-                    'TestSize': config['TestSize']},
-                    config)
-                trans_thres()
-
-                # change dtypes for label
-                changeDtypes(
-                    {'database': config["database"],
-                        'username': config["username"],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_transform']},
-                    trans_label,
-                    ["float8"] * len(trans_label))
-                splitter_obj = splitter(
-                    {
-                        'labels_names': config['labels_names'],
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_split'],
-                        'TestSize': config['TestSize']})
-                splitter_obj()
-                # ...and map data['labels'] test
-            # 4. Train model
+            # # 4. Train model
             torch.distributed.barrier()
             config['output'] = output_directory
             config['output_directory'] = output_directory
             config['table_name'] = output_table_name
             config['use_DDP'] = 'True'
             config['datasetFingerprintFile'] = None
-            train(config)
+            if not config['is_already_trained']:
+
+                train(config)
 
             # 5 eval model
 
             config['model']['pretrain_model'] = output_directory
-            test({**config, 'query': config["query_test"], 'TestSize': 1})
+            if not config['is_already_trained']:
+                test({**config, 'query': config["query_test"], 'TestSize': 1})
 
             print('kill gpu processes')
-            torch.distributed.barrier()
-            torch.cuda.empty_cache()
-            torch.distributed.destroy_process_group()
+            if table_name_input is not None:
+                torch.distributed.barrier()
+                torch.cuda.empty_cache()
+                torch.distributed.destroy_process_group()
 
             # 6 plot results:
             # train
@@ -581,5 +459,24 @@ def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
 
 
 if __name__ == '__main__':
+    import torch
+    import os
+    
+    start_time = timeit.default_timer()
+
     args = parser.parse_args()
-    stenosis_identifier(args.cpu, args.num_workers, args.config_path)
+    torch.distributed.init_process_group(backend='nccl' if args.cpu == 'False' else "Gloo",
+                                        init_method='env://',
+                                        world_size=int(os.environ['WORLD_SIZE']),
+                                        timeout=timedelta(seconds=18000000),)
+    local_rank = int(os.environ['LOCAL_RANK'])
+    if args.cpu != 'True':
+        torch.cuda.set_device(local_rank)
+
+
+
+    stenosis_identifier(args.cpu, args.num_workers, args.config_path, args.table_name_input)
+    elapsed = timeit.default_timer() - start_time
+    print('cpu', args.cpu)
+    print(f"Execution time: {elapsed} seconds")
+

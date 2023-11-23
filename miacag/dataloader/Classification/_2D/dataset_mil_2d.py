@@ -38,6 +38,9 @@ from monai.utils import MAX_SEED, deprecated_arg, get_seed, look_up_option, min_
 from monai.utils.misc import first
 from torch.utils.data.dataloader import default_collate
 import monai
+import pydicom
+
+#from ijepa.dictionary import LoadImaged
 if TYPE_CHECKING:
     from tqdm import tqdm
 
@@ -48,7 +51,39 @@ else:
 lmdb, _ = optional_import("lmdb")
 pd, _ = optional_import("pandas")
 from monai.transforms import CenterSpatialCropd, RandSpatialCropd, SpatialPad
+from highdicom.io import ImageFileReader
+from monai.transforms import LoadImage
 
+def normalize_imagenet_torch(tensor, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    """
+    Normalize a tensor with ImageNet standards using PyTorch.
+
+    Parameters:
+    tensor (torch.Tensor): Input tensor of shape [channels, h, w, patches].
+    mean (tuple): Mean for each channel.
+    std (tuple): Standard deviation for each channel.
+
+    Returns:
+    torch.Tensor: Normalized tensor.
+    """
+    # Convert means and stds to tensors
+    mean = torch.tensor(mean).view(-1, 1, 1, 1)
+    std = torch.tensor(std).view(-1, 1, 1, 1)
+
+    # Check if dimensions match
+    if tensor.shape[0] != len(mean) or tensor.shape[0] != len(std):
+        raise ValueError("The number of channels in the tensor must match the length of mean and std")
+
+    # Normalize
+    normalized_tensor = (tensor - mean) / std
+
+    return normalized_tensor
+# read fraame
+def load_frames(filename_or_obj):
+    with ImageFileReader(filename_or_obj) as image:
+        frame_idx = random.randint(0, image.number_of_frames - 1)
+        frame = image.read_frame(frame_idx)
+    return frame
 def replicate_list(lst, m):
     return (lst * ((m // len(lst)) + 1))[:m]
 
@@ -98,6 +133,7 @@ def get_random_patches(stacked_data, config):
     else:
         return stacked_data
 
+
 class MILDataset(_TorchDataset):
     """
     A generic dataset with a length property and an optional callable data transform
@@ -137,24 +173,22 @@ class MILDataset(_TorchDataset):
 
     def get_pretransformers(self):
         pre_transforms = [
-            monai.transforms.LoadImaged(keys=self.features),
+            monai.transforms.LoadImaged(keys=self.features,
+                                        prune_meta_pattern="(^0008|^0010|^5004|^5006|^5|^0)"),
             monai.transforms.EnsureChannelFirstD(keys=self.features),
-            monai.transforms.RandSpatialCropd(
-                keys=self.features,
-                roi_size=[
-                    -1,
-                    -1,
-                    1],
-                random_size=False),
+            monai.transforms.Resized(
+                        keys=self.features,
+                        spatial_size=(
+                                    self.config['loaders']['Resize_height'],
+                                    self.config['loaders']['Resize_width'],
+                                    -1)),
+            monai.transforms.DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+            monai.transforms.DeleteItemsd(keys=self.features[0]+"_meta_dict.0008\\|[0-9]", use_re=True),
+
             ]
-        if self.phase == 'train':
-            pre_transforms = pre_transforms + [
-                monai.transforms.RandRotate90d(
-                self.features, prob=0.1, max_k=3,
-                spatial_axes=(0, 1))]
+
         pre_transforms = Compose(pre_transforms)
         return pre_transforms
-       # self.pre_transforms = pre_transforms
     
     def post_transforms(self):
         if self.config['cpu'] == 'True':
@@ -162,25 +196,17 @@ class MILDataset(_TorchDataset):
         else:
             device = "cuda:{}".format(os.environ['LOCAL_RANK'])
         post_transforms = [
-            monai.transforms.Resized(
-                        keys=self.features,
-                        spatial_size=(
-                                    self.config['loaders']['Resize_height'],
-                                    self.config['loaders']['Resize_width'],
-                                    self.config['loaders']['nr_patches'])),
-           # monai.transforms.DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-            monai.transforms.SpatialPadd(
-                keys=self.features,
-                spatial_size=[self.config['loaders']['Crop_height'],
-                              self.config['loaders']['Crop_width'],
-                              self.config['loaders']['nr_patches']]),
             monai.transforms.RepeatChanneld(keys=self.features, repeats=3),
-            monai.transforms.ScaleIntensityd(keys=self.features),
-            monai.transforms.NormalizeIntensityd(
-                keys=self.features,
-                subtrahend=(0.485, 0.456, 0.406),
-                divisor=(0.229, 0.224, 0.225),
-                channel_wise=True),
+            # monai.transforms.ScaleIntensityd(keys=self.features),
+            # monai.transforms.NormalizeIntensityd(
+            #     keys=self.features,
+            #     subtrahend=(0.485, 0.456, 0.406),
+            #     divisor=(0.229, 0.224, 0.225),
+            #     channel_wise=True),
+            ########
+           # monai.transforms.Rotate90d(keys=self.features, k=3, spatial_axes=(0, 1)),
+           # monai.transforms.Flipd(keys=self.features, spatial_axis=1),
+           ##########
            # monai.transforms.ToDeviced(keys=self.features, device=device)
             ]
         
@@ -225,65 +251,112 @@ class MILDataset(_TorchDataset):
         post_transforms = Compose(post_transforms)
         return post_transforms
 
-    def _transform(self, index: int):
-        """
-        Fetch single data item from `self.data`.
-        """
-        data_i = self.data[index]
-        #post_trans = Compose([ToTensord(keys=["img"])])
-        data_i_list = []
-        # replicate list
-        data_i['DcmPathFlatten'] = replicate_list(data_i['DcmPathFlatten'], self.config['loaders']['nr_patches'])
-
-        data_i["SOPInstanceUID"] = replicate_list(data_i["SOPInstanceUID"], self.config['loaders']['nr_patches'])
-        data_i["SeriesInstanceUID"] = replicate_list(data_i["SeriesInstanceUID"], self.config['loaders']['nr_patches'])
-        data_i["StudyInstanceUID"] = replicate_list(data_i["StudyInstanceUID"], self.config['loaders']['nr_patches'])
-
-
-        # start while loop. Should stop when all patches are loaded
-        while len(data_i_list) < self.config['loaders']['nr_patches']:
-            for data_i_i in data_i[self.features[0]]:
-                data_i_i = {
-                    self.features[0]: data_i_i}
-                for n in self.config['labels_names']:
-
-                    data_i_i[n] = data_i[n]
-                 #   data_i_i[n] = self.pre_transforms(data_i_i)
-                    data_idx = self.pre_transforms(data_i_i)
-                    data_i_list.append(data_idx)
-        stacked_data = torch.concat(
-            [i[self.features[0]] for i in data_i_list], dim=3)
-        data_i_i['DcmPathFlatten'] = stacked_data
-        data_i_i = self.post_transformations(data_i_i)
-        
-        # stacked_data = get_random_patches_cache(
-        #     stacked_data,
-        #     self.config)
-        data_i_i['inputs'] = data_i_i['inputs'].permute(3, 0, 1, 2)
-        #data_i_i['inputs'] = stacked_data
-        data_i_i["rowid"] = data_i["rowid"]
-        if self.config['loss']['name'][0] == 'NNL':
-            data_i_i["event"] = data_i["event"]
-        data_i_i['DcmPathFlatten_paths'] = data_i['DcmPathFlatten']
-        data_i_i["SOPInstanceUID"] = data_i["SOPInstanceUID"]
-        data_i_i["SeriesInstanceUID"] = data_i["SeriesInstanceUID"]
-        data_i_i["StudyInstanceUID"] = data_i["StudyInstanceUID"]
-        data_i_i["PatientID"] = data_i["PatientID"]
-      #  if self.config['loaders']['val_method']['max_patches'] != 'None':
-       #     max_p = self.config['loaders']['val_method']['max_patches']
-       #     data_i_i['inputs'] = data_i_i['inputs'][0:max_p]
-        return data_i_i
-
+        return data_dict
+    
+    def __resize_transforms(self):
+        transform = Compose([
+            monai.transforms.Resize((self.config['loaders']['Crop_height'], self.config['loaders']['Crop_width'])),  # Resize to fixed dimensions (here, 256x256). Adjust as needed.
+            monai.transforms.ScaleIntensity(),    # Rescale image data to range [0,1]
+            monai.transforms.ToTensor(),
+            monai.transforms.EnsureChannelFirst()# Convert numpy array to PyTorch tensor
+        ])
+        return transform
+    ##################### LEGACY ############################################
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
-        if isinstance(index, slice):
-            # dataset[:42]
-            start, stop, step = index.indices(len(self))
-            indices = range(start, stop, step)
-            return Subset(dataset=self, indices=indices)
-        if isinstance(index, collections.abc.Sequence):
-            # dataset[[1, 3, 4]]
-            return Subset(dataset=self, indices=index)
-        return self._transform(index)
+        #return self._transform(index)
+        return self._transform_pydicom(index)
+    def _transform_pydicom(self, idx):
+        data_dict = {'DcmPathFlatten': self.data[idx]['DcmPathFlatten']}
+        data_dict['DcmPathFlatten'] = replicate_list(data_dict['DcmPathFlatten'], self.config['loaders']['nr_patches'])
+
+        data_dict["SOPInstanceUID"] = replicate_list(self.data[idx]["SOPInstanceUID"], self.config['loaders']['nr_patches'])
+        data_dict["SeriesInstanceUID"] = replicate_list(self.data[idx]["SeriesInstanceUID"], self.config['loaders']['nr_patches'])
+        data_dict["StudyInstanceUID"] = replicate_list(self.data[idx]["StudyInstanceUID"], self.config['loaders']['nr_patches'])
+
+ 
+        slices_info = [(s, pydicom.dcmread(s, stop_before_pixels=True).NumberOfFrames) for s in self.data[idx]['DcmPathFlatten']]
+        loadimage = LoadImage(image_only=True)
+        start_idx = 0
+        end_idx = start_idx + self.config['loaders']['nr_patches']
+
+        # Now read only the slices you need
+        slices = []
+        frames = 0
+        for i in range(0, len(self.data[0]['DcmPathFlatten'])):
+            if frames > end_idx:
+                break
+          #  slice_i = loadimage(self.data[0]['DcmPathFlatten'][i]) # [h, w, frame]
+            # load using pydicom
+            slice_i = pydicom.dcmread(self.data[0]['DcmPathFlatten'][i]).pixel_array
+            metadata_dicom = {
+                # ... your DICOM metadata ...
+                '0028|0010': str(slice_i.shape[1]),  # Rows
+                '0028|0011': str(slice_i.shape[2]),  # Columns
+                'spacing': np.array([1., 1., 33.]),  # Pixel spacing
+                # Add other relevant metadata as needed
+            }
+
+            # Convert and format as required for MetaTensor
+            metadata_for_metatensor = {
+                'original_shape': (int(metadata_dicom['0028|0010']), int(metadata_dicom['0028|0010']), len(metadata_dicom['spacing'])),
+                'spacing': metadata_dicom['spacing'],
+                # Add other relevant metadata as needed
+                'original_channel_dim': "no_channel"  # Assuming channel is last, modify as per your data
+            }
+            slice_i = monai.data.MetaTensor(torch.tensor(slice_i).permute(1,2,0), metadata=metadata_for_metatensor )
+            slice_i.meta['original_channel_dim'] ='no_channel'
+         #   slice_i.set_meta('original_channel_dim', "no_channel")
+            frames += slice_i.shape[-1]
+            slices.append(slice_i)
+
+
+       # slices.sort(key=lambda x: float(x.SliceLocation))
+        t = self.__resize_transforms()
+
+        # Resize each individual slice before stacking
+        resized_slices = []
+        for s in slices:
+            if self.transform:
+                img = t(s.permute(2, 0, 1))#.permute(1, 0, 2, 3)
+            resized_slices.append(img)
+
+        # Stack the resized slices to form the 3D array
+        image = torch.concatenate(resized_slices, axis=1)
+        
+        # permute image to get the correct shape for monau post transforms later
+        image = image.permute(0, 2, 3, 1)
+        
+        # Restrict the number of slices to `max_slices`
+        if image.shape[-1] > end_idx:
+            image = image[:, :, :, start_idx:start_idx+end_idx:]
+        elif image.shape[-1] == end_idx:
+            pass
+        else:
+            diff = end_idx - image.shape[-1]
+            #pad_tuple = div_diff_tuple(diff)
+            # use torch to pad the first dimension of 3d tensor
+            image = torch.nn.functional.pad(image, (diff, 0, 0, 0),  mode='constant', value=0)
+         #   image = np.pad(image, ((0, 0), (0, 0), (diff, diff)), 'constant', constant_values=0)
+            
+        # stack interesting things
+       # image = image.permute(1, 0     , 2, 3)
+        data_dict['DcmPathFlatten'] = image
+        data_dict['DcmPathFlatten_paths'] = data_dict['DcmPathFlatten']
+        data_dict = self.post_transformations(data_dict)
+        data_dict['inputs'] = normalize_imagenet_torch(tensor=data_dict['inputs'])
+        data_dict['inputs'] = data_dict['inputs'].permute(3, 0, 1, 2)
+        data_dict["rowid"] = self.data[idx]["rowid"]
+        if self.config['loss']['name'][0] == 'NNL':
+            data_dict["event"] = self.data[idx]["event"]
+            data_dict["duration_transformed"] = self.data[idx]["duration_transformed"]
+      #  data_dict['DcmPathFlatten_paths'] = data_dict['DcmPathFlatten']
+        data_dict["PatientID"] = self.data[idx]["PatientID"]
+        for label_name in self.config['labels_names']:
+            data_dict[label_name] = self.data[idx][label_name]
+            data_dict["weights_" + label_name] = self.data[idx]["weights_" + label_name]
+       # data_dict['inputs'] = torch.unsqueeze(data_dict['inputs'], dim=0)
+       # data_dict['DcmPathFlatten'] = data_dict['inputs']
+        return data_dict #monai.transforms.AddChannel()(image)   # Add an extra channel dimension
 
 
 class Dataset(_TorchDataset):
@@ -329,7 +402,7 @@ class Dataset(_TorchDataset):
             data_i_i = {
                 self.features[0]: data_i_i}
             for n in self.config['labels_names']:
-
+                data_i_i['weights_' + n] = data_i['weights_' + n]
                 data_i_i[n] = data_i[n]
             for _transform in self.transform.transforms:
                 # execute all the deterministic transforms

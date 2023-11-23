@@ -14,6 +14,7 @@ from miacag.utils.common_utils import stack_labels, get_loss
 from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict
 from miacag.models.BuildModel import ModelBuilder
 from miacag.models.modules import get_loss_names_groups
+from torch.nn.utils.clip_grad import clip_grad_norm
 
 
 def set_random_seeds(random_seed=0):
@@ -39,15 +40,24 @@ def train_one_step(model, data, criterion,
                    optimizer, lr_scheduler, writer, config,
                    running_loss_train,
                    running_metric_train,
+                   epoch,
                    tb_step_writer, scaler, device):
     model.train()
+    # combined_tensor = torch.cat([data[label_name] for label_name in config['labels_names']], dim=0)
+    
+    # # Check if all values in the combined tensor are NaNs
+    # if torch.isnan(combined_tensor).all():
+    #     #print(f"Skipping iteration {i} as all values in data are NaNs.")
+    #     del combined_tensor
+    # else:
     # zero the parameter gradients
     optimizer.zero_grad()
-
+    # if config['labels_names'][0].startswith("sten"):
+    #     criterion[0].__defaults__[0][1] = 1
     # forward + backward + optimize
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
-            outputs = model(data['inputs'])
+            outputs = model(data['inputs'].as_tensor())
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
@@ -57,8 +67,9 @@ def train_one_step(model, data, criterion,
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
+      #  optimizer.step()
     else:
-        outputs = model(data['inputs'])
+        outputs = model(data['inputs'].as_tensor())
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
@@ -80,8 +91,18 @@ def train_one_epoch(model, criterion,
                     optimizer, lr_scheduler,
                     running_metric_train, running_loss_train,
                     writer, config, scaler):
+        # if config['loaders']['mode'] == 'testing':
+   # train_loader.dataset.data = train_loader.dataset.data*400
+    
     for i, data in enumerate(train_loader, 0):
         data = get_data_from_loader(data, config, device)
+       # print('1 prox', data['sten_proc_1_prox_rca_transformed'])
+      # print('2 midt', data['sten_proc_2_midt_rca_transformed'])
+        # if epoch < 10:
+        #     lr_scheduler.base_lrs[0] =lr_scheduler.base_lrs[0]*0.1
+            # lr_scale = warm_up_factor * current_step
+            # for param_group in optimizer.param_groups:
+            #     param_group['lr'] = 0.1 * lr_scal
         outputs, loss, metrics, loss_metric = train_one_step(
             model,
             data,
@@ -92,6 +113,7 @@ def train_one_epoch(model, criterion,
             config,
             running_loss_train,
             running_metric_train,
+            epoch,
             tb_step_writer=i,
             scaler=scaler,
             device=device)
@@ -102,6 +124,7 @@ def train_one_epoch(model, criterion,
     if lr_scheduler is not False:
         lr_scheduler.step()
 
+  #  if metrics is not None:  # Add check her
     running_metric_train, metric_tb = normalize_metrics(
         metrics, device)
     running_loss_train, loss_tb = normalize_metrics(

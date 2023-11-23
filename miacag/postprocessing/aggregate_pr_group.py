@@ -13,7 +13,7 @@ def addapt_numpy_int64(numpy_int64):
 register_adapter(numpy.float64, addapt_numpy_float64)
 register_adapter(numpy.int64, addapt_numpy_int64)
 
-
+#TODO IMPLEMEENT update cols on the old way...
 @dataclass
 class Aggregator:
     sql_config: dict

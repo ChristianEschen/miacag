@@ -43,6 +43,19 @@ def convert_dict_to_str(labels_dict_val):
         items.append((k, v))
     return dict(items)
 
+# for old python versions
+# def flatten(d, parent_key='', sep='_'):
+#     items = []
+#     for k, v in d.items():
+#         if k == 'labels_dict':
+#             v = convert_dict_to_str(v)
+#         new_key = parent_key + sep + k if parent_key else k
+#         if isinstance(v, collections.MutableMapping):
+#             items.extend(flatten(v, new_key, sep=sep).items())
+#         else:
+#             items.append((new_key, v))
+#     return dict(items)
+
 
 def flatten(d, parent_key='', sep='_'):
     items = []
@@ -50,12 +63,11 @@ def flatten(d, parent_key='', sep='_'):
         if k == 'labels_dict':
             v = convert_dict_to_str(v)
         new_key = parent_key + sep + k if parent_key else k
-        if isinstance(v, collections.MutableMapping):
+        if isinstance(v, collections.abc.MutableMapping):
             items.extend(flatten(v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))
     return dict(items)
-
 
 def unroll_list_in_dict(config):
     for i in list(config):
@@ -109,6 +121,9 @@ def init_metrics(metrics, config, device, ptype=None):
         elif metrics[i].startswith('_L1'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('L1smooth'):
+            
+            dicts[metrics[i]] = CumulativeAverage()
+        elif metrics[i].startswith('wfocall1'):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('MSE'):
             dicts[metrics[i]] = CumulativeAverage()
@@ -263,6 +278,9 @@ def get_losses_metric(running_losses,
         elif loss.startswith('NNL'):
             running_losses[loss].append(losses[loss])
             losses_metric[loss] = running_losses[loss]
+        elif loss.startswith('wfocall1'):
+            running_losses[loss].append(losses[loss])
+            losses_metric[loss] = running_losses[loss]
         else:
             raise ValueError("Invalid loss %s" % repr(loss))
     return losses_metric
@@ -333,6 +351,11 @@ def normalize_metrics(running_metrics, device):
         elif running_metric.startswith('MSE'):
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('L1smooth'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
+            metric_tb = running_metrics[running_metric].aggregate().item()
+        elif running_metric.startswith('wfocall1'):
             running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
             running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
             running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)

@@ -47,6 +47,7 @@ class ModelBuilder():
             model = torch.nn.parallel.DistributedDataParallel(
                     model,
                     device_ids=[self.device] if self.config["cpu"] == "False" else None,
+                    output_device=int(os.environ['LOCAL_RANK']) if self.config["cpu"] == "False" else None,
                     find_unused_parameters=True)
                     #find_unused_parameters=True if self.config['loaders']['val_method']['saliency'] == "True" else False)
         return model
@@ -117,10 +118,6 @@ class ModelBuilder():
 
         elif self.config['model']['model_name'] == 'DynUNet':
             print('to be implemented')
-            #unpack_fingerprint(self, config)
-            # import monai.networks.nets as m
-            # model = m.DYNUNet(
-        else:
             raise ValueError('model not implemented')
 
         if path_model != "None":

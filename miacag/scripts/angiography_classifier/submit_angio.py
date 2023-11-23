@@ -21,7 +21,7 @@ from miacag.plots.plotter import plot_results
 import pandas as pd
 from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, write_file, test_for_file
 
-
+import timeit
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -42,11 +42,7 @@ parser.add_argument(
 
 
 def angio_classifier(cpu, num_workers, config_path):
-    torch.distributed.init_process_group(
-            backend="nccl" if cpu == "False" else "Gloo",
-            init_method="env://",
-            timeout=timedelta(seconds=1800000)
-            )
+
     config_path = [
         os.path.join(config_path, i) for i in os.listdir(config_path)]
 
@@ -294,6 +290,24 @@ def angio_classifier(cpu, num_workers, config_path):
 
 
 if __name__ == '__main__':
+
+    import torch
+    import os
+    
+    start_time = timeit.default_timer()
+
     args = parser.parse_args()
+    torch.distributed.init_process_group(backend='nccl' if args.cpu == 'False' else "Gloo",
+                                         init_method='env://',
+                                         world_size=int(os.environ['WORLD_SIZE']),
+                                         timeout=timedelta(seconds=18000000),)
+    local_rank = int(os.environ['LOCAL_RANK'])
+    torch.cuda.set_device(local_rank)
+
+
 
     angio_classifier(args.cpu, args.num_workers, args.config_path)
+
+    elapsed = timeit.default_timer() - start_time
+    print('cpu', args.cpu)
+    print(f"Execution time: {elapsed} seconds")

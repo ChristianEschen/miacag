@@ -15,7 +15,7 @@ import time
 import torch.distributed as dist
 from monai.utils import set_determinism
 from miacag.models.modules import get_loss_names_groups
-
+import gc
 
 def train(config):
     config['loaders']['mode'] = 'training'
@@ -112,7 +112,16 @@ def train(config):
     print('Finished Training')
     print('training loop (s)', time.time()-starter)
     # dist.destroy_process_group()
+    del model
+    # del other variables that are not needed anymore
+    del optimizer, lr_scheduler, criterion, scaler
+    del running_loss_train, running_metric_train, running_loss_val, \
+        running_metric_val
+    del train_ds, train_loader, val_loader
+    train_loader, val_loader = None, None
+    gc.collect()
     torch.cuda.empty_cache()
+    
 
 
 if __name__ == '__main__':

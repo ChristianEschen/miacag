@@ -5,7 +5,7 @@ from miacag.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
 import numpy as np
-
+from miacag.models.fds import FDS
 
 def getCountsLoss(losses):
     count_regression = 0
@@ -155,7 +155,7 @@ class ImageToScalarModel(EncoderModel):
                         ).to(device))
             # test if loss_type startswith three conditions
             
-            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL'])):
+            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL', 'wfocall1'])):
                 # if config['model']['sigm'] == 'True':
                 self.fcs.append(
                     nn.Sequential(
@@ -169,8 +169,12 @@ class ImageToScalarModel(EncoderModel):
             else:
                 raise ValueError('loss not implemented')
             
-        
+
+        # self.fds_config = dict(feature_dim=self.in_features, start_update=0, start_smooth=1, kernel='gaussian', ks=5, sigma=2)
+        # self.regressor = nn.Linear(self.in_features, 1)
+
         self.dimension = config['model']['dimension']
+     #   self.FDS = FDS(**self.fds_config)
         
         
     def forward(self, x):
@@ -191,7 +195,8 @@ class ImageToScalarModel(EncoderModel):
             p = p.mean(dim=(-2, -1))
         ps = []
         for fc in self.fcs:
-            ps.append(fc(p))
+            features = fc(p)
+            ps.append(features)
         return ps
 
     def forward_saliency(self, x):

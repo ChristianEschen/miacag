@@ -2,21 +2,22 @@ import torch
 import os
 
 
-def to_dtype(data, config):
-    for c, label_name in enumerate(config['labels_names']):
+def to_dtype(data,fields, config):
+    for c, label_name in enumerate(fields):
         if config['loss']['name'][c].startswith('CE'):
             data[label_name] = torch.nan_to_num(data[label_name], nan=99998)
             data[label_name] = data[label_name].long()
         elif config['loss']['name'][c] == 'BCE_multilabel':
             data[label_name] = torch.nan_to_num(data[label_name], nan=99998)
             data[label_name] = data[label_name].long()
-        elif config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth']:
+        elif config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth','wfocall1']:
             data[label_name] = data[label_name].float()
         elif config['loss']['name'][c] in ['NNL']:
             data[label_name] = data[label_name].float()
             data['event'] = data['event'].int()
         else:
             raise ValueError("model loss not implemented")
+        data
     return data
 
 
@@ -36,8 +37,13 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 }
     if config['task_type'] in ["classification", "regression", "mil_classification"]:
         data = to_device(data, device, ['inputs'])
-        data = to_dtype(data, config)
+        if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
+            data = to_device(data, device, ["weights_" + i for i in config['labels_names']])
+        data = to_dtype(data, config['labels_names'], config)
+        if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
+            data = to_dtype(data, ["weights_" + i for i in config['labels_names']], config)
         data = to_device(data, device, config['labels_names'])
+
        # if 
         #print('data shape', data['inputs'].shape)
     elif config['task_type'] == "representation_learning":

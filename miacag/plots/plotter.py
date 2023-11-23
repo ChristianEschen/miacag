@@ -99,7 +99,7 @@ def convertConfFloats(confidences, loss_name):
             else:
                 confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
 
-        elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel']:
+        elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel', 'wfocall1']:
             if conf is None:
                 confidences_conv.append(np.nan)
             else:
@@ -280,8 +280,16 @@ def plot_results_regression(df_label, confidence_name,
         df_label[label_name],
         config,
         label_name)
+    if label_name.startswith('ffr'):
+        max_v = 1
+    elif label_name.startswith('sten'):
+        max_v = 1
+    elif label_name.startswith('timi'):
+        max_v = 3
+    else:
+        raise ValueError('label_name_ori must be either sten or ffr or timi')
     df_label[confidence_name] = np.clip(
-        df_label[confidence_name], a_min=0, a_max=1)
+        df_label[confidence_name], a_min=0, a_max=max_v)
     plot_roc_curve(
         df_label[label_name], df_label[confidence_name],
         output_plots, label_name, support,
@@ -337,8 +345,16 @@ def plot_results_classification(df_label,
     if not group_aggregated:
         df_label[confidence_name] = convertConfFloats(
             df_label[confidence_name], config['loss']['name'][c])
+    if label_nam.startswith('ffr'):
+        max_v = 1
+    elif label_nam.startswith('sten'):
+        max_v = 1
+    elif label_nam.startswith('timi'):
+        max_v = 3
+    else:
+        raise ValueError('label_name_ori must be either sten or ffr or timi')
     df_label[confidence_name] = np.clip(
-        df_label[confidence_name], a_min=0, a_max=1)
+        df_label[confidence_name], a_min=0, a_max=max_v)
     plot_roc_curve(
         df_label[label_name], df_label[confidence_name],
         output_plots, label_name, support,
@@ -479,6 +495,13 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
     #     print('No FFR labels found in database')
     
 
+def add_misssing_rows(df, label_name):
+    # Forward fill the 'ffr_proc_2_midt_rca_transformed' within each group of 'PatientID' and 'StudyInstanceUID'
+    df[label_name] = df.groupby(['PatientID', 'StudyInstanceUID'])[label_name].fillna(method='ffill')
+
+    # If any NaNs are still present, backfill them within each group
+    df[label_name] = df.groupby(['PatientID', 'StudyInstanceUID'])[label_name].fillna(method='bfill')
+    return df
 
 def remove_suffix(input_string, suffix):
     if suffix and input_string.endswith(suffix):
@@ -489,10 +512,14 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    
+    for label_name in label_names:
+        df = add_misssing_rows(df, label_name)
     if group_aggregated:
         confidence_names = [c + '_aggregated' for c in confidence_names]
     # test if a element is a list starts with a string: "sten"
     stens = select_relevant_columns(label_names, 'sten')
+    # copy row values in _transfored if PatientID and StudyInstanceUID are the same
     
     wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                         group_aggregated, config)    
@@ -503,6 +530,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     for c, label_name in enumerate(label_names):
         confidence_name = confidence_names[c]
         prediction_name = prediction_names[c]
+      #  df = add_misssing_rows(df, label_name)
         df_label = df[df[label_name].notna()]
         df_label = df_label[df_label[confidence_name].notna()]
         df_label = df_label[df_label[prediction_name].notna()]
@@ -510,7 +538,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
-        if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth']:
+        if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth', 'wfocall1']:
             df_to_process = df_label.copy()
             plot_results_regression(df_to_process, confidence_name,
                                     label_name, config, c, support,
@@ -571,6 +599,8 @@ def annotate(data, label_name, prediction_name, **kws):
 def plotStenoserTrueVsPred(sql_config, label_names,
                            prediction_names, output_folder):
     df, _ = getDataFromDatabase(sql_config)
+    for label_name in label_names:
+        df = add_misssing_rows(df, label_name)
     df = df.drop_duplicates(
             ['PatientID',
              'StudyInstanceUID'])
@@ -616,6 +646,8 @@ def plotRegression(sql_config, label_names,
                    prediction_names, output_folder, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
     from miacag.plots.plot_roc_auc_all import plot_regression_all
+    for label_name in label_names:
+        df = add_misssing_rows(df, label_name)
     plot_regression_all(df,
                         label_names, prediction_names,
                         output_folder, sql_config)
@@ -630,7 +662,8 @@ def plotRegression(sql_config, label_names,
             df_plot = df_plot.drop_duplicates(
                     ['PatientID',
                     'StudyInstanceUID'])
-        if sql_config['task_type'] != 'regression':
+        #if sql_config['task_type'] != 'regression':
+        if sql_config['task_type'] != 'mil_classification':
             df_plot_rep, _ = select_relevant_data(
                 df_plot, prediction_name, label_name)
         else:
@@ -649,8 +682,16 @@ def plotRegression(sql_config, label_names,
                     df_plot_rep[prediction_name],
                     sql_config['loss_name'][c])
 
+        if label_name_ori.startswith('ffr'):
+            max_v = 1
+        elif label_name_ori.startswith('sten'):
+            max_v = 1
+        elif label_name_ori.startswith('timi'):
+            max_v = 3
+        else:
+            raise ValueError('label_name_ori must be either sten or ffr or timi')
         df_plot_rep[prediction_name] = np.clip(
-            df_plot_rep[prediction_name], a_min=0, a_max=1)
+            df_plot_rep[prediction_name], a_min=0, a_max=max_v)
 
         df_plot_rep = df_plot_rep.astype({prediction_name: float})
         if label_name_ori.startswith('sten'):
@@ -723,13 +764,20 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     mask = mask | y.isna()
     x = x[~mask]
     y = y[~mask]
-    
+    if label_name_ori.startswith('ffr'):
+        max_v = 1
+    elif label_name_ori.startswith('sten'):
+        max_v = 1
+    elif label_name_ori.startswith('timi'):
+        max_v = 3
+    else:
+        raise ValueError('label_name_ori must be either sten or ffr or timi')
     x = x.to_numpy()
     y = y.to_numpy()
     y = np.clip(
-            y, a_min=0, a_max=1)
+            y, a_min=0, a_max=max_v)
     x = np.clip(
-            x, a_min=0, a_max=1)
+            x, a_min=0, a_max=max_v)
     ax1 = sns.jointplot(x=x, y=y, marginal_kws=dict(bins=snsbins))
     ax1.fig.set_size_inches(figsize[0], figsize[1])
     ax1.ax_joint.cla()

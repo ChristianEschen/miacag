@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from psycopg2.extras import execute_batch
 from miacag.configs.config import load_config
-from miacag.utils.sql_utils import update_cols, getDataFromDatabase
+from miacag.utils.sql_utils import update_cols, getDataFromDatabase, update_cols_no_batch
 
 
 parser = argparse.ArgumentParser(
@@ -45,6 +45,7 @@ class splitter():
     def __init__(self, sql_config, labels_config=None):
         self.sql_config = sql_config
         self.df, self.connection = getDataFromDatabase(sql_config=sql_config)
+      #  self.connection.close()
         #self.df = self.df.dropna(subset=sql_config["labels_names"], how='any')
 
     def groupEntriesPrPatient(self, df):
@@ -73,11 +74,20 @@ class splitter():
         train_df = train_df[
             ['phase', 'rowid']]
 
-        update_cols(
+        # update_cols(
+        #             val_df.to_dict('records'),
+        #             self.sql_config,
+        #             ['phase'],)
+        # update_cols(
+        #             train_df.to_dict('records'),
+        #             self.sql_config,
+        #             ['phase'])
+
+        update_cols_no_batch(self.connection,
                     val_df.to_dict('records'),
                     self.sql_config,
                     ['phase'],)
-        update_cols(
+        update_cols_no_batch(self.connection,
                     train_df.to_dict('records'),
                     self.sql_config,
                     ['phase'])

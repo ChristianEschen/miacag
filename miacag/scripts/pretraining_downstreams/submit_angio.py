@@ -29,8 +29,6 @@ from miacag.utils.script_utils import create_empty_csv, mkFolder, maybe_remove, 
 from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
-from miacag.models.dino_utils import dino_pretrained
-from miacag.models.dino_utils.dino_pretrained import FeatureForwarder
 from miacag.utils.sql_utils import getDataFromDatabase
 from miacag.plots.plot_predict_coronary_pathology import run_plotter_ruc_multi_class
 from miacag.utils.survival_utils import create_cols_survival
@@ -43,6 +41,14 @@ matplotlib.use('Agg')
 from miacag.features import feature_forward_dino
 import shutil
 import timeit
+import torch.distributed as dist
+import tracemalloc
+import psutil
+import threading
+import linecache
+import time
+import sys
+import traceback
 
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -66,14 +72,23 @@ parser.add_argument(
     help="path to config file for pretraining")
 parser.add_argument("--debugging", action="store_true", help="do debugging")
 
-def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraining, debugging):
-    torch.distributed.init_process_group(
-            backend="nccl" if cpu == "False" else "Gloo",
-            init_method="env://")
-    # config_path = [
-    #     os.path.join(config_path, i) for i in os.listdir(config_path)]
+def get_exp_name(config, rank, config_path):
+    tensorboard_comment = os.path.basename(config_path)[:-5]
+    temp_file = os.path.join(config['output'], 'temp.txt')
+    torch.distributed.barrier()
+    if rank == 0:
+        maybe_remove(temp_file)
+        experiment_name = tensorboard_comment + '_' + \
+            "SEP_" + \
+            datetime.now().strftime('%b%d_%H-%M-%S')
+        write_file(temp_file, experiment_name)
+        torch.distributed.barrier()
+    else:
+        torch.distributed.barrier()
+    experiment_name = test_for_file(temp_file)[0]
+    return experiment_name
 
-    #for i in range(0, len(config_path)):
+def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraining, debugging):
     print('loading config:', config_path)
     
     with open(config_path) as file:
@@ -89,33 +104,27 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
     config['cpu'] = str(config['cpu'])
 
     config['debugging'] = debugging
-    tensorboard_comment = os.path.basename(config_path)[:-5]
-    temp_file = os.path.join(config['output'], 'temp.txt')
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
-        maybe_remove(temp_file)
-        experiment_name = tensorboard_comment + '_' + \
-            "SEP_" + \
-            datetime.now().strftime('%b%d_%H-%M-%S')
-        write_file(temp_file, experiment_name)
-    torch.distributed.barrier()
-    experiment_name = test_for_file(temp_file)[0]
-    output_directory = os.path.join(
-                config['output'],
-                experiment_name)
-    mkFolder(output_directory)
-    output_config = os.path.join(output_directory,
-                                    os.path.basename(config_path))
+    rank = int(os.environ['RANK'])
+
+    experiment_name = get_exp_name(config, rank, config_path)
     output_table_name = \
         experiment_name + "_" + config['table_name']
-
-
+    output_directory = os.path.join(
+                        config['output'],
+                        experiment_name)
+    output_config = os.path.join(output_directory,
+                                 os.path.basename(config_path))
     # begin pipeline
     # 1. copy table
-    os.system("mkdir -p {output_dir}".format(
-        output_dir=output_directory))
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
+    if rank == 0:
+        os.system("mkdir -p {output_dir}".format(
+            output_dir=output_directory))
+        torch.distributed.barrier()
+    else:
+        torch.distributed.barrier()
+  #  torch.distributed.barrier()
+
+    if rank == 0:
         copy_table(sql_config={
             'database': config['database'],
             'username': config['username'],
@@ -130,23 +139,12 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
             "cp {config_path} {config_file_temp}".format(
                 config_path=config_path,
                 config_file_temp=output_config))
+        torch.distributed.barrier()
+    else:
+        torch.distributed.barrier()
 
 
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
-        # TODO dont split on labels names
-        splitter_obj = splitter(
-            {
-                'labels_names': config['labels_names'],
-                'database': config['database'],
-                'username': config['username'],
-                'password': config['password'],
-                'host': config['host'],
-                'schema_name': config['schema_name'],
-                'table_name': output_table_name,
-                'query': config['query_split'],
-                'TestSize': config['TestSize']})
-        splitter_obj()
+
         # ...and map data['labels'] test
     # 4.1 Pretrain encoder model
     ## TODO add pretrain model
@@ -156,21 +154,28 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
         use_cpu = False if cpu == "False" else True
         config['logging']['folder'] = output_directory
         config_pretrain = copy.deepcopy(config)
+        torch.distributed.barrier()
         launch_in_pipeline(config_pretrain,
                            num_workers=num_workers, cpu=use_cpu,
                            init_ddp=False)
-    else:
-        # copy model
-        shutil.copyfile(
-            os.path.join(config['model']['pretrain_model'], 'model.pt'),
-            os.path.join(output_directory, 'model.pt'))
+        torch.distributed.barrier()
+
+    else:        # copy model
+        if rank == 0:
+            shutil.copyfile(
+                os.path.join(config['model']['pretrain_model'], 'model.pt'),
+                os.path.join(output_directory, 'model.pt'))
+            torch.distributed.barrier()
+  
     config['model']['pretrain_model']  = output_directory
     config['model']['pretrained'] = "True"
 
     # loop through all indicator tasks
     unique_index = list(dict.fromkeys(config['task_indicator']))
     for task_index in unique_index:
+        print('running task idx', task_index)
         config_new = copy.deepcopy(config)
+        torch.distributed.barrier()
         run_task(config_new, task_index, output_directory, output_table_name,
                 cpu)
     print('pipeline done')
@@ -207,7 +212,6 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     config_task['eval_metric_train']['name'] = eval_names_train
     config_task['eval_metric_val']['name'] = eval_names_val
     config['model']['num_classes'] = num_classes
-    torch.distributed.barrier()
     config_task['output'] = output_directory
     config_task['output_directory'] = os.path.join(output_directory, task_names[0])
     mkFolder(config_task['output_directory'])
@@ -225,24 +229,43 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     
     
     # test if loss is regression type
-    if loss_names[0] in ['L1smooth', 'MSE']:
-        change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "float8")
-        transform_regression_data(config_task, output_table_name, trans_label)
-    elif loss_names[0] in ['CE']:
-        change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "int8")
-        config_task['weighted_sampler'] == "True"
+    # torch.distributed.barrier()
+    # if torch.distributed.get_rank() == 0:
+    #     if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+    #         if config_task['transform_targets']:
+    #             change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "float8")
+    #             transform_regression_data(config_task, output_table_name, trans_label)
+    #         else:
+    #             pass
+    #     elif loss_names[0] in ['CE']:
+    #         if config_task['transform_targets']:
+    #             change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "int8")
+    #         else:
+    #             pass
+    #         config_task['weighted_sampler'] == "True"
+    #     elif loss_names[0] in ['NNL']:
+    #         event = ['event']
+    #         config_task['labels_names'] = ['duration_transformed']
+    #         if config_task['transforM_targets']:
+    #             create_cols_survival(config, output_table_name, trans_label, event)
+    #         else:
+    #             pass
+    #     else:
+    #         raise ValueError("Loss not supported")
+    # torch.distributed.barrier()
+    if loss_names[0] in ['CE']:
+        config_task['weighted_sampler'] = "True"
     elif loss_names[0] in ['NNL']:
-        event = ['event']
-        config_task['labels_names'] = ['duration_transformed']
-        create_cols_survival(config, output_table_name, trans_label, event)
-        
+        config_task['weighted_sampler'] = "True"
     else:
-        raise ValueError("Loss not supported")
+        config_task['weighted_sampler'] = "False"
+        
     train(config_task)
+
     # 5 eval model
     config_task['model']['pretrain_model'] = config_task['output_directory']
-    config['model']['pretrained'] = "None"
-    test(config_task)
+    config_task['model']['pretrained'] = "None"
+    test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
     print('kill gpu processes')
     torch.distributed.barrier()
     # clear gpu memory
@@ -256,25 +279,30 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     output_plots_train = os.path.join(output_plots, 'train')
     output_plots_val = os.path.join(output_plots, 'val')
     output_plots_test = os.path.join(output_plots, 'test')
+    output_plots_test_large = os.path.join(output_plots, 'test_large')
 
     mkFolder(output_plots_train)
     mkFolder(output_plots_test)
+    mkFolder(output_plots_test_large)
     mkFolder(output_plots_val)
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        # plot results
+        if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+            plot_regression_tasks(config_task, output_table_name, output_plots_train,
+                                output_plots_val, output_plots_test, output_plots_test_large, conf)
+        elif loss_names[0] in ['CE']:
+            plot_classification_tasks(config_task, output_table_name,
+                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+            
+        elif loss_names[0] in ['NNL']:
+            plot_time_to_event_tasks(config_task, output_table_name,
+                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+            
+        else:
+            raise ValueError("Loss not supported")
+    torch.distributed.barrier()
 
-    # plot results
-    if loss_names[0] in ['L1smooth', 'MSE']:
-        plot_regression_tasks(config_task, output_table_name, output_plots_train,
-                              output_plots_val, output_plots_test, conf)
-    elif loss_names[0] in ['CE']:
-        plot_classification_tasks(config_task, output_table_name,
-                                  output_plots_train, output_plots_val, output_plots_test)
-        
-    elif loss_names[0] in ['NNL']:
-        plot_time_to_event_tasks(config_task, output_table_name,
-                                  output_plots_train, output_plots_val, output_plots_test)
-        
-    else:
-        raise ValueError("Loss not supported")
 def change_psql_col_to_dates(config, output_table_name, col):
     sql = """
     UPDATE {s}.{t}
@@ -389,7 +417,7 @@ def transform_regression_data(config, output_table_name, trans_label):
     # change dtypes for label
 
 def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
-                              output_plots_val, output_plots_test):
+                              output_plots_val, output_plots_test, output_plots_test_large):
     
     df, conn = getDataFromDatabase({
                 'database': config_task['database'],
@@ -401,6 +429,9 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
                 'table_name': output_table_name,
                 'query': config_task['query_transform']})
     conn.close()
+    from miacag.plots.plotter import add_misssing_rows
+    for label_name in config_task['labels_names']:
+        df = add_misssing_rows(df, label_name)
     df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
     base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
     if config_task['debugging']:
@@ -408,8 +439,8 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         phases_q = ['train']
 
     else:
-        phases = [output_plots_train + output_plots_val + output_plots_test]
-        phases_q = ['train', 'val', 'test']
+        phases = [output_plots_train + output_plots_val + output_plots_test] # + output_plots_test_large]
+        phases_q = ['train', 'val', 'test']#, 'test_large']
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
         phase_q = phases_q[idx]
@@ -422,6 +453,9 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
                 'schema_name': config_task['schema_name'],
                 'table_name': output_table_name,
                 'query': config_task['query_' +  phase_q +'_plot']})
+        from miacag.plots.plotter import add_misssing_rows
+        for label_name in config_task['labels_names']:
+            df = add_misssing_rows(df, label_name)
         df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
 
         out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
@@ -485,7 +519,7 @@ def plot_scores(out_dict, ouput_path):
     plt.close()
 
 def plot_regression_tasks(config_task, output_table_name, output_plots_train,
-                          output_plots_val, output_plots_test, conf):
+                          output_plots_val, output_plots_test, output_plots_test_large, conf):
     # 6 plot results:
     if config_task['debugging']:
         queries = [config_task['query_train_plot']]
@@ -493,8 +527,12 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
     else:
         queries = [config_task['query_train_plot'],
                 config_task['query_val_plot'],
-                config_task['query_test_plot'],]
-        plots = [output_plots_train, output_plots_val, output_plots_test]
+                config_task['query_test_plot'],
+               # config_task['query_test_large_plot'
+                            ]
+        plots = [output_plots_train, output_plots_val,
+                 output_plots_test,]
+                 #output_plots_test_large]
 
                # config_task['query_test_large_plot']]
     for idx, query in enumerate(queries):
@@ -539,13 +577,13 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
 
 def plot_classification_tasks(config,
                              output_table_name,
-                             output_plots_train, output_plots_val, output_plots_test):
+                             output_plots_train, output_plots_val, output_plots_test, output_plots_test_large):
     if config['debugging']:
         phases = [output_plots_train]
         phases_q = ['train']
     else:
-        phases = [output_plots_train + output_plots_val + output_plots_test]
-        phases_q = ['train', 'val', 'test']
+        phases = [output_plots_train + output_plots_val + output_plots_test] # + output_plots_test_large]
+        phases_q = ['train', 'val', 'test'] #, 'test_large']
     
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
@@ -559,6 +597,9 @@ def plot_classification_tasks(config,
                                 'schema_name': config['schema_name'],
                                 'table_name': output_table_name,
                                 'query': config['query_' + phase_q  +'_plot']})
+        from miacag.plots.plotter import add_misssing_rows
+        for label_name in config['labels_names']:
+            df = add_misssing_rows(df, label_name)
         # test if _confidences exists
         if config['labels_names'][0] +"_confidences" in df.columns:
             labels_names = config['labels_names'][0] +"_confidences"
@@ -569,7 +610,7 @@ def plot_classification_tasks(config,
             
         df = df.dropna(subset=[labels_names], how="any")
         if config['labels_names'][0].startswith('koronarpatologi'):
-            col = 'koronarpatologi_nativekar_udfyldesforallept__transformed_confid'
+            col = 'koronarpatologi_transformed_confidences'
             pred_name = "corornay_pathology"
             save_name = "roc_curve_coronar"
         else:
@@ -606,11 +647,24 @@ def convert_string_to_numpy(df, column='koronarpatologi_nativekar_udfyldesforall
     
     return np_array
 if __name__ == '__main__':
+    import torch
+    import os
+    
     start_time = timeit.default_timer()
 
     args = parser.parse_args()
+    torch.distributed.init_process_group(backend='nccl' if args.cpu == 'False' else "Gloo",
+                                         init_method='env://',
+                                         world_size=int(os.environ['WORLD_SIZE']),
+                                         timeout=timedelta(seconds=18000000),)
+    local_rank = int(os.environ['LOCAL_RANK'])
+    torch.cuda.set_device(local_rank)
+
+
+
     pretraining_downstreams(args.cpu, args.num_workers, args.config_path,
-                            args.config_path_pretraining, args.debugging)
+                        args.config_path_pretraining, args.debugging)
+
     elapsed = timeit.default_timer() - start_time
     print('cpu', args.cpu)
     print(f"Execution time: {elapsed} seconds")

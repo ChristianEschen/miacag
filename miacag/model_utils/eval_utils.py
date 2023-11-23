@@ -15,6 +15,22 @@ from miacag.model_utils.grad_cam_utils import calc_saliency_maps
 from miacag.models.modules import getCountsLoss, unique_counts
 from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict, get_loss
 import pandas as pd
+import os
+import psutil
+
+def check_memory():
+    pid = os.getpid()
+    proc = psutil.Process(pid)
+
+    # Get process memory info in bytes
+    mem_info = proc.memory_info()
+    mem_in_gb = mem_info.rss / (1024 ** 3)  # Convert to GB
+
+    threshold_in_gb = 100  # Define your threshold here
+
+    if mem_in_gb > threshold_in_gb:
+        raise MemoryError('Memory usage of this process is over {} GB'.format(threshold_in_gb))
+
 
 def get_input_shape(config):
     if config['model']['dimension'] in ['2D+T', 3]:
@@ -52,27 +68,44 @@ def maybe_use_amp(use_amp, inputs, model):
 def eval_one_step(model, data, device, criterion,
                   config, running_metric_val, running_loss_val,
                   saliency_maps=False):
+    import time
+    # if config['labels_names'][0].startswith("sten"):
+    #     criterion[0].__defaults__[0][1] = 0
     # set model in eval mode
     model.eval()
     with torch.no_grad():
         # forward
-        outputs = maybe_sliding_window(data['inputs'], model, config)
-        losses, loss = get_losses_class(config, outputs,
-                                        data, criterion, device)
+     #   start_ = time.time()
+        outputs = maybe_sliding_window(data['inputs'].as_tensor(), model, config)
+       # stop_sliding = time.time()
+        #print('sliding window time: ', stop_sliding - start_)
+     #   start_get_class = time.time()
+        if config['loaders']['mode'] != 'testing':
+            losses, loss = get_losses_class(config, outputs,
+                                            data, criterion, device)
+            losses = create_loss_dict(config, losses, loss)
+      #  stop = time.time()
+      #  print('get loss time: ', stop - start_get_class)
         outputs = wrap_outputs_to_dict(outputs, config)
-
-        losses = create_loss_dict(config, losses, loss)
-        metrics, losses_metric = get_loss_metric_class(config, outputs,
-                                                        data, losses,
-                                                        running_metric_val,
-                                                        running_loss_val,
-                                                        criterion)
- 
+      #  start = time.time()
+      #  losses = create_loss_dict(config, losses, loss)
+     #   print('create loss dict time: ', time.time() - start)
+        #    start = time.time()
+        if config['loaders']['mode'] != 'testing':
+            metrics, losses_metric = get_loss_metric_class(config, outputs,
+                                                            data, losses,
+                                                            running_metric_val,
+                                                            running_loss_val,
+                                                            criterion)
+            return outputs, losses, metrics, None
+        else:
+            return outputs, None, None, None
+      #  print('get loss metric class time: ', time.time() - start)
     # if config['loaders']['val_method']['saliency'] == 'True':
     #     cams = calc_saliency_maps(model, data['inputs'], config, )
     #     return outputs, losses, metrics, cams
     # else:
-    return outputs, losses, metrics, None
+        # return outputs, losses, metrics, None
 
 def forward_model(inputs, model, config):
     if config['loaders']['use_amp'] is True:
@@ -150,12 +183,18 @@ def set_uniform_sample_pct(validation_loader, percentage):
 def run_val_one_step(model, config, validation_loader, device, criterion,
                      saliency_maps, running_metric_val,
                      running_loss_val):
-    if config['task_type'] != "representation_learning":
-        # initialize pandas dataframe from dict
-        df_results = pd.DataFrame()
-        
+    # if config['task_type'] != "representation_learning":
+    #     # initialize pandas dataframe from dict
+    df_results_list = []
+    #config['loaders']['batchSize']= 2
+    model.eval()
+    # if config['loaders']['mode'] == 'testing':
+    #     validation_loader.dataset.data = validation_loader.dataset.data*4000
+    
+    with torch.no_grad():
         for data in validation_loader:
             data = get_data_from_loader(data, config, device)
+            
 
             outputs, loss, metrics, cams = eval_one_step(
                                             model, data, device,
@@ -164,23 +203,54 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
                                             running_metric_val,
                                             running_loss_val,
                                             saliency_maps)
+            
             if config['loaders']['mode'] == 'testing':
                 # list comprehension on the dict outputs
-                outputs = {key: value.cpu().numpy().tolist()
-                           for (key, value) in outputs.items()}
-                outputs['rowid'] = data['rowid'].cpu().numpy().tolist()
-                nr_values = len(outputs[[i for i in outputs][0]])
-                for i in range(0, nr_values):
-                    outputs_i = {
-                        key: value[i] for (key, value) in outputs.items()}
-                    # append outputs to dataframe
-                    df_dictionary = pd.DataFrame([outputs_i])
-                    df_results = pd.concat(
-                        [df_results, df_dictionary], ignore_index=True)
+                outputs_i_i = []
+                for o_idx in range(0, len(data['rowid'])):
+                    outputs_i = {key: value.cpu().numpy().tolist()[o_idx]
+                                for (key, value) in outputs.items()}
+                    outputs_i['rowid'] = data['rowid'].cpu().numpy().tolist()[o_idx]
+                    outputs_i_i.append(outputs_i)
+                df_results_list.append(outputs_i_i)
+                # OLD####
+                # if config["task_type"] == "mil_classification":
+                #     outputs_i = {key: value.cpu().numpy().tolist()[0]
+                #                 for (key, value) in outputs.items()}
+                #     outputs_i['rowid'] = data['rowid'].cpu().numpy().tolist()[0]
+                #   #  append outputs to dataframe
+                    
+                #     df_results_list.append(outputs_i)
+                # else:
+                #     outputs_i_i = []
+                #     for o_idx in range(0, len(data['rowid'])):
+                #         outputs_i = {key: value.cpu().numpy().tolist()[o_idx]
+                #                     for (key, value) in outputs.items()}
+                #         outputs_i['rowid'] = data['rowid'].cpu().numpy().tolist()[o_idx]
+                #         outputs_i_i.append(outputs_i)
+                #     df_results_list.append(outputs_i_i)
+
+
 
     if config['loaders']['mode'] == 'training':
         return running_metric_val, running_loss_val, None, None
     else:
+        ##### OLD #######
+        # if config["task_type"] == "mil_classification":
+        #     df_results = pd.DataFrame(df_results_list)
+
+        # else:
+        # # Convert the list of dictionaries into a pandas DataFrame
+        #     flattened_list = [dict_item for sublist in df_results_list for dict_item in sublist]
+
+        #     # Convert the list of dictionaries into a pandas DataFrame
+        #     df_results = pd.DataFrame(flattened_list)
+        #######################
+         # Convert the list of dictionaries into a pandas DataFrame
+        flattened_list = [dict_item for sublist in df_results_list for dict_item in sublist]
+
+        # Convert the list of dictionaries into a pandas DataFrame
+        df_results = pd.DataFrame(flattened_list)
         return running_metric_val, running_loss_val, df_results, None
 
 
@@ -219,26 +289,29 @@ def val_one_epoch_test(
         validation_loader, device,
         running_metric_val=0.0, running_loss_val=0.0,
         writer=False, epoch=0, saliency_maps=False):
-    df_result = pd.DataFrame()
+   # df_result = pd.DataFrame()
+    df_results_list = []
     samples = config['loaders']['val_method']["samples"]
+    if samples > 1:
+        raise(ValueError('this is not implemented'))
     for i in range(0, samples):
         eval_outputs = run_val_one_step(
                 model, config, validation_loader, device, criterion,
                 saliency_maps,
                 running_metric_val, running_loss_val)
         running_metric_val, running_loss_val, df_result_i, _ = eval_outputs
-
-        df_result = pd.concat(
-                        [df_result, df_result_i], ignore_index=True)
-
-    if config['task_type'] != "representation_learning":
+        df_results_list.append(df_result_i)
+        # df_result = pd.concat(
+        #                 [df_result, df_result_i], ignore_index=True)
+    df_result = pd.concat(df_results_list)
+    if config['loaders']['mode'] != 'testing':
         running_metric_val, metric_tb = normalize_metrics(
             running_metric_val, device)
-
-    running_loss_val, loss_tb = normalize_metrics(
-        running_loss_val, device)
     df_result = maybe_softmax_transform(df_result, config)
-    return metric_tb, df_result
+    if config['loaders']['mode'] != 'testing':
+        return metric_tb, df_result
+    else:
+        return None, df_result
 
 
 def maybe_softmax_transform(df, config):
@@ -254,7 +327,7 @@ def maybe_softmax_transform(df, config):
             df[logit_conf] = softmax_transform(torch.tensor(df[logit])).tolist()
         elif config['loss']['name'][c] == 'MSE':
             logits_return.append(logit.float())
-        elif config['loss']['name'][c] in ['_L1', 'L1smooth']:
+        elif config['loss']['name'][c] in ['_L1', 'L1smooth', 'wfocall1']:
             df[logit_conf] = df[logit]
         elif config['loss']['name'][c].startswith('BCE'):
             logits_return.append(torch.nn.Sigmoid()(logit.float()))
@@ -301,9 +374,13 @@ def val_one_epoch(model, criterion, config,
         return metric_tb
 
     else:
-        metric_tb, df_results = val_one_epoch_test(
-            model, criterion, config,
-            validation_loader, device,
-            running_metric_val, running_loss_val,
-            writer, epoch, saliency_maps)
+        try:
+            check_memory()
+            metric_tb, df_results = val_one_epoch_test(
+                model, criterion, config,
+                validation_loader, device,
+                running_metric_val, running_loss_val,
+                writer, epoch, saliency_maps)
+        except MemoryError as e:
+            print(e)
         return metric_tb, df_results  # predictions

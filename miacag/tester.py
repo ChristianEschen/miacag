@@ -33,10 +33,9 @@ def convert_string_to_tuple(field):
 def test(config):
     config['loaders']['mode'] = 'testing'
     # if config['loaders']['val_method']['saliency'] == 'False':
-    config['loaders']['val_method']["samples"] = 10
+    config['loaders']['val_method']["samples"] = 1
     if config["task_type"] == "mil_classification":
         config['loaders']['val_method']["samples"] = 1
-        config['loaders']['batchSize'] = 1
 
     set_random_seeds(random_seed=config['manual_seed'])
 
@@ -68,10 +67,13 @@ def test(config):
                 device)
 
     pipeline = TestPipeline()
+    import time
+    start = time.time()
     pipeline.get_test_pipeline(model, criterion, config, test_loader,
                                device, init_metrics,
                                normalize_metrics,
                                running_metric_test, running_loss_test)
+    print('time elapsed:', time.time() - start)
 
 
 if __name__ == '__main__':

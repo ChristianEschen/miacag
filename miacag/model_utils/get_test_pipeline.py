@@ -47,7 +47,7 @@ class TestPipeline():
                                          running_loss_test):
         start = time.time()
         print('starting inference:')
-        metrics, df_results = val_one_epoch(
+        _, df_results = val_one_epoch(
             model, criterion, config,
             test_loader.val_loader, device,
             running_metric_val=running_metric_test,
@@ -59,32 +59,25 @@ class TestPipeline():
             csv_files = self.saveCsvFiles(label, df_results, config, count)
         torch.distributed.barrier()
         if torch.distributed.get_rank() == 0:
-            for count, label in enumerate(config['labels_names']):
-                test_loader.val_df = self.buildPandasResults(
-                    label,
-                    test_loader.val_df,
-                    csv_files,
-                    count,
-                    config)
-                self.insert_data_to_db(test_loader, label, config)
-                if config['loss']['name'] == 'CE':
-                    acc = {
-                        'accuracy ensemble_' + label: accuracy_score(
-                            test_loader.val_df[label].astype('float').astype('int'),
-                            test_loader.val_df[
-                                label + '_predictions'].astype(
-                                    'float').astype('int'))}
-                    print('accuracy_correct', acc)
-                    metrics.update(acc)
-                print('metrics (mean of all preds)', metrics)
+            from miacag.utils.sql_upt_utils_temp_table import update_cols_based_on_temp_table
+            update_cols_based_on_temp_table(csv_files, config)
+            # for count, label in enumerate(config['labels_names']):
+                # test_loader.val_df = self.buildPandasResults(
+                #     label,
+                #     test_loader.val_df,
+                #     csv_files,
+                #     count,
+                #     config)
+            #     self.insert_data_to_db(test_loader, label, config)
+    
                 
-                log_name = config["table_name"] + '_' + label + '_log.txt'
-                with open(
-                    os.path.join(config['output_directory'], log_name),
-                        'w') as file:
-                    file.write(json.dumps({**metrics, **config},
-                            sort_keys=True, indent=4,
-                            separators=(',', ': ')))
+            log_name = config["table_name"] +  '_log.txt'
+            with open(
+                os.path.join(config['output_directory'], log_name),
+                    'w') as file:
+                file.write(json.dumps({**config},
+                        sort_keys=True, indent=4,
+                        separators=(',', ': ')))
             shutil.rmtree(csv_files)
             cachDir = os.path.join(
                             config['model']['pretrain_model'],
@@ -138,7 +131,7 @@ class TestPipeline():
         if config['loss']['name'][count].startswith('CE'):
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].apply(np.argmax)
-        elif config['loss']['name'][count] in ['MSE', '_L1', 'L1smooth', 'NNL']:
+        elif config['loss']['name'][count] in ['MSE', '_L1', 'L1smooth', 'NNL', 'wfocall1']:
             val_df_conf[label_name + '_predictions'] = \
                 val_df_conf[label_name + '_confidences'].astype(float)
         elif config['loss']['name'][count] == 'BCE_multilabel':
@@ -161,6 +154,15 @@ class TestPipeline():
         return val_df
 
     def insert_data_to_db(self, test_loader, label_name, config):
+        confidences = self.array_to_tuple(
+            test_loader.val_df[label_name + '_confidences'].to_list())
+        test_loader.val_df[label_name + '_confidences'] = confidences
+        records = test_loader.val_df.to_dict('records')
+        update_cols(
+                    records, config,
+                    [label_name + '_predictions', label_name + '_confidences'])
+
+    def update_db_using_temp_csv(self, test_loader, label_name, config):
         confidences = self.array_to_tuple(
             test_loader.val_df[label_name + '_confidences'].to_list())
         test_loader.val_df[label_name + '_confidences'] = confidences

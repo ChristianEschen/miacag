@@ -6,12 +6,185 @@ from monai.data import (
 from torchvision import datasets
 import psycopg2
 import pandas as pd
+from torch.utils.data import Dataset
+from typing import Optional, Sequence
 import os
 from monai.data import DistributedWeightedRandomSampler, DistributedSampler
 from miacag.utils.sql_utils import getDataFromDatabase
 import numpy as np
 from torch.utils.data.dataloader import default_collate
 import collections.abc
+
+from torch.utils.data import DistributedSampler as _TorchDistributedSampler
+
+__all__ = ["DistributedSampler", "DistributedWeightedRandomSampler"]
+
+
+class DistributedSampler(_TorchDistributedSampler):
+    """
+    Enhance PyTorch DistributedSampler to support non-evenly divisible sampling.
+
+    Args:
+        dataset: Dataset used for sampling.
+        even_divisible: if False, different ranks can have different data length.
+            for example, input data: [1, 2, 3, 4, 5], rank 0: [1, 3, 5], rank 1: [2, 4].
+        num_replicas: number of processes participating in distributed training.
+            by default, `world_size` is retrieved from the current distributed group.
+        rank: rank of the current process within `num_replicas`. by default,
+            `rank` is retrieved from the current distributed group.
+        shuffle: if `True`, sampler will shuffle the indices, default to True.
+        kwargs: additional arguments for `DistributedSampler` super class, can be `seed` and `drop_last`.
+
+    More information about DistributedSampler, please check:
+    https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler.
+
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        even_divisible: bool = True,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        **kwargs,
+    ):
+        super().__init__(dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, **kwargs)
+
+        if not even_divisible:
+            data_len = len(dataset)  # type: ignore
+            if data_len < self.num_replicas:
+                raise ValueError("the dataset length is less than the number of participating ranks.")
+            extra_size = self.total_size - data_len
+            if self.rank + extra_size >= self.num_replicas:
+                self.num_samples -= 1
+            self.total_size = data_len
+
+class DistributedWeightedRandomSampler(DistributedSampler):
+    """
+    Extend the `DistributedSampler` to support weighted sampling.
+    Refer to `torch.utils.data.WeightedRandomSampler`, for more details please check:
+    https://pytorch.org/docs/stable/data.html#torch.utils.data.WeightedRandomSampler.
+
+    Args:
+        dataset: Dataset used for sampling.
+        weights: a sequence of weights, not necessary summing up to one, length should exactly
+            match the full dataset.
+        num_samples_per_rank: number of samples to draw for every rank, sample from
+            the distributed subset of dataset.
+            if None, default to the length of dataset split by DistributedSampler.
+        generator: PyTorch Generator used in sampling.
+        even_divisible: if False, different ranks can have different data length.
+            for example, input data: [1, 2, 3, 4, 5], rank 0: [1, 3, 5], rank 1: [2, 4].'
+        num_replicas: number of processes participating in distributed training.
+            by default, `world_size` is retrieved from the current distributed group.
+        rank: rank of the current process within `num_replicas`. by default,
+            `rank` is retrieved from the current distributed group.
+        shuffle: if `True`, sampler will shuffle the indices, default to True.
+        kwargs: additional arguments for `DistributedSampler` super class, can be `seed` and `drop_last`.
+
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        weights: Sequence[float],
+        num_samples_per_rank: Optional[int] = None,
+        generator: Optional[torch.Generator] = None,
+        even_divisible: bool = True,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        **kwargs,
+    ):
+        super().__init__(
+            dataset=dataset,
+            even_divisible=even_divisible,
+            num_replicas=num_replicas,
+            rank=rank,
+            shuffle=shuffle,
+            **kwargs,
+        )
+        self.weights = weights
+        self.num_samples_per_rank = num_samples_per_rank if num_samples_per_rank is not None else self.num_samples
+        self.generator = generator
+
+    def __iter__(self):
+        indices = list(super().__iter__())
+        weights = torch.as_tensor([self.weights[i] for i in indices], dtype=torch.double)
+        # sample based on the provided weights
+        rand_tensor = torch.multinomial(weights, self.num_samples_per_rank, True, generator=self.generator)
+
+        for i in rand_tensor:
+            yield indices[i]
+
+    def __len__(self):
+        return self.num_samples_per_rank
+
+
+
+class DistributedBalancedRandomSampler(DistributedSampler):
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        weights: Sequence[float],
+        num_samples_per_rank: Optional[int] = None,
+        generator: Optional[torch.Generator] = None,
+        even_divisible: bool = True,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        **kwargs,
+    ):
+        super().__init__(
+            dataset=dataset,
+            even_divisible=even_divisible,
+            num_replicas=num_replicas,
+            rank=rank,
+            shuffle=shuffle,
+            **kwargs,
+        )
+        self.labels = [i['event'] for i in self.dataset.data]
+        self.num_samples_per_rank = num_samples_per_rank if num_samples_per_rank is not None else self.num_samples
+        self.generator = generator
+
+    def __iter__(self):
+        indices = list(super().__iter__())
+        labels = torch.tensor(self.labels)
+
+        # Find the unique labels
+        unique_labels = labels.unique()
+
+        # Calculate the number of unique labels
+        num_unique = len(unique_labels)
+
+        # Calculate how many times we need to repeat the pattern to reach the desired length
+        num_repeats = len(labels) // num_unique + (len(labels) % num_unique > 0)
+
+        # Create an empty tensor to hold the final sequence
+        balanced_sequence = torch.empty((num_repeats * num_unique,), dtype=torch.long)
+
+        # Fill the balanced_sequence tensor with randomly shuffled unique labels
+        for i in range(num_repeats):
+            # Shuffle the unique labels
+            shuffled = unique_labels[torch.randperm(num_unique)]
+            # Place the shuffled labels into the balanced_sequence tensor
+            start_index = i * num_unique
+            end_index = start_index + num_unique
+            balanced_sequence[start_index:end_index] = shuffled
+
+        # Trim the balanced_sequence to match the length of the original labels list
+        balanced_sequence = balanced_sequence[:len(labels)]
+
+        # Convert back to a list if necessary
+        balanced_sequence_list = balanced_sequence.tolist()
+        rand_tensor = torch.tensor(balanced_sequence_list)
+        for i in rand_tensor:
+            yield indices[i]
+
+    def __len__(self):
+        return self.num_samples_per_rank
 
 
 # def list_data_collate_mil(batch: collections.abc.Sequence):
@@ -32,8 +205,10 @@ class ClassificationLoader():
     def __init__(self, config) -> None:
         self.config = config
         self.df, self.connection = getDataFromDatabase(self.config)
-        # if self.config['loaders']['mode'] != 'prediction':
-        #     self.df = self.df.dropna(subset=config["labels_names"], how='any')
+        if self.config['loaders']['mode'] != 'prediction':
+            # set iloc of 0 to nan
+            
+            self.df = self.df.dropna(subset=config["labels_names"], how='all')
         if self.config['loaders']['mode'] == 'prediction':
             for col in self.config['labels_names']:
                 #try:
@@ -90,11 +265,20 @@ class ClassificationLoader():
         if config['weighted_sampler'] == 'True':
             weights = train_ds.weights
             train_ds = train_ds()
-            sampler = DistributedWeightedRandomSampler(
-                dataset=train_ds,
-                weights=weights,
-                even_divisible=True,
-                shuffle=True)
+            if self.config['loss']['name'][0] == 'CE':
+                sampler = DistributedWeightedRandomSampler(
+                    dataset=train_ds,
+                    weights=weights,
+                    even_divisible=True,
+                    shuffle=True)
+            elif self.config['loss']['name'][0] == 'NNL':
+                sampler = DistributedBalancedRandomSampler(
+                    dataset=train_ds,
+                    weights=weights,
+                    even_divisible=True,
+                    shuffle=True)
+            else:
+                raise ValueError('sampler not implemented')
         else:
             train_ds = train_ds()
             sampler = DistributedSampler(
@@ -106,22 +290,46 @@ class ClassificationLoader():
                 self.val_df,
                 config)
         val_ds = val_ds()
-        train_loader = ThreadDataLoader(
-            train_ds,
-            sampler=sampler,
-            batch_size=config['loaders']['batchSize'],
-            shuffle=False,
-            num_workers=0, #config['num_workers'],
-            collate_fn=pad_list_data_collate,
-            pin_memory=False,) #True if config['cpu'] == "False" else False,)
-        with torch.no_grad():
-            val_loader = ThreadDataLoader(
-                val_ds,
+        if config['cache_num'] == 'standard':
+            train_loader = DataLoader(
+                train_ds,
+                sampler=sampler,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=0,
-                collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-                pin_memory=False,)
+                num_workers=config['num_workers'],
+                persistent_workers=True if config['num_workers'] > 0 else False,
+                collate_fn=pad_list_data_collate,
+                pin_memory=True,
+                drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
+            with torch.no_grad():
+                val_loader = DataLoader(
+                    val_ds,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=False,
+                    num_workers=config['num_workers'],
+                    persistent_workers=False,
+                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    pin_memory=False,
+                    drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) 
+        else:
+            train_loader = ThreadDataLoader(
+                train_ds,
+                sampler=sampler,
+                batch_size=config['loaders']['batchSize'],
+                shuffle=False,
+                num_workers=0, #config['num_workers'],
+                collate_fn=pad_list_data_collate,
+                pin_memory=False,
+                drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
+            with torch.no_grad():
+                val_loader = ThreadDataLoader(
+                    val_ds,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=False,
+                    num_workers=0,
+                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    pin_memory=False,
+                    drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
         return train_loader, val_loader, train_ds, val_ds
 
     def get_classificationloader_patch_lvl_test(self, config):
@@ -151,13 +359,7 @@ class ClassificationLoader():
                     config)
             else:
                 raise ValueError("not implemented")
-            # elif config['loaders']['val_method']['type'] == 'sliding_window':
-            #     from miacag.dataloader.Classification._3D. \
-            #         dataloader_monai_classification_3D import \
-            #         val_monai_classification_loader_SW
-            #     self.val_ds = val_monai_classification_loader_SW(
-            #         self.val_df,
-            #         config)
+
         elif config['loaders']['format'] == 'db':
             if config['loaders']['val_method']['type'] == 'full':
                 from miacag.dataloader.Classification.tabular. \
@@ -179,15 +381,9 @@ class ClassificationLoader():
                 self.val_ds,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=0,
+                num_workers=config['num_workers'], #0
                 collate_fn=list_data_collate if
                         config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
                # pin_memory=False if config['cpu'] == "False" else True,)
-                pin_memory=False)
-            # self.val_loader = ThreadDataLoader(
-            #                 self.val_ds,
-            #                 batch_size=config['loaders']['batchSize'],
-            #                 shuffle=False,
-            #                 num_workers=0,
-            #                 collate_fn=pad_list_data_collate,#pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-            #                 pin_memory=False,)
+                pin_memory=False,
+                drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)

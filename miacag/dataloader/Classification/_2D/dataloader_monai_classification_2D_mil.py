@@ -55,6 +55,9 @@ from collections import Counter
 from miacag.dataloader.dataloader_base import _get_weights_classification
 import random
 import numpy as np
+from sklearn.utils import shuffle
+
+
 # compute weights for weighted sampler for config['labels_names']
 def _compute_weights(df, config):
     labels = df[config['labels_names']].values
@@ -157,7 +160,7 @@ def generate_debug_label(len_vector, num_classes):
     return vector
 
 def generate_weights_for_single_label(df, config):
-    if config['labels_names'][0].startswith('koronar'):
+    if config['labels_names'][0].startswith('koronar') or config['labels_names'][0].startswith('treatment'):
         # generate random values for labels with number of classes specificed by:
         num_classes = len(config['labels_dict']) - 1
         #generate values covering every labels with number of classes (num_classes)
@@ -204,6 +207,8 @@ class train_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
+        # shuffle rows in df
+        self.df = self.df.sample(frac=1).reset_index(drop=True)
         # dropnans with labels
         self.df = self.df.dropna(subset=config["labels_names"], how='all')
         self.df = self.df.fillna(value=np.nan)
@@ -227,7 +232,7 @@ class train_monai_classification_loader(base_monai_loader):
                 self.df = self.df.loc[self.df.index.repeat(2)].reset_index(drop=True)
                 self.df[config['labels_names'][0]].iloc[0]= np.NaN
                 self.df[config['labels_names'][0]].iloc[1]= np.NaN
-                self.df[config['labels_names'][1]].iloc[0]= np.NaN
+          #      self.df[config['labels_names'][1]].iloc[0]= np.NaN
             self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
             self.df['weights_' + label_name] = self.weights
@@ -308,29 +313,29 @@ class train_monai_classification_loader(base_monai_loader):
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
         
-        if len(self.config['labels_names'][0]) == 1:
-            classes = [i[self.config['labels_names'][0]] for i in self.data]
-            self.data_par_train = monai.data.partition_dataset_classes(
-                data=self.data,
-                classes=classes,
-                num_partitions=dist.get_world_size(),
-                shuffle=True,
-                even_divisible=True,
-            )[dist.get_rank()]
-        else:
-            self.data_par_train = monai.data.partition_dataset(
-                data=self.data,
-                num_partitions=dist.get_world_size(),
-                shuffle=True,
-                even_divisible=True,
-            )[dist.get_rank()]
+        # if len(self.config['labels_names'][0]) == 1:
+        #     classes = [i[self.config['labels_names'][0]] for i in self.data]
+        #     self.data = monai.data.partition_dataset_classes(
+        #         data=self.data,
+        #         classes=classes,
+        #         num_partitions=dist.get_world_size(),
+        #         shuffle=True,
+        #         even_divisible=True,
+        #     )[dist.get_rank()]
+        # else:
+        #     self.data = monai.data.partition_dataset(
+        #         data=self.data,
+        #         num_partitions=dist.get_world_size(),
+        #         shuffle=True,
+        #         even_divisible=True,
+        #     )[dist.get_rank()]
 
         # create a training data loader'
         if self.config['cache_num'] not in ['standard', 'None']:
             train_ds = SmartCacheDataset(
                 config=self.config,
                 features=self.features,
-                data=self.data_par_train,
+                data=self.data,
                 transform=train_transforms,
                 copy_cache=True,
                 cache_num=self.config['cache_num'],
@@ -343,21 +348,21 @@ class train_monai_classification_loader(base_monai_loader):
                 train_ds = MILDataset_old(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_train, transform=train_transforms,
+                            data=self.data, transform=train_transforms,
                             phase='train'
                         )
             else:
                  train_ds = MILDataset(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_train, transform=train_transforms,
+                            data=self.data, transform=train_transforms,
                             phase='train'
                         )
         else:
             train_ds = CacheDataset(
                 config=self.config,
                 features=self.features,
-                data=self.data_par_train,
+                data=self.data,
                 transform=train_transforms,
                 copy_cache=True,
                 num_workers=self.config['num_workers'])
@@ -414,11 +419,11 @@ class val_monai_classification_loader(base_monai_loader):
                 self.df = self.df.loc[self.df.index.repeat(8)].reset_index(drop=True)
                 self.df[config['labels_names'][0]].iloc[0]= np.NaN
                 self.df[config['labels_names'][0]].iloc[1]= np.NaN
-                self.df[config['labels_names'][1]].iloc[0]= np.NaN
-                self.df[config['labels_names'][0]].iloc[5]= None
-                self.df[config['labels_names'][1]].iloc[5]= None
-                self.df[config['labels_names'][0]].iloc[6]= None
-                self.df[config['labels_names'][1]].iloc[7]= None
+                #self.df[config['labels_names'][1]].iloc[0]= np.NaN
+                # self.df[config['labels_names'][0]].iloc[5]= None
+                # self.df[config['labels_names'][1]].iloc[5]= None
+                # self.df[config['labels_names'][0]].iloc[6]= None
+                # self.df[config['labels_names'][1]].iloc[7]= None
                 
             self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
@@ -452,7 +457,7 @@ class val_monai_classification_loader(base_monai_loader):
                 self.resampleORresize(),
                 self.maybeDeleteMeta(),
                # DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-                self.getMaybePad(),
+           #     self.getMaybePad(),
                 self.getCopy1to3Channels(),
               #  self.getClipChannels(),
                 ScaleIntensityd(keys=self.features),
@@ -467,19 +472,19 @@ class val_monai_classification_loader(base_monai_loader):
         val_transforms = Compose(val_transforms)
         val_transforms.set_random_state(seed=0)
         #if self.config['use_DDP'] == 'True':
-        self.data_par_val = monai.data.partition_dataset(
-            data=self.data,
-            num_partitions=dist.get_world_size(),
-            shuffle=False,
-            even_divisible=True if self.config['loaders']['mode'] not in ['testing', 'prediction'] else False,
-        )[dist.get_rank()]
-        rowids = [i["rowid"] for i in self.data_par_val]
+        # self.data = monai.data.partition_dataset(
+        #     data=self.data,
+        #     num_partitions=dist.get_world_size(),
+        #     shuffle=False,
+        #     even_divisible=True if self.config['loaders']['mode'] not in ['testing', 'prediction'] else False,
+        # )[dist.get_rank()]
+        rowids = [i["rowid"] for i in self.data]
         if self.config['loaders']['mode'] not in ['prediction', 'testing']:
             if self.config['cache_num'] not in ['standard', 'None']:
                 val_ds = SmartCacheDataset(
                     config=self.config,
                     features=self.features,
-                    data=self.data_par_val,
+                    data=self.data,
                     transform=val_transforms,
                     copy_cache=True,
                     cache_num=self.config['cache_num'],
@@ -491,21 +496,21 @@ class val_monai_classification_loader(base_monai_loader):
                     val_ds = MILDataset_old(
                                 config=self.config,
                                 features=self.features,
-                                data=self.data_par_val, transform=val_transforms,
+                                data=self.data, transform=val_transforms,
                                 phase='val'
                             )
                 else:
                     val_ds = MILDataset(
                                 config=self.config,
                                 features=self.features,
-                                data=self.data_par_val, transform=val_transforms,
+                                data=self.data, transform=val_transforms,
                                 phase='val'
                             )
             else:
                 val_ds = CacheDataset(
                     config=self.config,
                     features=self.features,
-                    data=self.data_par_val,
+                    data=self.data,
                     transform=val_transforms,
                     copy_cache=True,
                     num_workers=self.config['num_workers'])
@@ -514,7 +519,7 @@ class val_monai_classification_loader(base_monai_loader):
                 val_ds = CacheDataset(
                         config=self.config,
                         features=self.features,
-                        data=self.data_par_val,
+                        data=self.data,
                         transform=val_transforms,
                         copy_cache=True,
                         num_workers=self.config['num_workers'])
@@ -522,14 +527,14 @@ class val_monai_classification_loader(base_monai_loader):
                 val_ds = MILDataset(
                         config=self.config,
                         features=self.features,
-                        data=self.data_par_val, transform=val_transforms,
+                        data=self.data, transform=val_transforms,
                         phase='val'
                     )
             elif self.config['cache_num'] == 'standard':
                 val_ds = MILDataset(
                             config=self.config,
                             features=self.features,
-                            data=self.data_par_val, transform=val_transforms,
+                            data=self.data, transform=val_transforms,
                             phase='val'
                         )
             elif self.config['cache_test'] == "persistant":
@@ -539,7 +544,7 @@ class val_monai_classification_loader(base_monai_loader):
                 val_ds = PersistentDataset(
                         config=self.config,
                         features=self.features,
-                        data=self.data_par_val, transform=val_transforms,
+                        data=self.data, transform=val_transforms,
                         cache_dir=cachDir
                     )
             else:
@@ -575,7 +580,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
                 ]
         val_transforms = Compose(val_transforms)
         if self.config['use_DDP'] == 'True':
-            self.data_par_val = partition_dataset(
+            self.data = partition_dataset(
                 data=self.data,
                 num_partitions=dist.get_world_size(),
                 shuffle=True,
@@ -585,7 +590,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
                 val_ds = SmartCacheDataset(
                     self.config,
                     self.features,
-                    data=self.data_par_val,
+                    data=self.data,
                     transform=val_transforms,
                     copy_cache=True,
                     cache_num=self.config['cache_num'],
@@ -596,7 +601,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
                 val_ds = CacheDataset(
                     self.config,
                     self.features,
-                    data=self.data_par_val,
+                    data=self.data,
                     transform=val_transforms,
                     copy_cache=True,
                     num_workers=self.config['num_workers'])

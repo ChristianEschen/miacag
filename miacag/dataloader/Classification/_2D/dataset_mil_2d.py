@@ -64,7 +64,7 @@ def normalize_imagenet_torch(tensor, mean=(0.485, 0.456, 0.406), std=(0.229, 0.2
     std (tuple): Standard deviation for each channel.
 
     Returns:
-    torch.Tensor: Normalized tensor.
+    torch.Tensor: Normalized tensor
     """
     # Convert means and stds to tensors
     mean = torch.tensor(mean).view(-1, 1, 1, 1)
@@ -73,11 +73,10 @@ def normalize_imagenet_torch(tensor, mean=(0.485, 0.456, 0.406), std=(0.229, 0.2
     # Check if dimensions match
     if tensor.shape[0] != len(mean) or tensor.shape[0] != len(std):
         raise ValueError("The number of channels in the tensor must match the length of mean and std")
-
     # Normalize
-    normalized_tensor = (tensor - mean) / std
-
+    normalized_tensor = (tensor - mean) / (std + (1.0*10**(-7)))
     return normalized_tensor
+
 # read fraame
 def load_frames(filename_or_obj):
     with ImageFileReader(filename_or_obj) as image:
@@ -165,6 +164,8 @@ class MILDataset(_TorchDataset):
         self.config = config
         self.phase = phase
 
+        self.loadimage = LoadImage(image_only=True)
+
         self.pre_transforms = self.get_pretransformers()
         self.post_transformations = self.post_transforms()
 
@@ -197,13 +198,13 @@ class MILDataset(_TorchDataset):
             device = "cuda:{}".format(os.environ['LOCAL_RANK'])
         post_transforms = [
             monai.transforms.RepeatChanneld(keys=self.features, repeats=3),
+            ########
             # monai.transforms.ScaleIntensityd(keys=self.features),
             # monai.transforms.NormalizeIntensityd(
             #     keys=self.features,
             #     subtrahend=(0.485, 0.456, 0.406),
             #     divisor=(0.229, 0.224, 0.225),
             #     channel_wise=True),
-            ########
            # monai.transforms.Rotate90d(keys=self.features, k=3, spatial_axes=(0, 1)),
            # monai.transforms.Flipd(keys=self.features, spatial_axis=1),
            ##########
@@ -241,17 +242,24 @@ class MILDataset(_TorchDataset):
                                       self.config['loaders']['Resize_width'],
                                       self.config['loaders']['nr_patches']),
                         padding_mode="zeros"),]
+            phase_transforms = []
+
         else:
             phase_transforms = []
 
         post_transforms = post_transforms + phase_transforms + [
             monai.transforms.ConcatItemsd(keys=self.features, name='inputs'),
             monai.transforms.DeleteItemsd(keys=self.features),
+            monai.transforms.ScaleIntensityd(keys='inputs'),    # Rescale image data to range [0,1]
+            # monai.transforms.NormalizeIntensityd(
+            #     keys="inputs",
+            #     subtrahend=(0.485, 0.456, 0.406),#(0.43216, 0.394666, 0.37645),
+            #     divisor=(0.229, 0.224, 0.225),#(0.22803, 0.22145, 0.216989),
+            #     channel_wise=True)
             ]
         post_transforms = Compose(post_transforms)
         return post_transforms
 
-        return data_dict
     
     def __resize_transforms(self):
         transform = Compose([
@@ -264,34 +272,31 @@ class MILDataset(_TorchDataset):
     ##################### LEGACY ############################################
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
         #return self._transform(index)
+        
         return self._transform_pydicom(index)
     def _transform_pydicom(self, idx):
         data_dict = {'DcmPathFlatten': self.data[idx]['DcmPathFlatten']}
-        data_dict['DcmPathFlatten'] = replicate_list(data_dict['DcmPathFlatten'], self.config['loaders']['nr_patches'])
-
-        data_dict["SOPInstanceUID"] = replicate_list(self.data[idx]["SOPInstanceUID"], self.config['loaders']['nr_patches'])
-        data_dict["SeriesInstanceUID"] = replicate_list(self.data[idx]["SeriesInstanceUID"], self.config['loaders']['nr_patches'])
-        data_dict["StudyInstanceUID"] = replicate_list(self.data[idx]["StudyInstanceUID"], self.config['loaders']['nr_patches'])
-
- 
-        slices_info = [(s, pydicom.dcmread(s, stop_before_pixels=True).NumberOfFrames) for s in self.data[idx]['DcmPathFlatten']]
-        loadimage = LoadImage(image_only=True)
         start_idx = 0
         end_idx = start_idx + self.config['loaders']['nr_patches']
-
+        # read image using monai
         # Now read only the slices you need
         slices = []
         frames = 0
-        for i in range(0, len(self.data[0]['DcmPathFlatten'])):
+        
+        for i in range(0, len(data_dict['DcmPathFlatten'])):
             if frames > end_idx:
                 break
-          #  slice_i = loadimage(self.data[0]['DcmPathFlatten'][i]) # [h, w, frame]
+            img_array = self.loadimage(data_dict['DcmPathFlatten'][i]) # [h, w, frame]
+            slice_i = torch.flip(img_array.permute(2,0,1).transpose(1, 2), [0])
+            
+            slice_i = img_array.permute(2,0,1)
             # load using pydicom
-            slice_i = pydicom.dcmread(self.data[0]['DcmPathFlatten'][i]).pixel_array
+           # slice_i = pydicom.dcmread(self.data[0]['DcmPathFlatten'][i]).pixel_array
+            
             metadata_dicom = {
                 # ... your DICOM metadata ...
-                '0028|0010': str(slice_i.shape[1]),  # Rows
-                '0028|0011': str(slice_i.shape[2]),  # Columns
+                '0028|0010': img_array.shape[0],  # Rows
+                '0028|0011': img_array.shape[1],  # Columns str(slice_i.shape[2])
                 'spacing': np.array([1., 1., 33.]),  # Pixel spacing
                 # Add other relevant metadata as needed
             }
@@ -301,7 +306,7 @@ class MILDataset(_TorchDataset):
                 'original_shape': (int(metadata_dicom['0028|0010']), int(metadata_dicom['0028|0010']), len(metadata_dicom['spacing'])),
                 'spacing': metadata_dicom['spacing'],
                 # Add other relevant metadata as needed
-                'original_channel_dim': "no_channel"  # Assuming channel is last, modify as per your data
+                'original_channel_dim': "no_channel"  # Assuming channel is no channel
             }
             slice_i = monai.data.MetaTensor(torch.tensor(slice_i).permute(1,2,0), metadata=metadata_for_metatensor )
             slice_i.meta['original_channel_dim'] ='no_channel'
@@ -343,8 +348,16 @@ class MILDataset(_TorchDataset):
         data_dict['DcmPathFlatten'] = image
         data_dict['DcmPathFlatten_paths'] = data_dict['DcmPathFlatten']
         data_dict = self.post_transformations(data_dict)
-        data_dict['inputs'] = normalize_imagenet_torch(tensor=data_dict['inputs'])
+       # btrahend=(0.485, 0.456, 0.406),
+        #        divisor=(0.229, 0.224, 0.225),
+        data_dict['inputs'] = normalize_imagenet_torch(
+            tensor=data_dict['inputs'],
+            mean=(0.45, 0.45, 0.45), std=(0.225, 0.225, 0.225))
+        # data_dict['inputs'] = normalize_imagenet_torch(
+        #     tensor=data_dict['inputs'],
+        #     mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         data_dict['inputs'] = data_dict['inputs'].permute(3, 0, 1, 2)
+       # data_dict['inputs'] = data_dict['inputs'][::2]
         data_dict["rowid"] = self.data[idx]["rowid"]
         if self.config['loss']['name'][0] == 'NNL':
             data_dict["event"] = self.data[idx]["event"]

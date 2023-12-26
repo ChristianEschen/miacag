@@ -446,8 +446,13 @@ class VisionTransformer(nn.Module):
             in_chans=in_chans,
             embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
+        ##### new
+        #self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+
         # --
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim), requires_grad=False)
+        #####
+
         pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1],
                                             int(self.patch_embed.num_patches**.5),
                                             cls_token=False)
@@ -496,6 +501,10 @@ class VisionTransformer(nn.Module):
         B, N, D = x.shape
 
         # -- add positional embedding to x
+        #### new
+       # cls_tokens = self.cls_token.expand(B, -1, -1)
+        #x = torch.cat((cls_tokens, x), dim=1)
+        #####
         pos_embed = self.interpolate_pos_encoding(x, self.pos_embed)
         x = x + pos_embed
 
@@ -544,8 +553,10 @@ def vit_tiny(patch_size=16, **kwargs):
 
 
 def vit_small(patch_size=16, **kwargs):
+    # test if **kwargs contains embed_dim
+    
     model = VisionTransformer(
-        patch_size=patch_size, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
+        patch_size=patch_size, depth=12, num_heads=6, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 

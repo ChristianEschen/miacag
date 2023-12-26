@@ -4,6 +4,8 @@ import torch
 import os
 import miacag.models.vision_transformer as vit
 from collections import OrderedDict
+from miacag.models.dino_vision_transformer import DinoVisionTransformer, Block, MemEffAttention
+from functools import partial
 
 class Identity(nn.Module):
     def __init__(self):
@@ -17,35 +19,61 @@ def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] == "True":
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
-            "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
-            if torch.distributed.get_rank() == 0:
-                dirname = os.path.dirname(__file__)
-                model_path = os.path.join(
-                                dirname,
-                                "torchhub",
-                                config['model']['dimension'],
-                                config['model']['backbone'],
-                                'model.pt')
-                loaded_model = torch.load(
-                        model_path,
-                        map_location=device)
+            "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+          #  if torch.distributed.get_rank() == 0:
+            dirname = os.path.dirname(__file__)
+            model_path = os.path.join(
+                            dirname,
+                            "torchhub",
+                            config['model']['dimension'],
+                            config['model']['backbone'],
+                            'model.pt')
+            loaded_model = torch.load(
+                    model_path,
+                    map_location=device)
 
-                if config['model']['backbone'] in \
-                        ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
+            if config['model']['backbone'] in \
+                    ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
 
-                    model.load_state_dict(loaded_model['model_state'])
-                else:
-                    model.load_state_dict(loaded_model)
-        else:
-            if config['model']['backbone'] in ['dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
-                loaded_model = torch.load(
-                        os.path.join(config['model']['pretrain_model'], 'model.pt'),
-                        map_location=device)
-                if config['model']['backbone'] in ['vit_small', 'vit_large', 'vit_huge', 'vit_giant']:
-                    if config['loaders']['mode'] != 'testing':
-                        loaded_model = {k.replace("module.", ""): v for k, v in loaded_model['target_encoder'].items()}
+                model.load_state_dict(loaded_model['model_state'])
+            else:
                 model.load_state_dict(loaded_model)
-
+        else:
+            if config['model']['backbone'] in ['dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+                if config['model']['pretrain_type'] =='ijepa':
+                    loaded_model = torch.load(
+                            os.path.join(config['model']['pretrain_model'], 'model.pt'),
+                            map_location=device)
+                    if config['model']['backbone'] in ['vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+                        if config['loaders']['mode'] != 'testing':
+                            loaded_model = {k.replace("module.", ""): v for k, v in loaded_model['target_encoder'].items()}
+                    model.load_state_dict(loaded_model)
+                elif config['model']['pretrain_type'] in ['mae_ct']:
+                    # if mae-ct
+                    loaded_model = torch.load(
+                            os.path.join(config['model']['pretrain_model'], 'model.pt'), map_location=torch.device("cpu"))
+                    loaded_model["pos_embed"] = torch.concat([torch.zeros(1, 1, model.embed_dim), loaded_model["pos_embed"]], dim=1)
+                    model.head_drop=Identity()
+                    model.head=Identity()
+                    model.load_state_dict(loaded_model)
+                    model.to(device)
+                elif config['model']['pretrain_type'] in ['None']:
+                    print('no pretraining')
+                    
+                elif config['model']['pretrain_type'] in ['supervised']:
+                    model_path = os.path.join(
+                                    config['model']['pretrain_model'],
+                                    'model.pt')
+                    loaded_model = torch.load(model_path, map_location=device)
+                    loaded_model["pos_embed"] = loaded_model["pos_embed"][:,:-1,:] # remove class token
+                    #model.head=Identity()
+                    #model.head.weight.data = loaded_model["head.weight"]
+                    for key in ["cls_token", "head.weight", "head.bias"]:
+                        if key in loaded_model:
+                            del loaded_model[key]
+                    model.load_state_dict(loaded_model)
+                else:
+                    raise ValueError('not implemented')
             else:
                 raise ValueError('not implemented')
                 # model = load_from_checkpoint(
@@ -58,19 +86,24 @@ def getPretrainedWeights(config, model, device):
             # remove all values from loaded_model dict starting with decoder
             # loaded_model = {k:v for k,v in loaded_model['model'].items() if not k.startswith("decoder")}
 
-    elif config['model']['pretrained'] == "None":
-        pass
+    elif config['model']['pretrained'] in ["False", "None"]:
+        if config['model']['backbone'] != 'r50':
+            model.head_drop=Identity()
+            model.head=Identity()
+            pass
+        else:
+            pass    
     else:
-        if torch.distributed.get_rank() == 0:
-            dirname = os.path.dirname(__file__)
-            model_path = os.path.join(
-                            config['model']['pretrain_model'],
-                            'model.pt')
-            loaded_model = torch.load(
-                    model_path,
-                    map_location=device)
+    #    if torch.distributed.get_rank() == 0:
+        dirname = os.path.dirname(__file__)
+        model_path = os.path.join(
+                        config['model']['pretrain_model'],
+                        'model.pt')
+        loaded_model = torch.load(
+                model_path,
+                map_location=device)
 
-            model.load_state_dict(loaded_model)
+        model.load_state_dict(loaded_model)
     return model
 
 
@@ -185,13 +218,55 @@ def get_encoder(config, device):
         in_features = model.norm.normalized_shape[0]
     
     elif config['model']['backbone'] in ['vit_small',
+                                         'vit_base',
                                          'vit_large',
                                          'vit_huge',
                                          'vit_giant']:
-        model = vit.__dict__[config['model']['backbone']](
-            img_size=[config['loaders']['Resize_height']],
-            patch_size=config['mask']['patch_size'])
+        if config['model']['backbone'] == 'vit_base':
+           # if config['model']['pretrain_type'] == 'mae_ct':
+            from timm.models import vit_base_patch16_224
+            model = vit_base_patch16_224(global_pool="token")
+        #     else:
+        #         pass
+        #         # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
+        #         model = DinoVisionTransformer(
+        #         patch_size=config['mask']['patch_size'],
+        #         embed_dim=768,
+        #         depth=12,
+        #         num_heads=12,
+        #         mlp_ratio=4,
+        #         block_fn=partial(Block, attn_class=MemEffAttention),
+        #    )
+        elif config['model']['backbone'] == 'vit_small':
+            
+            if config['model']['pretrain_type'] == 'supervised':
+                from timm.models import vit_small_patch16_224
+                import timm
+              #  model = timm.create_model('vit_small_patch16_224.augreg_in21k', pretrained=False)
+                from dinov2.models.vision_transformer import DinoVisionTransformer, vit_small
+        #    model = vit_small()
+                model = vit.__dict__[config['model']['backbone']](
+                    img_size=[config['loaders']['Resize_height']],
+                    patch_size=config['mask']['patch_size'],
+                    embed_dim=config['model']['embed_dim'])
+#                model = vit_small_patch16_224(embed_dim=384)
+            else:
+                model = vit.__dict__[config['model']['backbone']](
+                    img_size=[config['loaders']['Resize_height']],
+                    patch_size=config['mask']['patch_size'],
+                    embed_dim=config['model']['embed_dim'])
+        else:
+            model = vit.__dict__[config['model']['backbone']](
+                    img_size=[config['loaders']['Resize_height']],
+                    patch_size=config['mask']['patch_size'])
+        #if config['model']['pretrain_type'] == 'dinov2':
+          #  model = torch.load("/home/alatar/miacag/dinov2_base/model.pt")
+        #else:
         model = getPretrainedWeights(config, model, device)
+        if config['model']['pretrain_type'] == 'supervised':
+          #  in_features = model.head.in_features
+            model.head = Identity()
+            model.head_drop = Identity()
         in_features = model.norm.normalized_shape[0]
     else:
         raise ValueError('not implemented')

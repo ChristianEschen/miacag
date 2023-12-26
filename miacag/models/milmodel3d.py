@@ -32,6 +32,7 @@ class MILModel(ImageToScalarModel):
         self.mil_mode = self.config['model']['mil_mode'].lower()
         self.attention = nn.Sequential()
         self.transformer = None  # type: Optional[nn.Module]
+        self.my_fc_temp = nn.Linear(self.in_features, self.in_features)
         self.loss_uniques, self.count_loss_unique = unique_counts(self.config)
         # define mil_mode
         if self.mil_mode in ["mean", "max"]:
@@ -60,6 +61,7 @@ class MILModel(ImageToScalarModel):
                     nn.Linear(2048, 1)))
 
         elif self.mil_mode == "att_trans_pyramid":
+            
             self.attention = nn.ModuleList()
             self.transformer = nn.ModuleList()
             for c, head in enumerate(self.loss_uniques):
@@ -195,9 +197,9 @@ class MILModel(ImageToScalarModel):
 
         x = self.handle_x_dim_input(x, sh)
         x = maybePermuteInput(x, self.config)
-        x = self.encoder(x)
-        x = self.reduce_feature_space(x)
-
+        x = self.encoder(x) 
+        x = self.reduce_feature_space(x) # what is this?
+        x = self.my_fc_temp(x)
         x = x.reshape(sh[0], sh[1], -1)
 
         xs = []
@@ -267,7 +269,8 @@ class MILModel(ImageToScalarModel):
         #x = self.handle_x_dim_input(x, sh)
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
-        p = self.reduce_feature_space(p)
+        if not self.config['model']['pretrain_type'] == 'mae_ct':
+            p = self.reduce_feature_space(p)
 
         x = self.fcs[0](p) 
         # x = maybePermuteInput(x, self.config)
@@ -304,22 +307,30 @@ class MILModel(ImageToScalarModel):
         return x
 
     def reduce_feature_space(self, x):
-        if self.config['model']['dimension'] in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
-                x = x.mean(dim=(-3, -2, -1))
-            else:
-                pass
-        elif self.config['model']['dimension'] in ['2D']:
-            if self.config['model']['backbone'] not in ["dinov2_vits14",
-                                                        'vit_small', 'vit_large',
-                                                        'vit_huge', 'vit_giant']:
+        if self.config['model']['pretrain_type'] in ['dinov2', 'mae_ct', 'supervised']:
+            if self.config['model']['backbone'] in ["r50"]:
                 x = x.mean(dim=(-2, -1))
-            elif self.config['model']['backbone'] in ['vit_small', 'vit_large',
-                                                      'vit_huge', 'vit_giant']:
-                x = F.layer_norm(x, (x.size(-1),))
-                x = x.mean(dim=(-2))
+                return x
             else:
-                raise ValueError('not implemented for this backbone')
+                return x
         else:
-            raise ValueError('this dimension is not implemented')
-        return x
+            if self.config['model']['dimension'] in ['3D', '2D+T']:
+                if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
+                    x = x.mean(dim=(-3, -2, -1))
+                else:
+                    pass
+            elif self.config['model']['dimension'] in ['2D']:
+                if self.config['model']['backbone'] not in ["dinov2_vits14",
+                                                            'vit_small', 'vit_large',
+                                                            'vit_huge', 'vit_giant', 'vit_base']:
+                    x = x.mean(dim=(-2, -1))
+                elif self.config['model']['backbone'] in ['vit_small', 'vit_large',
+                                                        'vit_huge', 'vit_giant', 'vit_base']:
+                    x = F.layer_norm(x, (x.size(-1),))
+                    x = x.mean(dim=(-2))
+                else:
+                    raise ValueError('not implemented for this backbone')
+            else:
+                raise ValueError('this dimension is not implemented')
+        
+            return x

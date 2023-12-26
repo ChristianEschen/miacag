@@ -71,6 +71,8 @@ parser.add_argument(
     '--config_path_pretraining', type=str,
     help="path to config file for pretraining")
 parser.add_argument("--debugging", action="store_true", help="do debugging")
+parser.add_argument("--output_table_name", type=str, help="table name output table")
+
 
 def get_exp_name(config, rank, config_path):
     tensorboard_comment = os.path.basename(config_path)[:-5]
@@ -147,7 +149,9 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
 
         # ...and map data['labels'] test
     # 4.1 Pretrain encoder model
-    ## TODO add pretrain model
+    # raise error if  config['model']['pretrained'] = "Fale" and  config['model']['pretrain_model'] = "None"
+    if config['model']['pretrained'] in ["True"] and config['model']['pretrain_model'] in ["False", "None"]:
+        raise ValueError("pretrained = False but pretrain_model = None")
     if config['model']['ssl_pretraining']:
         print('ssl pretraining')
         from ijepa.main_distributed import launch_in_pipeline
@@ -161,27 +165,163 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
         torch.distributed.barrier()
 
     else:        # copy model
-        if rank == 0:
-            shutil.copyfile(
-                os.path.join(config['model']['pretrain_model'], 'model.pt'),
-                os.path.join(output_directory, 'model.pt'))
-            torch.distributed.barrier()
-  
-    config['model']['pretrain_model']  = output_directory
-    config['model']['pretrained'] = "True"
-
+        if config['model']['pretrain_model'] != 'None':
+            if rank == 0:
+                shutil.copyfile(
+                    os.path.join(config['model']['pretrain_model'], 'model.pt'),
+                    os.path.join(output_directory, 'model.pt'))
+                torch.distributed.barrier()
+    #if config['model']['pretrain_model'] != 'None':
+            config['model']['pretrain_model']  = output_directory
+            config['model']['pretrained'] = "True"
+        else:
+            config['model']['pretrain_model']  = output_directory
+            config['model']['pretrained'] = "None"
+            
+    print('before for loop')
     # loop through all indicator tasks
     unique_index = list(dict.fromkeys(config['task_indicator']))
     for task_index in unique_index:
         print('running task idx', task_index)
         config_new = copy.deepcopy(config)
+        if task_index == 2:
+            config_new['num_workers'] = 4
+        elif task_index == 3:
+            config_new['num_workers'] = 4
+        elif task_index == 5:
+            config_new['num_workers'] = 4
+        else:
+            config_new['num_workers'] = num_workers
+      #  print('before run task barrier')
+        torch.distributed.barrier()
+        print('before run task')
+        run_task(config_new, task_index, output_directory, output_table_name,
+                cpu, train_test_indicator=True)
+        
+    for task_index in unique_index:
+        print('running task idx', task_index)
+        config_new = copy.deepcopy(config)
         torch.distributed.barrier()
         run_task(config_new, task_index, output_directory, output_table_name,
-                cpu)
+                cpu, train_test_indicator=False)
     print('pipeline done')
     return None
 
-def run_task(config, task_index, output_directory, output_table_name, cpu):
+#################################### this is new ##############################################
+def plot_pretraining_downstreams(cpu, num_workers, config_path, debugging, output_table_name):
+    print('loading config:', config_path)
+    
+    with open(config_path) as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+        
+    
+    config['num_workers'] = num_workers
+    config['cpu'] = cpu
+    config['cpu'] = str(config['cpu'])
+
+    config['debugging'] = debugging
+
+    #experiment_name = get_exp_name(config, rank, config_path)
+    output_directory = config['output']
+
+
+
+    config['model']['pretrain_model']  = output_directory
+    config['model']['pretrained'] = "True"
+
+    unique_index = list(dict.fromkeys(config['task_indicator']))
+    for task_index in unique_index:
+        print('running task idx', task_index)
+        config_new = copy.deepcopy(config)
+        run_task(config_new, task_index, output_directory, output_table_name,
+                cpu, train_test_indicator=False)
+    print('pipeline done')
+    return None
+
+def plot_task_not_ddp(config_task, output_table_name, conf, loss_names):
+    # create plot folders
+    output_plots = os.path.join(config_task['output_directory'], 'plots')
+    mkFolder(output_plots)
+
+    output_plots_train = os.path.join(output_plots, 'train')
+    output_plots_val = os.path.join(output_plots, 'val')
+    output_plots_test = os.path.join(output_plots, 'test')
+    output_plots_test_large = os.path.join(output_plots, 'test_large')
+
+    mkFolder(output_plots_train)
+    mkFolder(output_plots_test)
+    mkFolder(output_plots_test_large)
+    mkFolder(output_plots_val)
+
+    # plot results
+    if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+        plot_regression_tasks(config_task, output_table_name, output_plots_train,
+                            output_plots_val, output_plots_test, output_plots_test_large, conf)
+    elif loss_names[0] in ['CE']:
+        plot_classification_tasks(config_task, output_table_name,
+                                output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+        
+    elif loss_names[0] in ['NNL']:
+        plot_time_to_event_tasks(config_task, output_table_name,
+                                output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+        
+    else:
+        raise ValueError("Loss not supported")
+    return
+####################################################################################
+def train_and_test(config_task):
+   # torch.distributed.barrier()
+    print('train test func')
+    train(config_task)
+
+    # 5 eval model
+    config_task['model']['pretrain_model'] = config_task['output_directory']
+    config_task['model']['pretrained'] = "None"
+    test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
+    print('kill gpu processes')
+    torch.distributed.barrier()
+    # clear gpu memory
+    torch.cuda.empty_cache()
+    return
+
+def plot_task(config_task, output_table_name, conf, loss_names):
+    # create plot folders
+    output_plots = os.path.join(config_task['output_directory'], 'plots')
+    mkFolder(output_plots)
+
+    output_plots_train = os.path.join(output_plots, 'train')
+    output_plots_val = os.path.join(output_plots, 'val')
+    output_plots_test = os.path.join(output_plots, 'test')
+    output_plots_test_large = os.path.join(output_plots, 'test_large')
+
+    mkFolder(output_plots_train)
+    mkFolder(output_plots_test)
+    mkFolder(output_plots_test_large)
+    mkFolder(output_plots_val)
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        # plot results
+        if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+            plot_regression_tasks(config_task, output_table_name, output_plots_train,
+                                output_plots_val, output_plots_test, output_plots_test_large, conf)
+        elif loss_names[0] in ['CE']:
+            plot_classification_tasks(config_task, output_table_name,
+                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+            
+        elif loss_names[0] in ['NNL']:
+            plot_time_to_event_tasks(config_task, output_table_name,
+                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+            
+        else:
+            raise ValueError("Loss not supported")
+    torch.distributed.barrier()
+    return
+
+
+
+def run_task(config, task_index, output_directory, output_table_name, cpu, train_test_indicator):
+    print('run taask func')
+    
     task_names = [
         name for i, name in zip(config['task_indicator'],
                                 config['labels_names']) if i == task_index]
@@ -214,7 +354,11 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     config['model']['num_classes'] = num_classes
     config_task['output'] = output_directory
     config_task['output_directory'] = os.path.join(output_directory, task_names[0])
+    
+    print('before mkfolder')
+   # if torch.distributed.get_rank() == 0:
     mkFolder(config_task['output_directory'])
+    #torch.distributed.barrier()
     config_task['table_name'] = output_table_name
     config_task['use_DDP'] = 'True'
     config_task['datasetFingerprintFile'] = None
@@ -228,31 +372,9 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     pred = [i + '_predictions' for i in config_task['labels_names']]
     
     
-    # test if loss is regression type
-    # torch.distributed.barrier()
-    # if torch.distributed.get_rank() == 0:
-    #     if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
-    #         if config_task['transform_targets']:
-    #             change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "float8")
-    #             transform_regression_data(config_task, output_table_name, trans_label)
-    #         else:
-    #             pass
-    #     elif loss_names[0] in ['CE']:
-    #         if config_task['transform_targets']:
-    #             change_dtype_add_cols_ints(config_task, output_table_name, trans_label, labels_names_original, conf, pred, "int8")
-    #         else:
-    #             pass
-    #         config_task['weighted_sampler'] == "True"
-    #     elif loss_names[0] in ['NNL']:
-    #         event = ['event']
-    #         config_task['labels_names'] = ['duration_transformed']
-    #         if config_task['transforM_targets']:
-    #             create_cols_survival(config, output_table_name, trans_label, event)
-    #         else:
-    #             pass
-    #     else:
-    #         raise ValueError("Loss not supported")
-    # torch.distributed.barrier()
+    # test if loss is regression typ
+   # torch.distributed.barrier()
+    print('before weight sampler')
     if loss_names[0] in ['CE']:
         config_task['weighted_sampler'] = "True"
     elif loss_names[0] in ['NNL']:
@@ -260,48 +382,26 @@ def run_task(config, task_index, output_directory, output_table_name, cpu):
     else:
         config_task['weighted_sampler'] = "False"
         
-    train(config_task)
+    # train(config_task)
 
-    # 5 eval model
-    config_task['model']['pretrain_model'] = config_task['output_directory']
-    config_task['model']['pretrained'] = "None"
-    test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
-    print('kill gpu processes')
-    torch.distributed.barrier()
-    # clear gpu memory
-    torch.cuda.empty_cache()
-
-
-    # create plot folders
-    output_plots = os.path.join(config_task['output_directory'], 'plots')
-    mkFolder(output_plots)
-
-    output_plots_train = os.path.join(output_plots, 'train')
-    output_plots_val = os.path.join(output_plots, 'val')
-    output_plots_test = os.path.join(output_plots, 'test')
-    output_plots_test_large = os.path.join(output_plots, 'test_large')
-
-    mkFolder(output_plots_train)
-    mkFolder(output_plots_test)
-    mkFolder(output_plots_test_large)
-    mkFolder(output_plots_val)
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
-        # plot results
-        if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
-            plot_regression_tasks(config_task, output_table_name, output_plots_train,
-                                output_plots_val, output_plots_test, output_plots_test_large, conf)
-        elif loss_names[0] in ['CE']:
-            plot_classification_tasks(config_task, output_table_name,
-                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
-            
-        elif loss_names[0] in ['NNL']:
-            plot_time_to_event_tasks(config_task, output_table_name,
-                                    output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
-            
+    # # 5 eval model
+    # config_task['model']['pretrain_model'] = config_task['output_directory']
+    # config_task['model']['pretrained'] = "None"
+    # test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
+    # print('kill gpu processes')
+    # torch.distributed.barrier()
+    # # clear gpu memory
+    # torch.cuda.empty_cache()
+    #torch.distributed.barrier()
+    print('train test indicator')
+    if train_test_indicator:
+        train_and_test(config_task)
+    else:
+        if dist.is_initialized():
+            plot_task(config_task, output_table_name, conf, loss_names)
         else:
-            raise ValueError("Loss not supported")
-    torch.distributed.barrier()
+            plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
+    return None
 
 def change_psql_col_to_dates(config, output_table_name, col):
     sql = """
@@ -648,9 +748,9 @@ def convert_string_to_numpy(df, column='koronarpatologi_nativekar_udfyldesforall
     return np_array
 if __name__ == '__main__':
     import torch
-    import os
-    
+    import os   
     start_time = timeit.default_timer()
+
 
     args = parser.parse_args()
     torch.distributed.init_process_group(backend='nccl' if args.cpu == 'False' else "Gloo",
@@ -658,7 +758,8 @@ if __name__ == '__main__':
                                          world_size=int(os.environ['WORLD_SIZE']),
                                          timeout=timedelta(seconds=18000000),)
     local_rank = int(os.environ['LOCAL_RANK'])
-    torch.cuda.set_device(local_rank)
+    if args.cpu == 'False':
+        torch.cuda.set_device(local_rank)
 
 
 

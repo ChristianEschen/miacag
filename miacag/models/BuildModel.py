@@ -78,13 +78,21 @@ class ModelBuilder():
                     model.load_state_dict(
                         torch.load(os.path.join(path_model, 'model.pt')))
                 else:
-                    if torch.distributed.get_rank() == 0:
-                        if self.config['cpu'] == 'True':
-                            model.load_state_dict(
-                                torch.load(os.path.join(path_model, 'model.pt')))
-                        else:
-                            model.module.load_state_dict(
-                                torch.load(os.path.join(path_model, 'model.pt')))
+                    # if torch.distributed.get_rank() == 0:
+                    #     if self.config['cpu'] == 'True':
+                    #         model.load_state_dict(
+                    #             torch.load(os.path.join(path_model, 'model.pt')))
+                    #     else:
+                    # model.module.load_state_dict(
+                    #     torch.load(os.path.join(path_model, 'model.pt')))
+                    if self.config['cpu'] == 'True':
+                        model.load_state_dict(
+                            torch.load(os.path.join(path_model, 'model.pt')
+                                    ,map_location='cpu'))
+                    else:
+                        model.module.load_state_dict(
+                            torch.load(os.path.join(path_model, 'model.pt')
+                                    ,map_location='cuda:{}'.format(os.environ['LOCAL_RANK'])))
         return model
 
     def get_segmentation_model(self):
@@ -134,15 +142,17 @@ class ModelBuilder():
         else:
             raise ValueError('model not implemented')
         # maybe freeze backbone
-        if self.config['model']['freeze_backbone']:
-            for param in model.module.parameters():
-                param.requires_grad = False
-        #else:
-         #   if self.config['model']['model_name'] in "dinov2_vits14":
-            for param in model.module.fcs.parameters():
-                param.requires_grad = True
-            for param in model.module.attention.parameters():
-                param.requires_grad = True
+        if self.config['loaders']['mode'] not in ['testing', 'prediction']:
+            if self.config['model']['freeze_backbone']:
+                for param in model.module.encoder.parameters():
+                    param.requires_grad = False
+            #else:
+            #   if self.config['model']['model_name'] in "dinov2_vits14":
+            # else:
+                for param in model.module.fcs.parameters():
+                    param.requires_grad = True
+                for param in model.module.attention.parameters():
+                    param.requires_grad = True
         return model
 
     def __call__(self):

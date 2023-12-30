@@ -258,6 +258,8 @@ class train_monai_classification_loader(base_monai_loader):
         # self.data = pd.DataFrame(np.repeat(
        # self.data = self.data.loc[self.data.index.repeat(100)].reset_index(drop=True)
 
+        # unroll "DcmPathFlatten" column in dataframe to multiple rows
+   #     self.data = self.data.explode('DcmPathFlatten')
         self.data = self.data.to_dict('records')
 
 
@@ -447,6 +449,7 @@ class val_monai_classification_loader(base_monai_loader):
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
              "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed']]
+   #     self.data = self.data.explode('DcmPathFlatten')
         self.data = self.data.to_dict('records')
 
 

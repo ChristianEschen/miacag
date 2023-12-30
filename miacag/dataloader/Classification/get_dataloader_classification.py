@@ -20,6 +20,111 @@ from torch.utils.data import DistributedSampler as _TorchDistributedSampler
 __all__ = ["DistributedSampler", "DistributedWeightedRandomSampler"]
 
 
+
+def patches_list_data_collate(batch: collections.abc.Sequence, nr_patches=1):
+    '''
+        Combine instances from a list of dicts into a single dict, by stacking them along first dim
+        [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+        followed by the default collate which will form a batch BxNx3xHxW
+    '''
+    batch_data =batch
+
+    for i, item in enumerate(batch):
+        data = item[0]
+        data['inputs'] = torch.concatenate([it["inputs"] for it in item], dim=-1)
+     #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+        # zero pad if nr_patches is not reached
+        if data["inputs"].shape[-1] < nr_patches:
+            # zero pad
+            diff = nr_patches - data["inputs"].shape[-1]
+            data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+        # trim to nr_patches
+        data["inputs"] = data["inputs"][:, :, :, 0:nr_patches]
+        # drop SOPInstanceUID from dict
+        data.pop('SOPInstanceUID', None)
+        data["DcmPathFlatten"] = data["DcmPathFlatten"][0]
+        data["SeriesInstanceUID"] = data["SeriesInstanceUID"][0]
+        batch[i] = data
+    batch = default_collate(batch)
+    batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
+    return batch
+
+def patches_list_data_collate_read_patches_individual(batch: collections.abc.Sequence, nr_patches=1):
+    '''
+        Combine instances from a list of dicts into a single dict, by stacking them along first dim
+        [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+        followed by the default collate which will form a batch BxNx3xHxW
+    '''
+    batch_data =batch
+
+    for i, item in enumerate(batch):
+        data = item[0]
+        data['inputs'] = torch.concatenate([it["inputs"] for it in item], dim=-1)
+     #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+        # zero pad if nr_patches is not reached
+        if data["inputs"].shape[-1] < nr_patches:
+            # zero pad
+            diff = nr_patches - data["inputs"].shape[-1]
+            data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+        # trim to nr_patches
+        data["inputs"] = data["inputs"][:, :, :, 0:nr_patches]
+        # drop SOPInstanceUID from dict
+        data.pop('SOPInstanceUID', None)
+        data["DcmPathFlatten"] = data["DcmPathFlatten"][0]
+        data["SeriesInstanceUID"] = data["SeriesInstanceUID"][0]
+        batch[i] = data
+    batch = default_collate(batch)
+    batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
+    return batch
+
+# def patches_list_data_collate(batch: collections.abc.Sequence, nr_patches=1):
+#     '''
+#         Combine instances from a list of dicts into a single dict, by stacking them along first dim
+#         [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+#         followed by the default collate which will form a batch BxNx3xHxW
+#     '''
+
+#     for i, item in enumerate(batch):
+#         data = item[0]
+#         data['inputs'] = torch.concatenate([it[0]["inputs"] for it in batch], dim=-1) # this does not work
+#      #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+#         # zero pad if nr_patches is not reached
+#         if data["inputs"].shape[-1] < nr_patches:
+#             # zero pad
+#             diff = nr_patches - data["inputs"].shape[-1]
+#             data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+#         # trim to nr_patches
+#         data["inputs"] = data["inputs"][:nr_patches]
+#         batch[i] = data
+#     return default_collate(batch)
+
+
+
+# def patches_list_data_collate(batch: collections.abc.Sequence):
+#     '''
+#         Combine instances from a list of dicts into a single dict, by stacking them along first dim
+#         [{'image' : 3xHxWxD}, {'image' : 3xHxWxD}, {'image' : 3xHxWxD}...] - > {'image' : Nx3xHxWxD}
+#         followed by the default collate which will form a batch BxNx3xHxW
+#     '''
+    
+#     # concatenate items with the same studyUID and PatientID along the last dimension
+    
+    
+#     #torch.concatenate([item["inputs"] for item in batch], dim=-1)
+#     pid = "None"
+    
+#     for i, item in enumerate(batch):
+        
+#         if pid == item["Patient"]:
+#             torch.concatenate([item["inputs"] for item in batch], dim=-1)
+
+#         pid = item["PatientID"]
+
+#     for i, item in enumerate(batch):
+#         data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+#         batch[i] = data
+#     return default_collate(batch)
+
 class DistributedSampler(_TorchDistributedSampler):
     """
     Enhance PyTorch DistributedSampler to support non-evenly divisible sampling.
@@ -289,7 +394,8 @@ class ClassificationLoader():
         val_ds = val_monai_classification_loader(
                 self.val_df,
                 config)
-        val_ds = val_ds()
+        val_ds = val_ds
+        patches_list_data_collate.__defaults__=(config['loaders']['nr_patches'],config['loaders']['nr_patches'],config['loaders']['nr_patches'])
         if config['cache_num'] == 'standard':
             train_loader = DataLoader(
                 train_ds,
@@ -298,7 +404,7 @@ class ClassificationLoader():
                 shuffle=False,
                 num_workers=config['num_workers'],
                 persistent_workers=True if config['num_workers'] > 0 else False,
-                collate_fn=pad_list_data_collate,
+                collate_fn=patches_list_data_collate, #pad_list_data_collate,
                 pin_memory=True,
                 drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
@@ -308,7 +414,7 @@ class ClassificationLoader():
                     shuffle=False,
                     num_workers=config['num_workers'],
                     persistent_workers=False,
-                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    collate_fn=patches_list_data_collate, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,
                     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) 
         else:
@@ -318,7 +424,7 @@ class ClassificationLoader():
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
                 num_workers=0, #config['num_workers'],
-                collate_fn=pad_list_data_collate,
+                collate_fn=patches_list_data_collate, #pad_list_data_collate,
                 pin_memory=False,
                 drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
@@ -327,7 +433,7 @@ class ClassificationLoader():
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
                     num_workers=0,
-                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    collate_fn=patches_list_data_collate, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,
                     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
         return train_loader, val_loader, train_ds, val_ds

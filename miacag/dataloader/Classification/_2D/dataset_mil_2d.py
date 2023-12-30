@@ -177,6 +177,7 @@ class MILDataset(_TorchDataset):
             monai.transforms.LoadImaged(keys=self.features,
                                         prune_meta_pattern="(^0008|^0010|^5004|^5006|^5|^0)"),
             monai.transforms.EnsureChannelFirstD(keys=self.features),
+            monai.transforms.RepeatChanneld(keys=self.features, repeats=3),
             monai.transforms.Resized(
                         keys=self.features,
                         spatial_size=(
@@ -197,7 +198,8 @@ class MILDataset(_TorchDataset):
         else:
             device = "cuda:{}".format(os.environ['LOCAL_RANK'])
         post_transforms = [
-            monai.transforms.RepeatChanneld(keys=self.features, repeats=3),
+            # add channel dim, as the model expects CHW
+         #   monai.transforms.AddChanneld(keys=self.features),
             ########
             # monai.transforms.ScaleIntensityd(keys=self.features),
             # monai.transforms.NormalizeIntensityd(
@@ -272,104 +274,30 @@ class MILDataset(_TorchDataset):
     ##################### LEGACY ############################################
     def __getitem__(self, index: Union[int, slice, Sequence[int]]):
         #return self._transform(index)
-        
         return self._transform_pydicom(index)
+
+
     def _transform_pydicom(self, idx):
-        data_dict = {'DcmPathFlatten': self.data[idx]['DcmPathFlatten']}
-        start_idx = 0
-        end_idx = start_idx + self.config['loaders']['nr_patches']
-        # read image using monai
-        # Now read only the slices you need
-        slices = []
-        frames = 0
+        data_dict = self.data[idx]
+        list_dict = []
         
-        for i in range(0, len(data_dict['DcmPathFlatten'])):
-            if frames > end_idx:
+        nr_frames = 0
+        for id, image_path in enumerate(data_dict["DcmPathFlatten"]):
+            data_dict_i = {}
+            data_dict_i["DcmPathFlatten"] = data_dict["DcmPathFlatten"][id]
+            data_dict_i = self.pre_transforms(data_dict_i)
+            data_dict_i = self.post_transformations(data_dict_i)
+            # add all elements from data_dict
+            data_dict_i = {**data_dict_i, **data_dict} 
+            list_dict += [data_dict_i]
+            nr_frames += data_dict_i['inputs'].shape[-1]
+            if nr_frames >= self.config['loaders']['nr_patches']:
                 break
-            img_array = self.loadimage(data_dict['DcmPathFlatten'][i]) # [h, w, frame]
-            slice_i = torch.flip(img_array.permute(2,0,1).transpose(1, 2), [0])
-            
-            slice_i = img_array.permute(2,0,1)
-            # load using pydicom
-           # slice_i = pydicom.dcmread(self.data[0]['DcmPathFlatten'][i]).pixel_array
-            
-            metadata_dicom = {
-                # ... your DICOM metadata ...
-                '0028|0010': img_array.shape[0],  # Rows
-                '0028|0011': img_array.shape[1],  # Columns str(slice_i.shape[2])
-                'spacing': np.array([1., 1., 33.]),  # Pixel spacing
-                # Add other relevant metadata as needed
-            }
+        return list_dict #monai.transforms.AddChannel()(image)   # Add an extra channel dimension
 
-            # Convert and format as required for MetaTensor
-            metadata_for_metatensor = {
-                'original_shape': (int(metadata_dicom['0028|0010']), int(metadata_dicom['0028|0010']), len(metadata_dicom['spacing'])),
-                'spacing': metadata_dicom['spacing'],
-                # Add other relevant metadata as needed
-                'original_channel_dim': "no_channel"  # Assuming channel is no channel
-            }
-            slice_i = monai.data.MetaTensor(torch.tensor(slice_i).permute(1,2,0), metadata=metadata_for_metatensor )
-            slice_i.meta['original_channel_dim'] ='no_channel'
-         #   slice_i.set_meta('original_channel_dim', "no_channel")
-            frames += slice_i.shape[-1]
-            slices.append(slice_i)
-
-
-       # slices.sort(key=lambda x: float(x.SliceLocation))
-        t = self.__resize_transforms()
-
-        # Resize each individual slice before stacking
-        resized_slices = []
-        for s in slices:
-            if self.transform:
-                img = t(s.permute(2, 0, 1))#.permute(1, 0, 2, 3)
-            resized_slices.append(img)
-
-        # Stack the resized slices to form the 3D array
-        image = torch.concatenate(resized_slices, axis=1)
-        
-        # permute image to get the correct shape for monau post transforms later
-        image = image.permute(0, 2, 3, 1)
-        
-        # Restrict the number of slices to `max_slices`
-        if image.shape[-1] > end_idx:
-            image = image[:, :, :, start_idx:start_idx+end_idx:]
-        elif image.shape[-1] == end_idx:
-            pass
-        else:
-            diff = end_idx - image.shape[-1]
-            #pad_tuple = div_diff_tuple(diff)
-            # use torch to pad the first dimension of 3d tensor
-            image = torch.nn.functional.pad(image, (diff, 0, 0, 0),  mode='constant', value=0)
-         #   image = np.pad(image, ((0, 0), (0, 0), (diff, diff)), 'constant', constant_values=0)
-            
-        # stack interesting things
-       # image = image.permute(1, 0     , 2, 3)
-        data_dict['DcmPathFlatten'] = image
-        data_dict['DcmPathFlatten_paths'] = data_dict['DcmPathFlatten']
-        data_dict = self.post_transformations(data_dict)
-       # btrahend=(0.485, 0.456, 0.406),
-        #        divisor=(0.229, 0.224, 0.225),
-        data_dict['inputs'] = normalize_imagenet_torch(
-            tensor=data_dict['inputs'],
-            mean=(0.45, 0.45, 0.45), std=(0.225, 0.225, 0.225))
-        # data_dict['inputs'] = normalize_imagenet_torch(
-        #     tensor=data_dict['inputs'],
-        #     mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-        data_dict['inputs'] = data_dict['inputs'].permute(3, 0, 1, 2)
-       # data_dict['inputs'] = data_dict['inputs'][::2]
-        data_dict["rowid"] = self.data[idx]["rowid"]
-        if self.config['loss']['name'][0] == 'NNL':
-            data_dict["event"] = self.data[idx]["event"]
-            data_dict["duration_transformed"] = self.data[idx]["duration_transformed"]
-      #  data_dict['DcmPathFlatten_paths'] = data_dict['DcmPathFlatten']
-        data_dict["PatientID"] = self.data[idx]["PatientID"]
-        for label_name in self.config['labels_names']:
-            data_dict[label_name] = self.data[idx][label_name]
-            data_dict["weights_" + label_name] = self.data[idx]["weights_" + label_name]
-       # data_dict['inputs'] = torch.unsqueeze(data_dict['inputs'], dim=0)
-       # data_dict['DcmPathFlatten'] = data_dict['inputs']
-        return data_dict #monai.transforms.AddChannel()(image)   # Add an extra channel dimension
+    def _transform_pydicom_indi(self, idx):
+        # TODO
+        return list_dict #monai.transforms.AddChannel()(image)   # Add an extra channel dimension
 
 
 class Dataset(_TorchDataset):

@@ -5,7 +5,6 @@ import pandas as pd
 from miacag.dataloader.dataloader_base import DataloaderBase
 from monai.transforms import Transform
 from monai.transforms import (
-    AddChanneld,
     Compose,
     LoadImaged,
     RepeatChanneld,
@@ -149,7 +148,7 @@ class base_monai_loader(DataloaderBase):
                 keys=keys_,
                 spatial_size=[self.config['loaders']['Crop_height'],
                               self.config['loaders']['Crop_width'],
-                              self.config['loaders']['Crop_depth']])
+                              self.config['loaders']['Center_crop_depth']])
         elif self.config['loaders']['mode'] in ['testing', 'prediction']:
             if self.config['task_type'] in ["classification",
                                             "regression",
@@ -159,7 +158,7 @@ class base_monai_loader(DataloaderBase):
                     keys=keys_,
                     spatial_size=[self.config['loaders']['Crop_height'],
                                   self.config['loaders']['Crop_width'],
-                                  self.config['loaders']['Crop_depth']])
+                                  self.config['loaders']['Center_crop_depth']])
             elif self.config['task_type'] == "segmentation":
                 pad = Identityd(keys=self.features + [self.config["labels_names"]])
             else:
@@ -234,9 +233,12 @@ class base_monai_loader(DataloaderBase):
             if self.config['use_DDP'] == 'False':
                 device = Identityd(keys=keys + [self.config["labels_names"]])
             else:
-                device = ToDeviced(
-                    keys=keys,
-                    device="cuda:{}".format(os.environ['LOCAL_RANK']))
+                if self.config['loaders']['mode'] == 'training':
+                    device = ToDeviced(
+                        keys=keys,
+                        device="cuda:{}".format(os.environ['LOCAL_RANK']))
+                else:
+                    device = Identityd(keys=keys)
 
         return device
 
@@ -432,10 +434,10 @@ class base_monai_loader(DataloaderBase):
         crop = RandSpatialCropd(
             keys=self.features,
             roi_size=[
-                -1,
+              #  -1,
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
-                self.config['loaders']['Crop_depth']],
+                self.config['loaders']['Crop_depth_cache']],
             random_size=False)
         return crop
 

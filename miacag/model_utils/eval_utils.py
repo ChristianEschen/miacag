@@ -76,6 +76,7 @@ def eval_one_step(model, data, device, criterion,
     with torch.no_grad():
         # forward
      #   start_ = time.time()
+        # test if data["inputs"] is metatenosr
         outputs = maybe_sliding_window(data['inputs'].as_tensor(), model, config)
        # stop_sliding = time.time()
         #print('sliding window time: ', stop_sliding - start_)

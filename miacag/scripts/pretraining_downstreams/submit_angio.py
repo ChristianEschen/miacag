@@ -273,11 +273,20 @@ def train_and_test(config_task):
    # torch.distributed.barrier()
     print('train test func')
     train(config_task)
-
+    config_task['model']['pretrain_model'] = config_task['output_directory']
+    config_task['model']['pretrained'] = "None"
+    config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
+    config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
+    torch.distributed.barrier()
+    # clear gpu memory
+    torch.cuda.empty_cache()
     # 5 eval model
     config_task['model']['pretrain_model'] = config_task['output_directory']
     config_task['model']['pretrained'] = "None"
     test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
+    config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
+    config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
+
     print('kill gpu processes')
     torch.distributed.barrier()
     # clear gpu memory

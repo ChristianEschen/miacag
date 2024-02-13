@@ -1,6 +1,6 @@
 import torch
 import os
-
+import numpy as np
 
 def to_dtype(data,fields, config):
     for c, label_name in enumerate(fields):
@@ -28,7 +28,31 @@ def to_device(data, device, fields):
         data[field] = data[field].to(device)
     return data
 
+    
 
+def map_category(value):
+    if torch.isnan(value):
+        return 2.0
+    elif value == 0:
+        return 0.5
+    elif value == 1:
+        return 1.0
+    elif value == 2:
+        return 1.5
+    elif value == None:
+        return 2.0
+
+def encode_labels_predictions_in_corner(data, categories):
+    batch_size = data["inputs"].shape[0]
+    # Encode categorical values into the top-left corner of each patch
+    for i in range(batch_size):
+        # Map the category value to the desired encoding
+        encoded_value = map_category(categories[i])
+
+        # Apply the encoded value to the top-left 2x2 pixels of each patch
+        #for j in range(patches):
+        data['inputs'][i, :, 0:2, 0:2, :] = encoded_value
+    return data
 def get_data_from_loader(data, config, device, val_phase=False):
     if config['loaders']['store_memory'] is True:
         data = {
@@ -36,7 +60,12 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 config['labels_names']: data[1]
                 }
     if config['task_type'] in ["classification", "regression", "mil_classification"]:
+        # rename data["DcmPathFlatten"] to data["inputs"]
+        data['inputs'] = data['DcmPathFlatten']
         data = to_device(data, device, ['inputs'])
+        data = encode_labels_predictions_in_corner(data, data['labels_predictions'])
+       # print('data mean', data['inputs'].mean())
+       # print('data std', data['inputs'].std())
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
             data = to_device(data, device, ["weights_" + i for i in config['labels_names']])
         data = to_dtype(data, config['labels_names'], config)
@@ -131,7 +160,8 @@ def get_dataloader_train(config):
                 "Data type is not implemented")
 
     return train_loader, val_loader, train_ds, val_ds
-
+    
+#    return train_loader, val_loader, train_ds, val_ds
 
 def get_dataloader_test(config):
     if config['task_type'] in ["classification", "regression", "mil_classification"]:

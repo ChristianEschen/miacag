@@ -47,9 +47,12 @@ from miacag.dataloader.dataloader_base_monai import \
     base_monai_loader, LabelEncodeIntegerGraded
 from monai.data import GridPatchDataset, PatchDataset, PatchIter
 import os
-from miacag.dataloader.Classification._3D.dataset_mil import \
+from miacag.dataloader.Classification.dataset_mil import \
     Dataset, CacheDataset, SmartCacheDataset, PersistentDataset
     #artition_dataset_classes, partition_dataset
+import numpy as np
+from scipy.ndimage import convolve1d
+from miacag.model_utils.utils_regression import get_lds_kernel_window
 
 
 def reorder_rows(df):
@@ -77,37 +80,115 @@ class train_monai_classification_loader(base_monai_loader):
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         self.df = reorder_rows(self.df)
+        w_label_names = []
+        if config['labels_names'][0].startswith('sten'):
+            
+            self.max_target = 100
+        elif config['labels_names'][0].startwith('TIMI'):
+            self.max_target = 3
+        for label_name in config['labels_names']:
+            
+            self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+            w_label_names.append('weights_' + label_name)
+            self.df['weights_' + label_name] = self.weights
+        #self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] + w_label_names]
         self.data = self.df[
             self.features + config['labels_names'] +
-            ['rowid', "SOPInstanceUID"]]
+            ['rowid', "SOPInstanceUID"] + ['rowid'] + ['event'] + w_label_names]
+        
         self.data = self.data.to_dict('records')
+
+    def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
+            assert reweight in {'none', 'inverse', 'sqrt_inv'}
+            assert reweight != 'none' if lds else True, \
+                "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
+
+            value_dict = {x: 0 for x in range(max_target)}
+            labels = self.df[target_name].values*100
+         #   labels = generate_values()*100
+            labels = [int(i) for i in labels]
+            for label in labels:
+                value_dict[min(max_target - 1, int(label))] += 1
+            if reweight == 'sqrt_inv':
+                value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
+            elif reweight == 'inverse':
+                value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}  # clip weights for inverse re-weight
+            num_per_label = [value_dict[min(max_target - 1, int(label))] for label in labels]
+            if not len(num_per_label) or reweight == 'none':
+                return None
+            print(f"Using re-weighting: [{reweight.upper()}]")
+            
+            if lds:
+                lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+                print(f'Using LDS: [{lds_kernel.upper()}] ({lds_ks}/{lds_sigma})')
+                smoothed_value = convolve1d(
+                    np.asarray([v for _, v in value_dict.items()]), weights=lds_kernel_window, mode='constant')
+                num_per_label = [smoothed_value[min(max_target - 1, int(label))] for label in labels]
+         #   plt.hist(labels)
+         #   plt.show()
+          #  plt.hist(smoothed_value)
+          #  plt.show()
+            weights = [np.float32(1 / x) for x in num_per_label]
+            scaling = len(weights) / np.sum(weights)
+            weights = [scaling * x for x in weights]
+          #plt.hist(weights)
+          #  plt.show()
+            return weights
 
     def __call__(self):
         # define transforms for image
+        if self.config['task_type'] == 'mil_classification':
+            # this is the deterministic cache transforms
+            self.config['task_type']  = "classification"
+            train_transforms = [
+                    LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
+                    EnsureChannelFirstD(keys=self.features),
+                    # LabelEncodeIntegerGraded(
+                    #     keys=self.config['labels_names'],
+                    #     num_classes=self.config['model']['num_classes']),
+                    self.resampleORresize(),
+                    DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                    self.getMaybePad(),
+                    self.getCopy1to3Channels(),
+                    self.getClipChannels(),
+                    ScaleIntensityd(keys=self.features),
+                    self.maybeNormalize(),
+                    EnsureTyped(keys=self.features, data_type='tensor'),
+                    self.maybeToGpu(self.features),
+                    self.maybeTranslate(),
+                    self.maybeSpatialScaling(),
+                    self.maybeTemporalScaling(),
+                    self.maybeRotate(),
+                    self.CropTemporal(),
+                    ConcatItemsd(keys=self.features, name='inputs'),
+                    DeleteItemsd(keys=self.features),
+                    ]
+            self.config['task_type'] = "mil_classification"
+        else:
 
-        train_transforms = [
-                LoadImaged(keys=self.features),
-                EnsureChannelFirstD(keys=self.features),
-                # LabelEncodeIntegerGraded(
-                #     keys=self.config['labels_names'],
-                #     num_classes=self.config['model']['num_classes']),
-                self.resampleORresize(),
-                DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
-                self.getMaybePad(),
-                self.getCopy1to3Channels(),
-                self.getClipChannels(),
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(),
-                EnsureTyped(keys=self.features, data_type='tensor'),
-                self.maybeToGpu(self.features),
-                self.maybeTranslate(),
-                self.maybeSpatialScaling(),
-                self.maybeTemporalScaling(),
-                self.maybeRotate(),
-                self.CropTemporal(),
-                ConcatItemsd(keys=self.features, name='inputs'),
-                DeleteItemsd(keys=self.features),
-                ]
+            train_transforms = [
+                    LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
+                    EnsureChannelFirstD(keys=self.features),
+                    # LabelEncodeIntegerGraded(
+                    #     keys=self.config['labels_names'],
+                    #     num_classes=self.config['model']['num_classes']),
+                    self.resampleORresize(),
+                    DeleteItemsd(keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+                    self.getMaybePad(),
+                    self.getCopy1to3Channels(),
+                    self.getClipChannels(),
+                    ScaleIntensityd(keys=self.features),
+                    self.maybeNormalize(),
+                    EnsureTyped(keys=self.features, data_type='tensor'),
+                    self.maybeToGpu(self.features),
+                    self.maybeTranslate(),
+                    self.maybeSpatialScaling(),
+                    self.maybeTemporalScaling(),
+                    self.maybeRotate(),
+                    self.CropTemporal(),
+                    ConcatItemsd(keys=self.features, name='inputs'),
+                    DeleteItemsd(keys=self.features),
+                    ]
 
         train_transforms = Compose(train_transforms)
         train_transforms.set_random_state(seed=0)
@@ -191,7 +272,59 @@ class val_monai_classification_loader(base_monai_loader):
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", "PatientID",
              "StudyInstanceUID", "SeriesInstanceUID"]]
+        w_label_names = []
+        if config['labels_names'][0].startswith('sten'):
+            
+            self.max_target = 100
+        elif config['labels_names'][0].startwith('TIMI'):
+            self.max_target = 3
+        for label_name in config['labels_names']:
+            
+            self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+            w_label_names.append('weights_' + label_name)
+            self.df['weights_' + label_name] = self.weights
+        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] + w_label_names]
+        # make histogram of self.df['weights_' + label_name] to see if it is working
+       
         self.data = self.data.to_dict('records')
+
+    def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
+            assert reweight in {'none', 'inverse', 'sqrt_inv'}
+            assert reweight != 'none' if lds else True, \
+                "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
+
+            value_dict = {x: 0 for x in range(max_target)}
+            if self.max_target == 100:
+                labels = self.df[target_name].values*100
+         #   labels = generate_values()*100
+            labels = [int(i) for i in labels]
+            for label in labels:
+                value_dict[min(max_target - 1, int(label))] += 1
+            if reweight == 'sqrt_inv':
+                value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
+            elif reweight == 'inverse':
+                value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}  # clip weights for inverse re-weight
+            num_per_label = [value_dict[min(max_target - 1, int(label))] for label in labels]
+            if not len(num_per_label) or reweight == 'none':
+                return None
+            print(f"Using re-weighting: [{reweight.upper()}]")
+            
+            if lds:
+                lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+                print(f'Using LDS: [{lds_kernel.upper()}] ({lds_ks}/{lds_sigma})')
+                smoothed_value = convolve1d(
+                    np.asarray([v for _, v in value_dict.items()]), weights=lds_kernel_window, mode='constant')
+                num_per_label = [smoothed_value[min(max_target - 1, int(label))] for label in labels]
+         #   plt.hist(labels)
+         #   plt.show()
+          #  plt.hist(smoothed_value)
+          #  plt.show()
+            weights = [np.float32(1 / x) for x in num_per_label]
+            scaling = len(weights) / np.sum(weights)
+            weights = [scaling * x for x in weights]
+          #plt.hist(weights)
+          #  plt.show()
+            return weights
 
 
     def __call__(self):

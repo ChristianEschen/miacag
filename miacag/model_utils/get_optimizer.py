@@ -9,16 +9,14 @@ def get_optimizer(config, model, len_train):
     if config['optimizer']['type'] == 'adam':
         optimizer = torch.optim.Adam(
             model.parameters(),
-            lr=config['optimizer']['learning_rate'] *
-            float(os.environ['WORLD_SIZE']),
+            lr=config['optimizer']['learning_rate'],
             weight_decay=config['optimizer']['weight_decay'])
 
     elif config['optimizer']['type'] == 'sgd':
 
         optimizer = torch.optim.SGD(
             model.parameters(),
-            lr=config['optimizer']['learning_rate'] *
-            float(os.environ['WORLD_SIZE']),
+            lr=config['optimizer']['learning_rate'],
             momentum=config['optimizer']['momentum'],
             weight_decay=config['optimizer']
                                 ['weight_decay'])
@@ -54,6 +52,11 @@ def get_optimizer(config, model, len_train):
                 optimizer, config['trainer']['epochs'])
     else:
         lr_scheduler = False
+
+    # warmup_steps = 200
+    # base_lr = 0.000001
+    # lambda1 = lambda step: step / warmup_steps if step < warmup_steps else 1
+    # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
     return optimizer, lr_scheduler
 

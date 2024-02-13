@@ -47,7 +47,7 @@ from miacag.dataloader.dataloader_base_monai import \
     base_monai_loader, LabelEncodeIntegerGraded
 from monai.data import GridPatchDataset, PatchDataset, PatchIter
 import os
-from miacag.dataloader.Classification._2D.dataset_mil_2d import \
+from miacag.dataloader.Classification.dataset_mil import \
     Dataset, CacheDataset, SmartCacheDataset, PersistentDataset
     #artition_dataset_classes, partition_dataset
 

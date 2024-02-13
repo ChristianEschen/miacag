@@ -4,7 +4,6 @@ import torch
 import os
 import miacag.models.vision_transformer as vit
 from collections import OrderedDict
-from miacag.models.dino_vision_transformer import DinoVisionTransformer, Block, MemEffAttention
 from functools import partial
 
 class Identity(nn.Module):
@@ -125,8 +124,32 @@ def get_encoder(config, device):
             pretrained=False)
         if config['loaders']['mode'] != 'testing':
             model = getPretrainedWeights(config, model, device)
-        in_features = model.fc.in_features
-        model = nn.Sequential(*list(model.children())[:-2])
+        if config['task_type'] == 'mil_classification':
+            model.avgpool = nn.Identity()
+            in_features = model.fc.in_features
+            model.fc = nn.Identity()
+            model = nn.Sequential(*list(model.children())[:-2])
+        else:
+            in_features = model.fc.in_features
+            model = nn.Sequential(*list(model.children())[:-2])
+            #print('here')
+    elif config['model']['backbone'] == 'r2plus1_18_tiny':
+        model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
+            pretrained=False)
+        if config['loaders']['mode'] != 'testing':
+            model = getPretrainedWeights(config, model, device)
+        if config['task_type'] == 'mil_classification':
+            model.avgpool = nn.Identity()
+            in_features = model.fc.in_features
+            model.fc = nn.Identity()
+            model = nn.Sequential(*list(model.children())[:-7][:-1]) #nn.Sequential(*list(model.children())[:-7])
+            in_features = 64
+            print('not implemented jet')
+        else:
+            in_features = model.fc.in_features
+            model = nn.Sequential(*list(model.children())[:-2])
+            #print('here')
+        config['model']['backbone'] = 'r2plus1_18'
     elif config['model']['backbone'] == 'x3d_l':
         print('not implemented jet')
     elif config['model']['backbone'] == 'slowfast8x8':
@@ -240,9 +263,9 @@ def get_encoder(config, device):
         elif config['model']['backbone'] == 'vit_small':
             
             if config['model']['pretrain_type'] == 'supervised':
-                from timm.models import vit_small_patch16_224
-                import timm
-              #  model = timm.create_model('vit_small_patch16_224.augreg_in21k', pretrained=False)
+            #     from timm.models import vit_small_patch16_224
+            #     import timm
+            #   #  model = timm.create_model('vit_small_patch16_224.augreg_in21k', pretrained=False)
                 from dinov2.models.vision_transformer import DinoVisionTransformer, vit_small
         #    model = vit_small()
                 model = vit.__dict__[config['model']['backbone']](

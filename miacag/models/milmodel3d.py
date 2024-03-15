@@ -32,8 +32,9 @@ class MILModel(ImageToScalarModel):
         self.mil_mode = self.config['model']['mil_mode'].lower()
         self.attention = nn.Sequential()
         self.transformer = None  # type: Optional[nn.Module]
-        self.my_fc_temp = nn.Linear(self.in_features, self.in_features)
-        self.conv1d = nn.Conv1d(self.in_features, self.in_features, 1)
+        self.my_fc_temp = nn.Sequential(nn.Linear(self.in_features, self.in_features), nn.LayerNorm(self.in_features), nn.ReLU())
+        #nn.Linear(self.in_features, len(config['labels_names']))
+     #   self.conv1d = nn.Conv1d(self.in_features, self.in_features, 1)
         self.loss_uniques = self.config['labels_names']
         # define mil_mode
         if self.mil_mode in ["mean", "max"]:
@@ -200,7 +201,7 @@ class MILModel(ImageToScalarModel):
         x = maybePermuteInput(x, self.config)
         x = self.encoder(x) 
         x = self.reduce_feature_space(x) # what is this?
-        #x = self.my_fc_temp(x)
+        x = self.my_fc_temp(x)
         x = x.reshape(sh[0], sh[1], -1)
 
         xs = []
@@ -312,7 +313,7 @@ class MILModel(ImageToScalarModel):
             if self.config['model']['backbone'] in ["r50"]:
                 x = x.mean(dim=(-2, -1))
                 return x
-            elif self.config['model']['backbone'] in ["r2plus1_18"]:
+            elif self.config['model']['backbone'] in ["r2plus1_18", "x3d_s"]:
                 x = x.mean(dim=(-3, -2, -1))
                 return x
 

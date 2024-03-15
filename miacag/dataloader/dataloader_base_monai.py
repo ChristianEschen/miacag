@@ -148,7 +148,8 @@ class base_monai_loader(DataloaderBase):
                 keys=keys_,
                 spatial_size=[self.config['loaders']['Crop_height'],
                               self.config['loaders']['Crop_width'],
-                              self.config['loaders']['Center_crop_depth']])
+                              self.config['loaders']['Crop_depth']],
+                mode="constant")
         elif self.config['loaders']['mode'] in ['testing', 'prediction']:
             if self.config['task_type'] in ["classification",
                                             "regression",
@@ -158,7 +159,8 @@ class base_monai_loader(DataloaderBase):
                     keys=keys_,
                     spatial_size=[self.config['loaders']['Crop_height'],
                                   self.config['loaders']['Crop_width'],
-                                  self.config['loaders']['Center_crop_depth']])
+                                  self.config['loaders']['Crop_depth']],
+                    mode="constant")
             elif self.config['task_type'] == "segmentation":
                 pad = Identityd(keys=self.features + [self.config["labels_names"]])
             else:
@@ -313,7 +315,7 @@ class base_monai_loader(DataloaderBase):
         if self.config['loaders']['translate'] == 'True':
             translation = RandAffined(
                     keys=self.features,
-                    mode="bilinear",
+                    mode="nearest",
                     prob=0.2,
                     spatial_size=(self.config['loaders']['Resize_height'],
                                   self.config['loaders']['Resize_width'],
@@ -321,7 +323,7 @@ class base_monai_loader(DataloaderBase):
                     translate_range=(
                          int(0.22*self.config['loaders']['Resize_height']),
                          int(0.22*self.config['loaders']['Resize_width']),
-                         int(0.5*self.config['loaders']['Resize_depth'])),
+                         int(0.3*self.config['loaders']['Resize_depth'])),
                     padding_mode="zeros")
         else:
             translation = Identityd(keys=self.features)
@@ -394,7 +396,7 @@ class base_monai_loader(DataloaderBase):
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] in ['r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+        elif self.config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.485, 0.456, 0.406),
@@ -437,7 +439,7 @@ class base_monai_loader(DataloaderBase):
               #  -1,
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
-                self.config['loaders']['Crop_depth_cache']],
+                self.config['loaders']['Crop_depth']],
             random_size=False)
         return crop
 

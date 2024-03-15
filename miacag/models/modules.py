@@ -157,30 +157,28 @@ class ImageToScalarModel(EncoderModel):
             # test if loss_type startswith three conditions
             
             elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL', 'wfocall1'])):
-                # if config['model']['sigm'] == 'True':
-                # if self.config['task_type'] == 'mil_classification':
-                #     if self.config['model']['dimension'] == '2D+T':
-                #         pass
-                #         # self.fcs.append(
-                #         #     nn.Sequential(
-                #         #         nn.Linear(
-                #         #             self.in_features,
-                #         #             count_loss),
-                #         #         nn.Sigmoid()).to(device))
-                #     else:
                 if config["task_type"] == "mil_classification":
-                    for i in range(0, len(config['labels_names'])):
-                        self.fcs.append(
-                            nn.Sequential(
-                                # nn.Linear(
-                                #     self.in_features, self.in_features).to(device),
-                                # nn.ReLU(),
-                                nn.Linear(
-                                    self.in_features,
-                                    1).to(device),
-                                #nn.ReLU(),
-
-                                ))
+                    # for i in range(0, len(config['labels_names'])):
+                    #     self.fcs.append(
+                    #         nn.Sequential(
+                    #             # nn.Linear(
+                    #             #     self.in_features, self.in_features).to(device),
+                    #             # nn.ReLU(),
+                    #             nn.Linear(
+                    #                 self.in_features,
+                    #                 1).to(device),
+                    #             #nn.ReLU(),
+                    #             ))
+                    self.fcs.append(
+                        nn.Sequential(
+                            # nn.Linear(
+                            #     self.in_features, self.in_features).to(device),
+                            # nn.ReLU(),
+                            nn.Linear(
+                                self.in_features,
+                                len(config['labels_names'])).to(device),
+                            #nn.ReLU(),
+                            ))
                 else:   
                     self.fcs.append(
                         nn.Sequential(

@@ -397,13 +397,23 @@ class ClassificationLoader():
                 # except:
                 #     print('column not found')
                 #     pass
-
+        print('please changes these')
         if self.config['loaders']['mode'] in ['prediction', 'testing']:
-            self.val_df = self.df
+            if self.config['debugging'] == True:
+                self.val_df = self.df[self.df['phase'] == 'train']
+            else:
+                self.val_df = self.df
         else:
-            self.train_df = self.df[self.df['phase'] == 'train']
-            self.val_df = self.df[self.df['phase'] == 'val']
+           # self.train_df = self.df
+           # self.val_df = self.df
+            if self.config['debugging'] == True:
 
+                self.train_df = self.df[self.df['phase'] == 'train']
+                self.val_df = self.df[self.df['phase'] == 'train']
+            else:
+                self.train_df = self.df[self.df['phase'] == 'train']
+                self.val_df = self.df[self.df['phase'] == 'val']
+                
  
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] in ['dicom']:
@@ -437,11 +447,6 @@ class ClassificationLoader():
         train_ds = train_monai_classification_loader(
             self.train_df,
             config)
-        # else:
-        #     from miacag.dataloader.Classification._1D.Feature_vector_dataset import FeatureVectorDataset
-        #     train_ds = FeatureVectorDataset(self.train_df, config)
-            
-
 
         if config['weighted_sampler'] == 'True':
             weights = train_ds.weights
@@ -471,8 +476,6 @@ class ClassificationLoader():
                 self.val_df,
                 config)
         val_ds = val_ds()
-      #  patches_list_data_collate_read_patches_individual.__defaults__=(config['loaders']['nr_cine_loops'],config['loaders']['nr_patches'],config['loaders']['batchSize'])
-      #  patches_list_data_collate_fn.__defaults__=(config['loaders']['nr_cine_loops'],config['loaders']['nr_patches'],config['loaders']['batchSize'])
         if config['cache_num'] == 'standard':
             train_loader = DataLoader(
                 train_ds,
@@ -497,11 +500,12 @@ class ClassificationLoader():
         else:
             train_loader = ThreadDataLoader(
                 train_ds,
-                repeats=3, #repeats=10 gives improve utilization of the gpu
+                repeats=1, #repeats=10 gives improve utilization of the gpu
                 buffer_size=1,
                 sampler=sampler,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
+              #  persistent_workers=True,
                 num_workers=0, #config['num_workers'],
                 collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
                 pin_memory=False,
@@ -515,26 +519,7 @@ class ClassificationLoader():
                     collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,
                     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
-            
-            # train_loader = DataLoader(
-            #     train_ds,
-            #     sampler=sampler,
-            #     batch_size=config['loaders']['batchSize'],
-            #     shuffle=False,
-            #     num_workers=0, #config['num_workers'],
-            #     collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
-            #     pin_memory=False,
-            #     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
-            # with torch.no_grad():
-            #     val_loader = DataLoader(
-            #         val_ds,
-            #         persistent_workers=False,
-            #         batch_size=config['loaders']['batchSize'],
-            #         shuffle=False,
-            #         num_workers=0,
-            #         collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-            #         pin_memory=False,
-            #         drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
+        
         return train_loader, val_loader, train_ds, val_ds
 
     def get_classificationloader_patch_lvl_test(self, config):
@@ -543,10 +528,6 @@ class ClassificationLoader():
                 from miacag.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
-                # nr_repeat = config['loaders']['val_method']['patches']
-                # self.val_df = pd.DataFrame(np.repeat(
-                #     self.val_df.values, nr_repeat,
-                #     axis=0), columns=self.val_df.columns)
                 self.val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)

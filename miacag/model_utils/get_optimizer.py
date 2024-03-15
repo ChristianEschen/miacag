@@ -26,7 +26,10 @@ def get_optimizer(config, model, len_train):
             optimizer,
             step_size=config['lr_scheduler']['steps_for_drop'],
             gamma=0.1)
-    elif config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
+    elif config['lr_scheduler']['type'] == 'OneCycleLR':
+        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config['optimizer']['learning_rate'],
+                                                           steps_per_epoch=config['lr_scheduler']["steps_per_epoch"], epochs=config['trainer']['epochs'])
+    elif config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos', "warmup_const"]:
         if config['lr_scheduler']['type'] == 'poly':
             print('to be implemented')
             lr_scheduler = PolynomialLRDecay(
@@ -47,6 +50,10 @@ def get_optimizer(config, model, len_train):
                     warmup_iters=warmup_iters,
                     warmup_factor=1e-5,
                 )
+        elif config['lr_scheduler']['type'] == 'warmup_const':
+            scheduler1 = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=config['lr_scheduler']['lr_warmup'], total_iters=config['lr_scheduler']['nr_warmup_epochs'])
+            scheduler2 = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=config['optimizer']['learning_rate'], total_iters=config['lr_scheduler']['nr_warmup_epochs'])
+            lr_scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer, schedulers=[scheduler1, scheduler2], milestones=[2])
         elif config['lr_scheduler']['type'] == 'cos':
             lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, config['trainer']['epochs'])

@@ -93,12 +93,15 @@ def get_exp_name(config, rank, config_path):
 def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraining, debugging):
     print('loading config:', config_path)
     
+
+    with open(config_path_pretraining) as file:
+        config_pretraining = yaml.load(file, Loader=yaml.FullLoader)
     with open(config_path) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
         
-    with open(config_path_pretraining) as file:
-        config_pretraining = yaml.load(file, Loader=yaml.FullLoader)
-    config.update(config_pretraining)
+    for key, value in config_pretraining.items():
+        if key not in config:
+            config[key] = value
     mkFolder(config['output'])
     config['master_port'] = os.environ['MASTER_PORT']
     config['num_workers'] = num_workers
@@ -178,7 +181,6 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
             config['model']['pretrain_model']  = output_directory
             config['model']['pretrained'] = "None"
             
-    print('before for loop')
     # loop through all indicator tasks
     unique_index = list(dict.fromkeys(config['task_indicator']))
     for task_index in unique_index:
@@ -194,17 +196,14 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
             config_new['num_workers'] = num_workers
       #  print('before run task barrier')
         torch.distributed.barrier()
-        print('before run task')
         run_task(config_new, task_index, output_directory, output_table_name,
                 cpu, train_test_indicator=True)
         
     for task_index in unique_index:
-        print('running task idx', task_index)
         config_new = copy.deepcopy(config)
         torch.distributed.barrier()
         run_task(config_new, task_index, output_directory, output_table_name,
                 cpu, train_test_indicator=False)
-    print('pipeline done')
     return None
 
 #################################### this is new ##############################################
@@ -271,7 +270,6 @@ def plot_task_not_ddp(config_task, output_table_name, conf, loss_names):
 ####################################################################################
 def train_and_test(config_task):
    # torch.distributed.barrier()
-    print('train test func')
     train(config_task)
     config_task['model']['pretrain_model'] = config_task['output_directory']
     config_task['model']['pretrained'] = "None"
@@ -329,7 +327,6 @@ def plot_task(config_task, output_table_name, conf, loss_names):
 
 
 def run_task(config, task_index, output_directory, output_table_name, cpu, train_test_indicator):
-    print('run taask func')
     
     task_names = [
         name for i, name in zip(config['task_indicator'],
@@ -364,10 +361,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     config_task['output'] = output_directory
     config_task['output_directory'] = os.path.join(output_directory, task_names[0])
     
-    print('before mkfolder')
-   # if torch.distributed.get_rank() == 0:
     mkFolder(config_task['output_directory'])
-    #torch.distributed.barrier()
     config_task['table_name'] = output_table_name
     config_task['use_DDP'] = 'True'
     config_task['datasetFingerprintFile'] = None
@@ -381,9 +375,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     pred = [i + '_predictions' for i in config_task['labels_names']]
     
     
-    # test if loss is regression typ
    # torch.distributed.barrier()
-    print('before weight sampler')
     if loss_names[0] in ['CE']:
         config_task['weighted_sampler'] = "True"
     elif loss_names[0] in ['NNL']:
@@ -394,15 +386,6 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     # train(config_task)
 
     # # 5 eval model
-    # config_task['model']['pretrain_model'] = config_task['output_directory']
-    # config_task['model']['pretrained'] = "None"
-    # test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
-    # print('kill gpu processes')
-    # torch.distributed.barrier()
-    # # clear gpu memory
-    # torch.cuda.empty_cache()
-    #torch.distributed.barrier()
-    print('train test indicator')
     if train_test_indicator:
         train_and_test(config_task)
     else:

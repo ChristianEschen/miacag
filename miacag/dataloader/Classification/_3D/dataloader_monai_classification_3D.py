@@ -3,9 +3,8 @@ import monai
 from monai.data import list_data_collate, pad_list_data_collate
 import torch.distributed as dist
 from monai.transforms import (
-    AsChannelFirstd,
+    EnsureChannelFirstd, #FIXME
     RepeatChanneld,
-    AddChanneld,
     EnsureChannelFirstD,
     RandAffined,
     DeleteItemsd,
@@ -87,7 +86,7 @@ class train_monai_classification_loader(base_monai_loader):
             self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
             self.df['weights_' + label_name] = self.weights
-        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] + w_label_names]
+        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +"labels_predictions" + w_label_names]
         # make histogram of self.df['weights_' + label_name] to see if it is working
        
         self.data = self.data.to_dict('records')
@@ -97,8 +96,8 @@ class train_monai_classification_loader(base_monai_loader):
             LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
             EnsureChannelFirstD(keys=self.features),
             self.resampleORresize(),
-            DeleteItemsd(
-                keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True),
+            # DeleteItemsd(
+            #     keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True), #FIXME
             self.getMaybePad(),
             self.getCopy1to3Channels(),
             ScaleIntensityd(keys=self.features),
@@ -205,7 +204,7 @@ class val_monai_classification_loader(base_monai_loader):
             self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
             self.df['weights_' + label_name] = self.weights
-        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] + w_label_names]
+        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +"labels_predictions" +w_label_names]
         self.data = self.data.to_dict('records')
 
     def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
@@ -242,7 +241,7 @@ class val_monai_classification_loader(base_monai_loader):
                 LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
-                self.maybeDeleteMeta(),
+               # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
                 ScaleIntensityd(keys=self.features),

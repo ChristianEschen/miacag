@@ -42,6 +42,74 @@ def map_category(value):
     elif value == None:
         return 2.0
 
+def display_input_stats(data):
+    print('rowid', data['rowid'])
+    print('data shape', data['inputs'].shape)
+    print('data mean', data['inputs'].mean())
+    print('data std', data['inputs'].std())
+    print('data max', data['inputs'].max())
+    print('data min', data['inputs'].min())
+    for p in range(0, data["inputs"].shape[1]):
+        print('patch', p)
+        print('patch mean', data['inputs'][:, p, :, :, :, :].mean())
+        print('patch std', data['inputs'][:, p, :, :, :, :].std())
+        print('patch max', data['inputs'][:, p, :, :, :, :].max())
+        print('patch min', data['inputs'][:, p, :, :, :, :].min())
+def display_input(data, config):
+    # data is a torch tensor of size [bs, patches, ch, h, w, depth]
+    if config['model']['dimension'] == '2D':
+        counter = 0
+        for i in range(0, data.shape[0]):
+            for p in range(0, data.shape[1]):
+                print('counter', counter)   
+
+                counter += 1
+                slice = data[i, p, :, :, :]
+                # normalize slice to [0, 1]
+                slice = (slice - slice.min()) / (slice.max() - slice.min())
+                slice = slice.cpu().numpy()
+                # cast to uint8
+                slice = (slice * 255).astype(np.uint8)
+                # permute slice to [h, w, ch]
+                slice = np.transpose(slice, (1, 2, 0))
+                
+                
+                # show torch tensor as image
+                import matplotlib.pyplot as plt
+                import matplotlib
+                matplotlib.use('TkAgg')
+                plt.imshow(slice)
+                # set grayscale color map
+                plt.set_cmap('gray')
+                plt.show()
+    else:
+        
+        counter = 0
+        for i in range(0, data.shape[0]):
+            for p in range(0, data.shape[1]):
+                for d in range(0, data.shape[5]):
+                    print('counter', counter)   
+
+                    counter += 1
+                    slice = data[i, p, :, :, :, d]
+                    # normalize slice to [0, 1]
+                    slice = (slice - slice.min()) / (slice.max() - slice.min())
+                    slice = slice.cpu().numpy()
+                    # cast to uint8
+                    slice = (slice * 255).astype(np.uint8)
+                    # permute slice to [h, w, ch]
+                    slice = np.transpose(slice, (1, 2, 0))
+                    
+                    
+                    # show torch tensor as image
+                    import matplotlib.pyplot as plt
+                    import matplotlib
+                    matplotlib.use('TkAgg')
+                    plt.imshow(slice)
+                    # set grayscale color map
+                    plt.set_cmap('gray')
+                    plt.show()
+    print('done')
 def encode_labels_predictions_in_corner(data, categories):
     batch_size = data["inputs"].shape[0]
     # Encode categorical values into the top-left corner of each patch
@@ -61,11 +129,20 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 }
     if config['task_type'] in ["classification", "regression", "mil_classification"]:
         # rename data["DcmPathFlatten"] to data["inputs"]
-        data['inputs'] = data['DcmPathFlatten']
+        if config["task_type"] == "mil_classification":
+            data['inputs'] = data['DcmPathFlatten']
+        data["inputs"] = torch.tensor(data["inputs"])
         data = to_device(data, device, ['inputs'])
-        data = encode_labels_predictions_in_corner(data, data['labels_predictions'])
-       # print('data mean', data['inputs'].mean())
-       # print('data std', data['inputs'].std())
+        
+       # data = encode_labels_predictions_in_corner(data, data['labels_predictions'])
+        # display_input_stats(data)
+        # import matplotlib.pyplot as plt
+        # import matplotlib
+        # matplotlib.use('TkAgg')
+        # display_input(data['inputs'])
+      #  print('data mean', data['inputs'].mean())
+      #  print('data std', data['inputs'].std())
+        # display each frame it consit of tensor of shape [bs, pathcies, ch, h, w, depth]
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
             data = to_device(data, device, ["weights_" + i for i in config['labels_names']])
         data = to_dtype(data, config['labels_names'], config)

@@ -59,8 +59,8 @@ def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
-    if config['loaders']['mode'] != 'testing':
-        loss_tot = loss_tot.requires_grad_()
+    # if config['loaders']['mode'] != 'testing':
+    #     loss_tot = loss_tot.requires_grad_()
 
     for count_idx, loss_name in enumerate(config['loss']['groups_names']):
         labels = stack_labels(data, config, loss_name)

@@ -42,14 +42,11 @@ def train_one_step(model, data, criterion,
                    running_metric_train,
                    epoch,
                    tb_step_writer, scaler, device, iter_minibatch):
-    model.train()
-    # combined_tensor = torch.cat([data[label_name] for label_name in config['labels_names']], dim=0)
-    
-    # before i started with     optimizer.zero_grad()
-
+    model.train()    
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
-            outputs = model(data['inputs'].as_tensor())
+       # with torch.autocast(device_type='cuda', dtype=torch.float16):
+            outputs = model(data['inputs'])
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
@@ -58,15 +55,11 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         scaler.scale(loss).backward()
-       # scaler.step(optimizer)
-        #scaler.update()
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()
-       # optimizer.zero_grad()
 
-      #  optimizer.step()
     else:
         outputs = model(data['inputs'].as_tensor())
         losses, loss = get_losses_class(config,
@@ -77,12 +70,11 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         loss.backward()
-        #optimizer.step()
- #       optimizer.zero_grad()
-##
+
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
                 optimizer.step()
                 optimizer.zero_grad()
+    
     outputs = wrap_outputs_to_dict(outputs, config)
     losses = create_loss_dict(config, losses, loss)
     metrics, losses_metric = get_loss_metric_class(
@@ -103,6 +95,13 @@ def train_one_epoch(model, criterion,
         iter_minibatch += 1
 
         data = get_data_from_loader(data, config, device)
+      #  if epoch >= 2:
+      
+        # from miacag.dataloader.get_dataloader import display_input, display_input_stats
+        #from miacag.dataloader.get_dataloader import display_input
+        #if i ==1:
+        #    display_input(data["inputs"], config)
+        #display_input_stats(data)
        # print('1 prox', data['sten_proc_1_prox_rca_transformed'])
       # print('2 midt', data['sten_proc_2_midt_rca_transformed'])
         # if epoch < 10:
@@ -137,17 +136,17 @@ def train_one_epoch(model, criterion,
         metrics, device)
     running_loss_train, loss_tb = normalize_metrics(
         loss_metric, device)
-    # running_loss_train = normalize_metrics(
-    #     running_loss_train,
-    #     config,
-    #     len(train_loader.dataset.data)
-    #     if config['cache_num'] == 'None' else config['cache_num_train'])
 
     loss_tbe, metric_tb = write_tensorboard(loss_tb,
                                             metric_tb,
                                             writer,
                                             epoch,
                                             'train')
+    if torch.distributed.get_rank() == 0:
+        writer.add_scalar(
+            "learning rate",
+             lr_scheduler.get_last_lr()[0],  # losses[loss],
+             epoch)
     return iter_minibatch
 
 

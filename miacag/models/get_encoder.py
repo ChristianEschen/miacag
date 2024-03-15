@@ -107,6 +107,8 @@ def getPretrainedWeights(config, model, device):
 
 
 def get_encoder(config, device):
+
+
     if config['loaders']['mode'] != 'testing':
         pretrained = config['model']['pretrained']
     else:
@@ -170,23 +172,39 @@ def get_encoder(config, device):
         model = nn.Sequential(
             *(list(model.blocks[:-1].children()) +
               list(model.blocks[-1].children())[:-3]))
+    elif config['model']['backbone'] == 'swin_s':
+        model = nets.torchvision_fc.models.video.swin3d_s()
+        in_features = model.norm.normalized_shape[0]
 
+     #   model.avgpool = Identity()
+        model.head =torch.nn.Identity()
+        
+    elif config['model']['backbone'] == 'swin_s_tiny':
+        model = nets.torchvision_fc.models.video.swin3d_s()
+        in_features = model.norm.normalized_shape[0]
+
+     #   model.avgpool = Identity()
+        model.head =torch.nn.Identity()
+      #  model.norm = torch.nn.Identity()
     elif config['model']['backbone'] in ["mvit_base_16x4", 'mvit_base_32x3']:
-        import pytorchvideo.models.vision_transformers as VT
-        model = VT.create_multiscale_vision_transformers(
-            spatial_size=(config['loaders']['Crop_height'],
-                          config['loaders']['Crop_width']),
-            temporal_size=config['loaders']['Crop_depth'],
-            embed_dim_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
-            atten_head_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
-            pool_q_stride_size=[[1, 1, 2, 2], [3, 1, 2, 2], [14, 1, 2, 2]],
-            pool_kv_stride_size=None,
-            pool_kv_stride_adaptive=[1, 8, 8],
-            pool_kvq_kernel=[3, 3, 3])
+     #   import pytorchvideo.models.vision_transformers as VT
+        # model = VT.create_multiscale_vision_transformers(
+        #     spatial_size=(config['loaders']['Crop_height'],
+        #                   config['loaders']['Crop_width']),
+        #     temporal_size=config['loaders']['Crop_depth'],
+        #     embed_dim_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
+        #     atten_head_mul=[[1, 2.0], [3, 2.0], [14, 2.0]],
+        #     pool_q_stride_size=[[1, 1, 2, 2], [3, 1, 2, 2], [14, 1, 2, 2]],
+        #     pool_kv_stride_size=None,
+        #     pool_kv_stride_adaptive=[1, 8, 8],
+        #     pool_kvq_kernel=[3, 3, 3])
+        model = nets.torchvision_fc.models.video.mvit_v1_b()
+
         if config['loaders']['mode'] != 'testing':
             model = getPretrainedWeights(config, model, device)
-        in_features = model.head.proj.in_features
+        in_features = model.norm.normalized_shape[0]
         model.head.proj = Identity()
+        model.head =torch.nn.Identity()
         
     elif config['model']['backbone'] in [
         'pretrain_videomae_small_patch16_224',
@@ -310,6 +328,7 @@ def modelsRequiredPermute():
         "vit_base_patch16",
         "vit_large_patch16",
         "vit_huge_patch14",
+        "swin_s",
         ]
     return model_list
 

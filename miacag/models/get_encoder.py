@@ -15,7 +15,7 @@ class Identity(nn.Module):
 
 
 def getPretrainedWeights(config, model, device):
-    if config['model']['pretrained'] == "True":
+    if config['model']['pretrained'] in [True, "True"]:
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
             "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
@@ -35,8 +35,21 @@ def getPretrainedWeights(config, model, device):
                     ['x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3']:
 
                 model.load_state_dict(loaded_model['model_state'])
+            elif config['model']['backbone'] in ["vit_large_3d"]:
+                loaded_model = loaded_model["encoder"]
+                loaded_model = {k.replace('module.', ''): v for k, v in loaded_model.items()}
+                loaded_model = {k.replace('backbone.', ''): v for k, v in loaded_model.items()}
+                for k, v in model.state_dict().items():
+                    if k not in loaded_model:
+                        print(f'key "{k}" could not be found in loaded state dict')
+                    elif loaded_model[k].shape != v.shape:
+                        print(f'key "{k}" is of different shape in model and loaded state dict')
+                        loaded_model[k] = v
+                model.load_state_dict(loaded_model, strict=False)
+
             else:
                 model.load_state_dict(loaded_model)
+                
         else:
             if config['model']['backbone'] in ['dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
                 if config['model']['pretrain_type'] =='ijepa':
@@ -84,18 +97,12 @@ def getPretrainedWeights(config, model, device):
             #                           map_location=device)
             # remove all values from loaded_model dict starting with decoder
             # loaded_model = {k:v for k,v in loaded_model['model'].items() if not k.startswith("decoder")}
-
-    elif config['model']['pretrained'] in ["False", "None"]:
-        if config['model']['backbone'] != 'r50':
-            model.head_drop=Identity()
-            model.head=Identity()
-            pass
-        else:
-            pass    
+ 
     else:
     #    if torch.distributed.get_rank() == 0:
         dirname = os.path.dirname(__file__)
         model_path = os.path.join(
+            
                         config['model']['pretrain_model'],
                         'model.pt')
         loaded_model = torch.load(
@@ -103,6 +110,18 @@ def getPretrainedWeights(config, model, device):
                 map_location=device)
 
         model.load_state_dict(loaded_model)
+        
+        loaded_model = {k.replace('encoder.', ''): v for k, v in loaded_model.items()}
+
+
+#   #      loaded_model = {k.replace('backbone.', ''): v for k, v in loaded_model.items()}
+#         for k, v in model.state_dict().items():
+#             if k not in loaded_model:
+#                 print(f'key "{k}" could not be found in loaded state dict')
+#             elif loaded_model[k].shape != v.shape:
+#                 print(f'key "{k}" is of different shape in model and loaded state dict')
+#                 loaded_model[k] = v
+#         model.load_state_dict(loaded_model, strict=False)
     return model
 
 
@@ -113,6 +132,10 @@ def get_encoder(config, device):
         pretrained = config['model']['pretrained']
     else:
         pretrained = False
+    # if config['model']['pretrained'] == "False":
+    #     pretrained = False
+    # else:
+    #     pretrained = config['model']['pretrained']
 
     # Get model
     if config['model']['backbone'] == 'r3d_18':
@@ -132,9 +155,12 @@ def get_encoder(config, device):
             model.fc = nn.Identity()
             model = nn.Sequential(*list(model.children())[:-2])
         else:
+            # in_features = model.fc.in_features
+            # model = nn.Sequential(*list(model.children())[:-2])
+            model.avgpool = nn.Identity()
             in_features = model.fc.in_features
+            model.fc = nn.Identity()
             model = nn.Sequential(*list(model.children())[:-2])
-            #print('here')
     elif config['model']['backbone'] == 'r2plus1_18_tiny':
         model = nets.torchvision_fc.models.video.resnet.r2plus1d_18(
             pretrained=False)
@@ -309,6 +335,19 @@ def get_encoder(config, device):
             model.head = Identity()
             model.head_drop = Identity()
         in_features = model.norm.normalized_shape[0]
+        
+    
+    elif config['model']['backbone'] == 'vit_tiny_3d':
+        from miacag.models.vision_transformer3d import vit_tiny
+        model = vit_tiny(patch_size=16, img_size=224, num_frames=config['loaders']['Crop_depth'] )
+        in_features = model.norm.normalized_shape[0]
+        
+    elif config['model']['backbone'] == 'vit_large_3d':
+        from miacag.models.vision_transformer3d import vit_large
+        model = vit_large(patch_size=16, img_size=224, num_frames=config['loaders']['Crop_depth'] )
+        model = getPretrainedWeights(config, model, device)
+        
+        in_features = model.norm.normalized_shape[0]
     else:
         raise ValueError('not implemented')
 
@@ -328,6 +367,8 @@ def modelsRequiredPermute():
         "vit_base_patch16",
         "vit_large_patch16",
         "vit_huge_patch14",
+        "vit_tiny_3d",
+        "vit_large_3d",
         "swin_s",
         ]
     return model_list

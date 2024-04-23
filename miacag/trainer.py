@@ -17,10 +17,13 @@ from monai.utils import set_determinism
 from miacag.models.modules import get_loss_names_groups
 import gc   
 
-def should_validate(last_validation_time):
+def should_validate(last_validation_time, val_frequency=30):
     current_time = time.time()
     elapsed_since_last_validation = current_time - last_validation_time
-    return elapsed_since_last_validation >= 60  # 5 hours
+    if elapsed_since_last_validation >= val_frequency:  # 5 hours
+        return 1
+    else:
+        return 0
 
 
 def train(config):
@@ -59,7 +62,8 @@ def train(config):
     train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
 
     # Get loss func
-    criterion = get_loss_func(config)
+    criterion_train = get_loss_func(config, train=True)
+    criterion_val = get_loss_func(config, train=False)
     # Get optimizer
     optimizer, lr_scheduler = get_optimizer(config,
                                             model,
@@ -78,25 +82,13 @@ def train(config):
 
     #  ---- Start training loop ----#
     iter_minibatch = 0
-    for epoch in range(0, config['trainer']['epochs']):
-        print('epoch nr', epoch)
-        # train one epoch
-
-        # lr = warmup_learning_rate(epoch, 200, config['optimizer']['learning_rate'], 0.00001)
-
-        # if epoch < 200:
-        #     # Linearly increase the learning rate
-        #     #warmup_factor = (base_lr - initial_lr) / warmup_steps
-        #     #lr = initial_lr + step * warmup_factor
-        #     lr = 0.00001
-        # else:
-        #     # Keep the learning rate constant after warmup
-        #     lr =  optimizer.param_groups[0]["lr"]
-        # # Update the optimizer's learning rate
-        # for param_group in optimizer.param_groups:
-        #     param_group['lr'] = lr
     
-        train_one_epoch(model, criterion,
+    for epoch in range(0, config['trainer']['epochs']):
+        # print only every 100 epochs
+        if epoch % 100 == 0:
+            print('epoch nr', epoch)
+        # train one epoch
+        iter_minibatch = train_one_epoch(model, criterion_train,
                         train_loader, device, epoch,
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
@@ -104,22 +96,24 @@ def train(config):
 
         if config['cache_num'] not in  ['standard', 'None']:
             train_ds.update_cache()
+           # train_ds.set_data()
 
         # Check elapsed time since last validation
         if dist.get_rank() == 0:
-            validate_now = should_validate(last_validation_time)
+            validate_now = should_validate(last_validation_time,
+                                           config['trainer']['validate_frequency'])
         else:
-            validate_now = None
+            validate_now = 0
 
         # Broadcast decision to all nodes
         validate_now = torch.tensor(validate_now).to(device)
+
         dist.broadcast(validate_now, src=0)
         validate_now = validate_now.item()  # Convert back to Python bool
 
         # validate if validate_now is True or epoch is 0
         if epoch == 0 or validate_now:
-            print('doing validation')
-            metric_dict_val = val_one_epoch(model, criterion, config,
+            metric_dict_val = val_one_epoch(model, criterion_val, config,
                                             val_loader, device,
                                             running_metric_val,
                                             running_loss_val, writer, epoch)
@@ -139,23 +133,12 @@ def train(config):
 
     if config['cache_num'] not in ['standard', 'None']:
         train_ds.shutdown()
-
-    # temp #
-    if early_stop is False:
-        if torch.distributed.get_rank() == 0:
-            save_model(model, writer, config)
-    # if torch.distributed.get_rank() == 0:
-    #     saver(metric_dict_val, writer, config)
     print('Finished Training')
+    if torch.distributed.get_rank() == 0:
+        saver(metric_dict_val, writer, config)
+
     print('training loop (s)', time.time()-starter)
-    # dist.destroy_process_group()
     del model
-    # del other variables that are not needed anymore
-    # del optimizer, lr_scheduler, criterion, scaler
-    # del running_loss_train, running_metric_train, running_loss_val, \
-    #     running_metric_val
-    # del train_ds, train_loader, val_loader
-    # train_loader, val_loader = None, None
     gc.collect()
     torch.cuda.empty_cache()
     

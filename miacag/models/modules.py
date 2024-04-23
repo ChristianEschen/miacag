@@ -140,10 +140,17 @@ class ImageToScalarModel(EncoderModel):
             #         self.config['loss']['name'],
             #         loss_type, self.config['model']['num_classes'])
             count_loss = self.config['loss']['groups_counts'][loss_count_idx]
-            if loss_type.startswith('CE'):
+            if loss_type.startswith(tuple(['CE'])):
                 self.fcs.append(nn.Linear(
                         self.in_features,
                         config['model']['num_classes'][loss_count_idx]).to(device))
+                
+            elif loss_type.startswith(tuple(['NNL'])):
+                self.fcs.append(nn.Linear(
+                        self.in_features,
+                        config['model']['num_classes'][loss_count_idx]).to(device))
+                # if loss_type.startswith(tuple(['NNL'])):
+                #     self.fcs.append(nn.Sigmoid())
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(
@@ -156,7 +163,7 @@ class ImageToScalarModel(EncoderModel):
                         nn.ReLU())
             # test if loss_type startswith three conditions
             
-            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL', 'wfocall1'])):
+            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'wfocall1'])):
                 if config["task_type"] == "mil_classification":
                     # for i in range(0, len(config['labels_names'])):
                     #     self.fcs.append(
@@ -171,13 +178,13 @@ class ImageToScalarModel(EncoderModel):
                     #             ))
                     self.fcs.append(
                         nn.Sequential(
-                            # nn.Linear(
-                            #     self.in_features, self.in_features).to(device),
-                            # nn.ReLU(),
+                            nn.Linear(
+                                self.in_features, self.in_features).to(device),
+                            nn.ReLU(),
                             nn.Linear(
                                 self.in_features,
                                 len(config['labels_names'])).to(device),
-                            #nn.ReLU(),
+                            nn.ReLU(),
                             ))
                 else:   
                     self.fcs.append(
@@ -212,7 +219,12 @@ class ImageToScalarModel(EncoderModel):
                 "vit_small_patch16_224", "vit_large_patch16_224",
                 "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
                 "vit_huge_patch14"]:
-                p = p.mean(dim=(-3, -2, -1))
+                
+                if self.config['model']['backbone'] in [
+                "vit_tiny_3d", "vit_small_3d", "vit_base_3d", "vit_large_3d"]:
+                    p = p.mean(dim=(-2))
+                else:
+                    p = p.mean(dim=(-3, -2, -1))
             else:
                 pass
         elif self.dimension == 'tabular':

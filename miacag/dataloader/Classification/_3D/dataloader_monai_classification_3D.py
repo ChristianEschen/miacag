@@ -49,10 +49,59 @@ import numpy as np
 from scipy.ndimage import convolve1d
 from miacag.model_utils.utils_regression import get_lds_kernel_window
 import numpy as np
+from miacag.dataloader.dataloader_base import _get_weights_classification
+from sklearn.preprocessing import StandardScaler
+from miacag.utils.survival_utils import LabTransDiscreteTime
+import random
+import pandas as pd
+import torch
 # import matplotlib
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
 # matplotlib.use( 'tkagg' )
+
+
+
+class RandReplicateSliceTransform(MapTransform):
+    """
+    A transformation class to select a random 2D slice from a 3D volume and replicate it.
+    The slice selection is normally distributed around the center of the volume.
+    """
+    def __init__(self, keys, num_slices=32, prob=0.2):
+        super().__init__(keys)
+        self.num_slices = num_slices
+        self.prob = prob  
+
+    def __call__(self, data):
+        d = dict(data)  # Create a shallow copy to ensure source data is not modified
+
+        apply_transform = np.random.rand() < self.prob 
+        if apply_transform:
+            for key in self.keys:
+                x = d[key]
+                mid_slice = float(x.shape[-1] // 2)  # Assuming x is in the shape [C, D, H, W] or [D, H, W]
+                std_dev = float(np.array(range(0,x.shape[-1])).std()) # Standard deviation
+
+                if torch.is_tensor(x):
+                    # Normal distribution centered at the middle slice, for tensors
+                    slice_idx  = int(torch.normal(mean=torch.tensor([mid_slice]), std=torch.tensor([std_dev])).clamp(0,x.shape[-1]-1).item())
+                #   slice_idx = 32
+                    selected_slice = x[:, :, :, slice_idx]
+                    replicated_slices = torch.unsqueeze(selected_slice, -1).repeat(1, 1, 1, self.num_slices)
+                else:
+                    raise ValueError("not implemeted for np")
+                    
+                    # Normal distribution for numpy arrays
+                    slice_idx = int(np.random.normal(mid_slice, std_dev))
+                    slice_idx = np.clip(slice_idx, 0, x.shape[-1] - 1)
+                    slice_idx = 32
+
+                    selected_slice = x[:, :, :, slice_idx]
+                    replicated_slices = np.repeat(selected_slice[np.newaxis, :, :], self.num_slices, axis=0)
+                
+                d[key] = replicated_slices
+        
+        return d
 def generate_values(n=100):
     # Generate values around 0.7 using a normal distribution
     values_around_70 = np.random.normal(0.7, 0.05, n//2)
@@ -70,25 +119,153 @@ def generate_values(n=100):
     np.random.shuffle(combined_values)
     
     return combined_values
+def _prepare_weights(df, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
+    assert reweight in {'none', 'inverse', 'sqrt_inv'}
+    assert reweight != 'none' if lds else True, \
+        "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
 
+    value_dict = {x: 0 for x in range(max_target)}
+    labels = df[target_name].values * 100
+
+    # Handling NaN values explicitly
+    labels = [int(i) if not np.isnan(i) else np.nan for i in labels]
+
+    for label in labels:
+        if not np.isnan(label):
+            value_dict[min(max_target - 1, int(label))] += 1
+
+    # Adjust weight calculation to handle NaNs
+    num_per_label = [value_dict[min(max_target - 1, int(label))] if not np.isnan(label) else np.nan for label in labels]
+
+    if reweight == 'sqrt_inv':
+        value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
+    elif reweight == 'inverse':
+        value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}
+
+    if lds:
+        lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+        print(f'Using LDS: [{lds_kernel.upper()}] ({lds_ks}/{lds_sigma})')
+        smoothed_value = convolve1d(
+            np.asarray([v for _, v in value_dict.items()]), weights=lds_kernel_window, mode='constant')
+        num_per_label = [smoothed_value[min(max_target - 1, int(label))] if not np.isnan(label) else np.nan for label in labels]
+
+    # Calculate weights while handling NaNs
+    weights = [np.float32(1 / x) if not np.isnan(x) else np.nan for x in num_per_label]
+
+    # Adjust scaling to exclude NaNs
+    valid_weights = [w for w in weights if not np.isnan(w)]
+    scaling = len(valid_weights) / np.sum(valid_weights)
+    weights = [scaling * x if not np.isnan(x) else np.nan for x in weights]
+
+    return weights
+def generate_debug_label(len_vector, num_classes):
+    values = list(range(0, num_classes))
+
+    # Start by adding one of each required value.
+    vector = values[:]
+
+    # Fill the rest of the vector with random choices from the required values.
+    while len(vector) < len_vector:
+        vector.append(random.choice(values))
+    return vector
+def generate_weights_for_single_label(df, config):
+   # raise NotImplementedError('This function is not implemented yet')
+    if config['labels_names'][0].startswith('koronar') or config['labels_names'][0].startswith('treatment') or config['labels_names'][0].startswith('labels_'):
+        # generate random values for labels with number of classes specificed by:
+        num_classes = len(config['labels_dict']) - 1
+        #generate values covering every labels with number of classes (num_classes)
+      #  labels_debug = generate_debug_label(len(df), num_classes)
+        # insert to df with labels_names
+     #   df[config['labels_names'][0]] = labels_debug
+        labels_to_weight = config['labels_names']
+        
+
+    elif config['labels_names'][0].startswith('duration'):
+        num_classes = 2
+        #generate values covering every labels with number of classes (num_classes)
+      #  labels_debug = generate_debug_label(len(df), num_classes)
+        # insert to df with labels_names
+        
+        labels_to_weight = ['event']
+     #   df[[labels_to_weight][0]] = labels_debug
+    else:
+        ValueError('labels_names not recognized')
+    return df, labels_to_weight
+    
+    
 class train_monai_classification_loader(base_monai_loader):
     def __init__(self, df, config):
         super(base_monai_loader, self).__init__(
             df,
             config)
-        if config['weighted_sampler'] == 'True':
-            self.getSampler()
+        # if config['weighted_sampler'] == 'True':
+        #     self.getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-        w_label_names = []
-        for label_name in config['labels_names']:
+        #######################################################################
+        # # old
+        # w_label_names = []
+        # for label_name in config['labels_names']:
             
-            self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+        #     self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+        #     w_label_names.append('weights_' + label_name)
+        #     self.df['weights_' + label_name] = self.weights
+        # self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +["labels_predictions"] + w_label_names]
+        ########################################################################
+
+        if self.config['labels_names'][0].startswith('treatment'):
+            # drop rows where the column self.config['labels_names'][0] is equal to 4
+            self.df = self.df[self.df[self.config['labels_names'][0]] != 4]
+        w_label_names = []
+        if config['labels_names'][0].startswith('sten'):
+            
+            self.max_target = 100
+        elif config['labels_names'][0].startswith('ffr'):
+            self.max_target = 100
+
+        elif config['labels_names'][0].startswith('timi'):
+            self.max_target = 3
+        else:
+            self.max_target = 100    
+        for label_name in config['labels_names']:
+            self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
             self.df['weights_' + label_name] = self.weights
-        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +"labels_predictions" + w_label_names]
-        # make histogram of self.df['weights_' + label_name] to see if it is working
-       
+        #self.data = self.df[self.features + config['labels_na
+        if self.config['loss']['name'][0] == 'NNL':
+            # start with censor after followup
+            self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
+           # self.df = pd.DataFrame({"duration_transformed": np.random.randint(1, 551, size=100), "event": np.random.randint(0, 2, size=100)})
+
+            self.labtrans = LabTransDiscreteTime(
+                cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
+                scheme='quantiles')
+
+            get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
+
+            target_trains = self.labtrans.fit_transform(*get_target(self.df))
+
+            self.df[self.config['labels_names'][0]] = target_trains[0]
+            
+            self.df['event'] = target_trains[1]
+            #self.config['labtrans'] = self.labtrans
+            self.config['cuts'] = self.labtrans.cuts
+            event = ['event']
+        else:
+            event = []
+        
+        if self.config['labels_names'][0].startswith('koronar') or self.config['labels_names'][0].startswith('duration') or self.config['labels_names'][0].startswith('treatment') or self.config['labels_names'][0].startswith('labels_'):
+            self.df, labels_to_weight = generate_weights_for_single_label(self.df, self.config)
+
+            self.weights = _get_weights_classification(self.df, labels_to_weight , config)
+          #  self.weights_cat = self._compute_weights(self.df, config)
+
+
+        self.data = self.df[
+            self.features + config['labels_names'] +
+            ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
+             "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed']]
+        self.data.fillna(value=np.nan, inplace=True)
         self.data = self.data.to_dict('records')
 
     def transformations(self):
@@ -100,15 +277,16 @@ class train_monai_classification_loader(base_monai_loader):
             #     keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True), #FIXME
             self.getMaybePad(),
             self.getCopy1to3Channels(),
-            ScaleIntensityd(keys=self.features),
-            self.maybeNormalize(),
             EnsureTyped(keys=self.features, data_type='tensor'),
             self.maybeToGpu(self.features),
+          #  RandReplicateSliceTransform(keys=self.features, num_slices=self.config['loaders']['Crop_depth'], prob=0.5),
             self.maybeTranslate(),
             self.maybeSpatialScaling(),
             self.maybeTemporalScaling(),
             self.maybeRotate(),
             self.CropTemporal(),
+            ScaleIntensityd(keys=self.features),
+            self.maybeNormalize(),
             ConcatItemsd(keys=self.features, name='inputs'),
             DeleteItemsd(keys=self.features),
             ]
@@ -196,15 +374,83 @@ class val_monai_classification_loader(base_monai_loader):
 
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
-     #   self.data = self.df[self.features + config['labels_names'] + ['rowid']]
+        if self.config['labels_names'][0].startswith('treatment'):
+            # drop rows where the column self.config['labels_names'][0] is equal to 4
+            self.df = self.df[self.df[self.config['labels_names'][0]] != 4]
         w_label_names = []
-
-        for label_name in config['labels_names']:
+        if config['labels_names'][0].startswith('sten'):
             
-            self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+            self.max_target = 100
+        elif config['labels_names'][0].startswith('ffr'):
+            self.max_target = 100
+
+        elif config['labels_names'][0].startswith('timi'):
+            self.max_target = 3
+        else:
+            self.max_target = 100    
+        for label_name in config['labels_names']:
+            self.df[label_name] = self.df[label_name].fillna(0)
+
+            self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
             self.df['weights_' + label_name] = self.weights
-        self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +"labels_predictions" +w_label_names]
+        #self.data = self.df[self.features + config['labels_na
+        if self.config['loss']['name'][0] == 'NNL':
+            self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
+
+            if self.config["loaders"]["mode"] != 'training':
+                cuts=self.config['cuts']
+            else:
+                cuts=self.config['cuts']
+            self.labtrans = LabTransDiscreteTime(
+                cuts=cuts,
+                #cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
+                )
+            
+            get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
+            
+            target_trains = self.labtrans.fit_transform(*get_target(self.df))
+            
+            self.df[self.config['labels_names'][0]] = target_trains[0]
+            
+            self.df['event'] = target_trains[1]
+           # self.config['labtrans'] = self.labtrans
+           # self.config['cuts'] = self.labtrans.cuts
+            event = ['event']
+        else:
+            event = []
+        
+        if self.config['labels_names'][0].startswith('koronar') or self.config['labels_names'][0].startswith('duration') or self.config['labels_names'][0].startswith('treatment') or self.config['labels_names'][0].startswith('labels_'):
+            self.df, labels_to_weight = generate_weights_for_single_label(self.df, self.config)
+
+            self.weights = _get_weights_classification(self.df, labels_to_weight , config)
+          #  self.weights_cat = self._compute_weights(self.df, config)
+
+
+        self.data = self.df[
+            self.features + config['labels_names'] +
+            ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
+             "StudyInstanceUID", "PatientID", 'labels_predictions'] + event+ w_label_names + ['duration_transformed']]
+        ###############################################################################################333
+        # OLD
+     #   self.data = self.df[self.features + config['labels_names'] + ['rowid']]
+        # w_label_names = []
+
+        # for label_name in config['labels_names']:
+        #     # replace nans with zeros
+        #     self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+        #     w_label_names.append('weights_' + label_name)
+        #     self.df['weights_' + label_name] = self.weights
+        # OLD
+        #########################################################################################################
+        # self.data = self.df[self.features + config['labels_names'] + ['rowid'] +
+        #                     ['event'] +["labels_predictions"] +["treatment_transformed"] +
+        #                     ["duration_transformed"] + ["koronarpatologi_transformed"] + w_label_names ]
+        
+        self.data.fillna(value=np.nan, inplace=True)
+        
+        
+        
         self.data = self.data.to_dict('records')
 
     def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
@@ -244,16 +490,16 @@ class val_monai_classification_loader(base_monai_loader):
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features),
+                ScaleIntensityd(keys=self.features),
+                self.maybeNormalize(),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]
 
-        self.transforms = Compose(self.transforms, log_stats=True)
+        self.transforms = Compose(self.transforms, log_stats=False)
         self.transforms.set_random_state(seed=0)
         return self.transforms
 
@@ -330,7 +576,7 @@ class val_monai_classification_loader_SW(base_monai_loader):
 
                 ConcatItemsd(keys=self.features, name='inputs'),
                 ]
-        val_transforms = Compose(val_transforms, log_stats=True)
+        val_transforms = Compose(val_transforms, log_stats=False)
         val_ds = monai.data.Dataset(
             data=self.data,
             transform=val_transforms)

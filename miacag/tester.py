@@ -9,6 +9,7 @@ from miacag.trainer import get_device
 from miacag.models.BuildModel import ModelBuilder
 import os
 from miacag.model_utils.train_utils import set_random_seeds
+from miacag.models.modules import get_loss_names_groups
 
 
 def read_log_file(config_input):
@@ -45,6 +46,9 @@ def test(config):
         torch.cuda.set_device(device)
         torch.backends.cudnn.benchmark = True
 
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+        config['loss']['group_idx'], config['groups_weights'] \
+        = get_loss_names_groups(config)
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
     if config['use_DDP'] == 'True':

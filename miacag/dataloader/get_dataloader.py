@@ -131,6 +131,14 @@ def get_data_from_loader(data, config, device, val_phase=False):
         # rename data["DcmPathFlatten"] to data["inputs"]
         if config["task_type"] == "mil_classification":
             data['inputs'] = data['DcmPathFlatten']
+            display_input_stats(data)
+
+       # else:
+            # print('data shape', data['inputs'][0].shape)
+            # print('data mean', data['inputs'][0].mean())
+            # print('data std', data['inputs'][0].std())
+            # print('data max', data['inputs'][0].max())
+            # print('data min', data['inputs'][0].min())
         data["inputs"] = torch.tensor(data["inputs"])
         data = to_device(data, device, ['inputs'])
         

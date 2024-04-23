@@ -23,7 +23,7 @@ from miacag.plots.plotter import rename_columns
 from miacag.plots.plot_utils import get_mean_lower_upper
 import statsmodels.api as sm
 from sklearn.metrics import precision_recall_curve
-
+import copy
 def generate_data():
     data = datasets.load_breast_cancer()
 
@@ -47,8 +47,6 @@ def generate_data():
     confidences = [i + "_confidences" for i in segments]
 
     trues = [i + "_transformed" for i in segments]
-    
-
     result_table = pd.DataFrame(columns=confidences + trues + ['labels_predictions'] + ['dominans'])
     domianse = [
         "Balanceret (PDA fra RCA/PLA fra LCX)",
@@ -140,7 +138,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
        # if config['task_type'] != 'mil_classification':
        #     result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
         #else:
-        result_table_copy = result_table.copy()
+        result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
@@ -155,7 +153,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         y_test = y_test[~mask]
         yproba = yproba[~mask]
         # deepcopy yproba
-        ypred_bin = yproba.copy()
+        ypred_bin = copy.deepcopy(yproba)
+        ypred_bin  = np.clip(ypred_bin, a_min=0, a_max=1)
         ypred_bin = threshold_continues(
             pd.DataFrame(ypred_bin), threshold=theshold, name=seg)
         yproba = np.clip(yproba, a_min=0, a_max=1)
@@ -170,9 +169,9 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         # compute alse precision and recall
         precision, recall, _ = precision_recall_curve(y_test, yproba)
         mean_f1, lower_f1, upper_f1 = get_mean_lower_upper(ypred_bin, y_test, 'f1')
-        if config['debugging']:
-            y_test[0] = 1
-            y_test[1] = 0
+        # if config['debugging']:
+        #     y_test[0] = 1
+        #     y_test[1] = 0
         auc = roc_auc_score(y_test, yproba)
         probas.append(yproba)
         trues.append(y_test)
@@ -231,8 +230,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                 bbox_inches='tight')
     plt.close()
     # plot precision recall curve for all segments combined
-    precision, recall, _ = precision_recall_curve(trues, probas_bin)
-    mean_f1_all,  lower_f1_all, upper_f1_all= get_mean_lower_upper(ypred_bin, trues, 'f1')
+    precision, recall, _ = precision_recall_curve(trues, probas)
+    mean_f1_all,  lower_f1_all, upper_f1_all= get_mean_lower_upper(probas_bin, trues, 'f1')
     fig = plt.figure(figsize=(8,6))
     plt.plot(recall, 
                 precision, 

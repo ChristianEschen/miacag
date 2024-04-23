@@ -21,6 +21,7 @@ import statsmodels.api as sm
 from decimal import Decimal
 from miacag.utils.script_utils import mkFolder
 
+import re
 
 def rename_columns(df, label_name):
     if '_1_prox' in label_name:
@@ -90,7 +91,7 @@ def map_1abels_to_0neTohree():
     return labels_dict
 
 
-def convertConfFloats(confidences, loss_name):
+def convertConfFloats(confidences, loss_name, config):
     confidences_conv = []
     for conf in confidences:
         if loss_name.startswith('CE'):
@@ -99,6 +100,27 @@ def convertConfFloats(confidences, loss_name):
             else:
                 confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
 
+        elif loss_name.startswith('NNL'):
+            if conf is None:
+                float_converted = []
+                for i, c in enumerate(range(0,config['model']['num_classes'][0])):
+                    float_converted.append(np.nan)
+                confidences_conv.append(float_converted)
+            
+            else:
+                strings = ""
+                float_converted = []
+                for i, c in enumerate(range(0,config['model']['num_classes'][0])):
+                    if i <config['model']['num_classes'][0]-1:
+
+                        match =  re.search('{}:(.*){}:'.format(c, c+1), conf)
+                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-3]
+                    else:
+                        match =  re.search('{}:(.*)'.format(c), conf)
+                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-1]
+                    #   strings = conf[idx[0]+2:idx[1]]
+                    float_converted.append(float(strings))
+                confidences_conv.append(float_converted)
         elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel', 'wfocall1']:
             if conf is None:
                 confidences_conv.append(np.nan)
@@ -157,7 +179,7 @@ def getNormConfMat_3class(df, labels_col, preds_col,
 
 
 def getNormConfMat(df, labels_col, preds_col,
-                   plot_name, f1, output, num_classes, support, c):
+                   plot_name, f1, output, num_classes, support, c, mcc=None):
     num_classes_for_plot = num_classes[c]
     if num_classes_for_plot == 1:
         num_classes_for_plot = 2
@@ -192,9 +214,23 @@ def getNormConfMat(df, labels_col, preds_col,
     plt.savefig(os.path.join(output, plot_name + '_cmat.png'), dpi=100,
                 bbox_inches='tight')
     plt.close()
-
+    fig = plt.figure()
+    plt.clf()
+    ax = fig.add_subplot(111)
+    ax.set_aspect(1)
+    cmap = sns.cubehelix_palette(light=1, as_cmap=True)
+    res = sns.heatmap(df_cm, annot=True, vmin=0.0, fmt='g',
+                      square=True, linewidths=0.1, annot_kws={"size": 8},
+                      cmap=cmap)
+    res.invert_yaxis()
+    f1 = np.round(f1, 3)
     plt.title(
         plot_name + ': Confusion Matrix, F1-macro:' + str(f1) +
+        ',support(N)=' + str(support))
+    if mcc is not None:
+        plt.title(
+            
+        plot_name + ': Confusion Matrix, F1-macro:' +  str(f1) +  ' ,MCC:' + str(mcc) +
         ',support(N)=' + str(support))
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
@@ -274,7 +310,7 @@ def plot_results_regression(df_label, confidence_name,
                             output_plots, group_aggregated):
     if not group_aggregated:
         df_label[confidence_name] = convertConfFloats(
-            df_label[confidence_name], config['loss']['name'][c])
+            df_label[confidence_name], config['loss']['name'][c], config)
 
     df_label[label_name] = threshold_continuois(
         df_label[label_name],
@@ -344,12 +380,12 @@ def plot_results_classification(df_label,
 
     if not group_aggregated:
         df_label[confidence_name] = convertConfFloats(
-            df_label[confidence_name], config['loss']['name'][c])
-    if label_nam.startswith('ffr'):
+            df_label[confidence_name], config['loss']['name'][c], config)
+    if label_name.startswith('ffr'):
         max_v = 1
-    elif label_nam.startswith('sten'):
+    elif label_name.startswith('sten'):
         max_v = 1
-    elif label_nam.startswith('timi'):
+    elif label_name.startswith('timi'):
         max_v = 3
     else:
         raise ValueError('label_name_ori must be either sten or ffr or timi')
@@ -397,7 +433,8 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
             for sten_col_conf in sten_cols_conf:
                 df_sten[sten_col_conf] = convertConfFloats(
                     df[sten_col_conf],
-                    config['loss']['name'][0])
+                    config['loss']['name'][0],
+                    config)
         sten_trues_concat = []      
         sten_conf_concat = []  
         #concantenating all stenosis columns
@@ -429,7 +466,8 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
             for ffr_col_conf in ffr_cols_conf:
                 df_ffr[ffr_col_conf] = convertConfFloats(
                     df_ffr[ffr_col_conf],
-                    config['loss']['name'][0])
+                    config['loss']['name'][0],
+                    config)
         ffr_trues_concat = []      
         ffr_conf_concat = []  
         #concantenating all stenosis columns
@@ -473,7 +511,12 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
             for sten_col_conf in sten_cols_conf:
                 df_sten[sten_col_conf] = convertConfFloats(
                     df[sten_col_conf],
-                    config['loss']['name'][0])
+                    config['loss']['name'][0],
+                    config)
+        # df_sten['sten_proc_1_prox_rca_transformed'].iloc[0] = None
+        
+        # df_sten['sten_proc_1_prox_rca_transformed_confidences'].iloc[10] = None
+
         plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
                     plot_type='stenosis',
                     config=config,
@@ -486,7 +529,8 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
             for ffr_col_conf in ffr_cols_conf:
                 df_ffr[ffr_col_conf] = convertConfFloats(
                     df_ffr[ffr_col_conf],
-                    config['loss']['name'][0])
+                    config['loss']['name'][0],
+                    config)
         plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
                      plot_type='FFR',
                      config=config,
@@ -513,8 +557,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
     
-    for label_name in label_names:
-        df = add_misssing_rows(df, label_name)
+
     if group_aggregated:
         confidence_names = [c + '_aggregated' for c in confidence_names]
     # test if a element is a list starts with a string: "sten"
@@ -533,7 +576,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
       #  df = add_misssing_rows(df, label_name)
         df_label = df[df[label_name].notna()]
         df_label = df_label[df_label[confidence_name].notna()]
-        df_label = df_label[df_label[prediction_name].notna()]
+       # df_label = df_label[df_label[prediction_name].notna()]
         if group_aggregated:
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
@@ -680,7 +723,8 @@ def plotRegression(sql_config, label_names,
             df_plot_rep[prediction_name] = \
                 convertConfFloats(
                     df_plot_rep[prediction_name],
-                    sql_config['loss_name'][c])
+                    sql_config['loss_name'][c],
+                    sql_config)
 
         if label_name_ori.startswith('ffr'):
             max_v = 1

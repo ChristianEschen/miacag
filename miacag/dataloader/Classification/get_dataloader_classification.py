@@ -400,7 +400,7 @@ class ClassificationLoader():
         print('please changes these')
         if self.config['loaders']['mode'] in ['prediction', 'testing']:
             if self.config['debugging'] == True:
-                self.val_df = self.df[self.df['phase'] == 'train']
+                self.val_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
             else:
                 self.val_df = self.df
         else:
@@ -408,11 +408,11 @@ class ClassificationLoader():
            # self.val_df = self.df
             if self.config['debugging'] == True:
 
-                self.train_df = self.df[self.df['phase'] == 'train']
-                self.val_df = self.df[self.df['phase'] == 'train']
+                self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
+                self.val_df = self.df[self.df['phase'].isin(['val', 'val_train'])]
             else:
-                self.train_df = self.df[self.df['phase'] == 'train']
-                self.val_df = self.df[self.df['phase'] == 'val']
+                self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
+                self.val_df = self.df[self.df['phase'].isin(['val','arcade_val'])]
                 
  
     def get_classification_loader_train(self, config):
@@ -458,7 +458,9 @@ class ClassificationLoader():
                     even_divisible=True,
                     shuffle=True)
             elif self.config['loss']['name'][0] == 'NNL':
-                sampler = DistributedBalancedRandomSampler(
+#                sampler = DistributedBalancedRandomSampler(
+                sampler = DistributedWeightedRandomSampler(
+
                     dataset=train_ds,
                     weights=weights,
                     even_divisible=True,

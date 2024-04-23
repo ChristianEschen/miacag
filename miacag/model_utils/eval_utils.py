@@ -18,6 +18,9 @@ import pandas as pd
 import os
 import psutil
 
+
+
+
 def check_memory():
     pid = os.getpid()
     proc = psutil.Process(pid)
@@ -329,4 +332,13 @@ def val_one_epoch(model, criterion, config,
                 writer, epoch, saliency_maps)
         except MemoryError as e:
             print(e)
+        
+        # maybe return survival predictions
+       # if config['loss']['name'][0] == 'NNL':
+            # logits = np.concatenate(
+            #     [np.expand_dims(np.array(i),-1) for i in df_results[config['labels_names'][0] + '_confidence']],
+            #     axis=1)
+            # surv = predict_surv(logits.T, config['cuts'])
+            # surv = surv.T.values.tolist()
+            # df_results[config['labels_names'][0] + '_confidence']= surv
         return metric_tb, df_results  # predictions

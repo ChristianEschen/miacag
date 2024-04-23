@@ -244,6 +244,22 @@ class base_monai_loader(DataloaderBase):
 
         return device
 
+    def maybeCenterFrameCrop(self, features):
+        crop = CenterSpatialCropd(
+            keys=features,
+            roi_size=[
+                self.config['loaders']['Crop_height'],
+                self.config['loaders']['Crop_width'],
+                1])
+        # replicate the frame to the depth of the crop
+        if self.config['model']['dimension'] == '2D+T':
+            replicate = Lambdad(keys=features,
+                           func=lambda x: np.repeat(x, self.config['loaders']['Crop_depth'], axis=2))
+        else:
+            raise ValueError('model dimension is not implemented')
+        return crop, replicate
+    
+    
     def maybeCenterCrop(self, features):
         if self.config['loaders']['mode'] == 'training':
             crop = CenterSpatialCropd(
@@ -358,6 +374,8 @@ class base_monai_loader(DataloaderBase):
             temporal_scaling = Identityd(keys=self.features)
         return temporal_scaling
 
+
+
     def maybeRotate(self):
         if self.config['loaders']['rotate'] == 'True':
             rotate = RandAffined(
@@ -396,7 +414,7 @@ class base_monai_loader(DataloaderBase):
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+        elif self.config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
             normalize = NormalizeIntensityd(
                 keys=self.features,
                 subtrahend=(0.485, 0.456, 0.406),

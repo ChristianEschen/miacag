@@ -4,6 +4,7 @@ import socket
 from datetime import datetime, timedelta
 import yaml
 from miacag.preprocessing.split_train_val import splitter
+from miacag.plots.plotter import getNormConfMat
 from miacag.utils.sql_utils import copy_table, add_columns, \
     copyCol, changeDtypes
 import copy
@@ -33,7 +34,7 @@ from miacag.utils.sql_utils import getDataFromDatabase
 from miacag.plots.plot_predict_coronary_pathology import run_plotter_ruc_multi_class
 from miacag.utils.survival_utils import create_cols_survival
 from miacag.model_utils.predict_utils import compute_baseline_hazards#, predict_surv_df
-from miacag.metrics.survival_metrics import confidences_upper_lower_survival
+from miacag.metrics.survival_metrics import confidences_upper_lower_survival, confidences_upper_lower_survival_discrete
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.ticker import MaxNLocator
@@ -49,7 +50,11 @@ import linecache
 import time
 import sys
 import traceback
-
+from miacag.scripts.script_utils import ConfigManipulator
+from sklearn.metrics import f1_score, matthews_corrcoef, \
+     accuracy_score, confusion_matrix#, plot_confusion_matrix
+import json
+from miacag.metrics.survival_metrics import EvalSurv
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -169,6 +174,7 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
 
     else:        # copy model
         if config['model']['pretrain_model'] != 'None':
+            print('need to adapt config')
             if rank == 0:
                 shutil.copyfile(
                     os.path.join(config['model']['pretrain_model'], 'model.pt'),
@@ -178,8 +184,9 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
             config['model']['pretrain_model']  = output_directory
             config['model']['pretrained'] = "True"
         else:
-            config['model']['pretrain_model']  = output_directory
-            config['model']['pretrained'] = "None"
+            pass
+          #  config['model']['pretrain_model']  = output_directory
+           # config['model']['pretrained'] = "None"
             
     # loop through all indicator tasks
     unique_index = list(dict.fromkeys(config['task_indicator']))
@@ -218,7 +225,7 @@ def plot_pretraining_downstreams(cpu, num_workers, config_path, debugging, outpu
     config['cpu'] = cpu
     config['cpu'] = str(config['cpu'])
 
-    config['debugging'] = debugging
+  #  config['debugging'] = debugging
 
     #experiment_name = get_exp_name(config, rank, config_path)
     output_directory = config['output']
@@ -273,8 +280,8 @@ def train_and_test(config_task):
     train(config_task)
     config_task['model']['pretrain_model'] = config_task['output_directory']
     config_task['model']['pretrained'] = "None"
-    config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
-    config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
+ #   config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
+ #   config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
     torch.distributed.barrier()
     # clear gpu memory
     torch.cuda.empty_cache()
@@ -282,8 +289,8 @@ def train_and_test(config_task):
     config_task['model']['pretrain_model'] = config_task['output_directory']
     config_task['model']['pretrained'] = "None"
     test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
-    config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
-    config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
+  #  config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
+  #  config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
 
     print('kill gpu processes')
     torch.distributed.barrier()
@@ -384,15 +391,29 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
         config_task['weighted_sampler'] = "False"
         
     # train(config_task)
-
+    # TODO manipulate config_task
+    manipulator = ConfigManipulator(config_task, task_index)
+    config_task_list = manipulator()
     # # 5 eval model
     if train_test_indicator:
-        train_and_test(config_task)
+        count = 0
+        print('train and test')
+        
+        for config_task_i in config_task_list:
+            print('rca or lca', count)
+            count+=1
+            train_and_test(config_task_i)
+            
+
     else:
+        if len(config_task_list)>1:
+            config_task_list[0]["labels_names"] = config_task_list[0]["labels_names"] + config_task_list[1]["labels_names"]
+            config_task_list[0]['loss']['name'] = config_task_list[0]['loss']['name'] + config_task_list[1]['loss']['name']
+            config_task_list[0]['model']['num_classes'] = config_task_list[0]['model']['num_classes'] + config_task_list[1]['model']['num_classes']
         if dist.is_initialized():
-            plot_task(config_task, output_table_name, conf, loss_names)
+            plot_task(config_task_list[0], output_table_name, conf, loss_names)
         else:
-            plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
+            plot_task_not_ddp(config_task_list[0], output_table_name, conf, loss_names)
     return None
 
 def change_psql_col_to_dates(config, output_table_name, col):
@@ -531,7 +552,7 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         phases_q = ['train']
 
     else:
-        phases = [output_plots_train + output_plots_val + output_plots_test] # + output_plots_test_large]
+        phases = [output_plots_train] + [output_plots_val] + [output_plots_test] # + output_plots_test_large]
         phases_q = ['train', 'val', 'test']#, 'test_large']
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
@@ -548,22 +569,74 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         from miacag.plots.plotter import add_misssing_rows
         for label_name in config_task['labels_names']:
             df = add_misssing_rows(df, label_name)
-        df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
 
-        out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
+        df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
+        from miacag.plots.plotter import convertConfFloats
+        preds = convertConfFloats(df_target[config_task['labels_names'][0]+'_confidences'], config_task['loss']['name'][0], config_task)
+        # interpolate preds
+        text_file_name = os.path.join(config_task['output_directory'], config_task['table_name']+'_log.txt')
+        cuts = convert_cuts_np(json.load(open(text_file_name))["cuts"])
         
+      #  surv =  pd.DataFrame(preds.transpose(), cuts)
+
+        surv = predict_surv(preds, cuts)
+        
+        ev = EvalSurv(surv,
+                      np.array(df_target[config_task['labels_names'][0]]),
+                      np.array(df_target['event']),
+                      censor_surv='km')
+
+
+        plot_x_individuals(surv, phase_plot,x_individuals=5)
+      #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
+        out_dict = confidences_upper_lower_survival_discrete(surv,
+                                                             np.array(df_target[config_task['labels_names'][0]]),
+                                                             np.array(df_target['event']),
+                                                             config_task)
+
         plot_scores(out_dict, phase_plot)
-        if config_task['debugging']:
-            thresholds = [6000, 7000]
-        else:
-            thresholds = [365, 365*5]
-        auc_1_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[0])
-        auc_5_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[1])
-        from miacag.metrics.survival_metrics import plot_auc_surv
-        plot_auc_surv(auc_1_year_dict, auc_5_year_dict, phase_plot)
+        # if config_task['debugging']:
+        #     thresholds = [6000, 7000]
+        # else:
+        #     thresholds = [365, 365*5]
+        # auc_1_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[0])
+        # auc_5_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[1])
+        # from miacag.metrics.survival_metrics import plot_auc_surv
+        # plot_auc_surv(auc_1_year_dict, auc_5_year_dict, phase_plot)
         
         print('done')
-        
+
+def predict_surv(logits, duration_index):
+    logits = torch.tensor(logits)
+    hazard = torch.nn.Sigmoid()(logits)
+    surv = (1 - hazard).add(1e-7).log().cumsum(1).exp()
+    surv_np = surv.numpy()
+    surv = pd.DataFrame(surv_np.transpose(), duration_index)
+    new_index = np.linspace(surv.index.min(), surv.index.max(), len(duration_index)*10)
+
+    # Interpolate DataFrame to new index
+    surv = surv.reindex(surv.index.union(new_index)).interpolate('index').loc[new_index]
+
+    return surv
+
+
+def convert_cuts_np(cuts):
+    string_list = cuts.strip('[]').split()
+
+    # Konverterer listen af strings til floats og derefter til et numpy array
+    numpy_array = np.array([float(i) for i in string_list])
+    return numpy_array
+
+
+def plot_x_individuals(surv, phase_plot,x_individuals=5):
+    surv.iloc[:, :x_individuals].plot(drawstyle='steps-post')
+    plt.ylabel('S(t | x)')
+    _ = plt.xlabel('Time')
+    plt.show()
+    plt.savefig(os.path.join(phase_plot, "survival_curves.png"))
+    plt.close()
+
+
 def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=365):
     from miacag.model_utils.predict_utils import predict_surv_df
     survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
@@ -600,6 +673,20 @@ def plot_scores(out_dict, ouput_path):
     plt.plot(out_dict['brier_scores'].index, 
                 out_dict['brier_scores'].values, 
             label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})\nC-index={mean_conc:.3f} ({ower_conc:.3f}-{uper_conc:.3f})")
+    # add x label
+    plt.xlabel('Time (days)')
+    # add y label
+    plt.ylabel('Brier score')
+    # add legend
+    plt.legend(loc='lower right')
+    plt.show()
+    plt.savefig(os.path.join(ouput_path, "brier_conc_scores.png"))
+    plt.close()
+    
+    plt.figure()
+    plt.plot(out_dict['brier_scores'].index, 
+                out_dict['brier_scores'].values, 
+            label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})")
     # add x label
     plt.xlabel('Time (days)')
     # add y label
@@ -674,7 +761,7 @@ def plot_classification_tasks(config,
         phases = [output_plots_train]
         phases_q = ['train']
     else:
-        phases = [output_plots_train + output_plots_val + output_plots_test] # + output_plots_test_large]
+        phases = [output_plots_train] + [output_plots_val] + [output_plots_test] # + output_plots_test_large]
         phases_q = ['train', 'val', 'test'] #, 'test_large']
     
     for idx in range(0, len(phases)):
@@ -703,24 +790,34 @@ def plot_classification_tasks(config,
         df = df.dropna(subset=[labels_names], how="any")
         if config['labels_names'][0].startswith('koronarpatologi'):
             col = 'koronarpatologi_transformed_confidences'
-            pred_name = "corornay_pathology"
+            target_name = "Corornay pathology"
             save_name = "roc_curve_coronar"
         else:
             col = "treatment_transformed_confidences"
-            pred_name = "treatment"
+            target_name = "Treatment"
             save_name = "roc_curve_treatment"
-        y_scores = convert_string_to_numpy(df, column=col)
-        label_binarizer = LabelBinarizer().fit(df[config['labels_names']])
-        y_onehot_test = label_binarizer.transform(df[config['labels_names']])
-        random_array = np.random.rand(4, 3)
-        y_scores = random_array / random_array.sum(axis=1, keepdims=True)
-        y_onehot_test = np.transpose(np.array([[1, 0, 2, 0]]))
-        label_binarizer = LabelBinarizer().fit(y_onehot_test)
-        y_onehot_test = label_binarizer.transform(y_onehot_test)
-        run_plotter_ruc_multi_class(y_scores, y_onehot_test,
-                                    pred_name, "model",
-                                    save_name,
-                                    phase_plot)
+        y_pred = df[label_name + '_predictions']
+        support = len(y_pred)
+        
+        f1_transformed = f1_score(
+            df[label_name],
+            df[label_name + '_predictions'],
+            average='macro')
+        mcc = matthews_corrcoef(df[label_name],
+            df[label_name + '_predictions'])
+        #df[target_name] = df[label_name]
+        getNormConfMat(
+            df,
+            label_name,
+            label_name + '_predictions',
+            target_name,
+            f1_transformed,
+            phase_plot,
+            config['model']['num_classes'],
+            support,
+            0,
+            mcc=mcc)
+    
 
     return None
 

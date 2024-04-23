@@ -32,7 +32,7 @@ class MILModel(ImageToScalarModel):
         self.mil_mode = self.config['model']['mil_mode'].lower()
         self.attention = nn.Sequential()
         self.transformer = None  # type: Optional[nn.Module]
-        self.my_fc_temp = nn.Sequential(nn.Linear(self.in_features, self.in_features), nn.LayerNorm(self.in_features), nn.ReLU())
+        self.my_fc_temp = nn.Sequential(nn.Linear(self.in_features, self.in_features), nn.ReLU(), nn.LayerNorm(self.in_features))
         #nn.Linear(self.in_features, len(config['labels_names']))
      #   self.conv1d = nn.Conv1d(self.in_features, self.in_features, 1)
         self.loss_uniques = self.config['labels_names']

@@ -390,9 +390,9 @@ class base_monai_loader(DataloaderBase):
         else:
             rotate = Identityd(keys=self.features)
         return rotate
-
-    def maybeNormalize(self):
-        if self.config['model']['backbone'] in [
+    @staticmethod
+    def maybeNormalize(config, features):
+        if config['model']['backbone'] in [
             'x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3', 'debug_3d',
             "pretrain_videomae_base_patch16_224",
             'pretrain_videomae_small_patch16_224',
@@ -404,19 +404,19 @@ class base_monai_loader(DataloaderBase):
             'vit_large_patch16',
             'vit_huge_patch14']:
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
                 divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] == 'r2plus1_18':
+        elif config['model']['backbone'] == 'r2plus1_18':
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
+        elif config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.485, 0.456, 0.406),
                 divisor=(0.229, 0.224, 0.225),
                 channel_wise=True)

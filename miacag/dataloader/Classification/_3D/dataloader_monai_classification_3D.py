@@ -25,6 +25,7 @@ from monai.transforms import (
     RandSpatialCropSamplesd,
     LoadImage,
     MapTransform,
+    Identityd,
     NormalizeIntensityd,
     Orientationd,
     RandFlipd,
@@ -286,7 +287,7 @@ class train_monai_classification_loader(base_monai_loader):
             self.maybeRotate(),
             self.CropTemporal(),
             ScaleIntensityd(keys=self.features),
-            self.maybeNormalize(),
+            self.maybeNormalize(config=self.config, features=self.features),
             ConcatItemsd(keys=self.features, name='inputs'),
             DeleteItemsd(keys=self.features),
             ]
@@ -492,9 +493,17 @@ class val_monai_classification_loader(base_monai_loader):
                 self.getCopy1to3Channels(),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                self.maybeCenterCrop(self.features),
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(),
+                self.maybeCenterCrop(self.features)
+                    if self.config['loaders']['mode'] == 'training'
+                    else monai.transforms.GridPatchd(keys=self.features,
+                                                patch_size=(
+                                                    self.config['loaders']['Crop_height'],
+                                                    self.config['loaders']['Crop_width'],
+                                                    self.config['loaders']['Crop_depth']),
+                                                pad_mode="constant",
+                                                ),
+                ScaleIntensityd(keys=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
+                self.maybeNormalize(config=self.config, features=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]

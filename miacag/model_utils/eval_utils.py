@@ -75,7 +75,18 @@ def eval_one_step(model, data, device, criterion,
     model.eval()
     with torch.no_grad():
         # forward
+        
         outputs = maybe_sliding_window(data['inputs'], model, config)
+        # max pooling on first dimension
+        if config['loaders']['mode'] == 'testing':
+            outputs = [torch.unsqueeze(torch.mean(outputs[0], dim=0), dim=0)]
+            # if config['labels_names'][0].startswith('ffr'):
+            #     outputs = [torch.unsqueeze(torch.amin(outputs[0], dim=0), dim=0)]
+            # elif config['labels_names'][0].startswith('sten'):
+
+            #     outputs = [torch.unsqueeze(torch.amax(outputs[0], dim=0), dim=0)]
+            # else:
+            #     raise(ValueError('this is not implemented'))
         if config['loaders']['mode'] != 'testing':
             losses, loss = get_losses_class(config, outputs,
                                             data, criterion, device)
@@ -98,63 +109,6 @@ def forward_model(inputs, model, config):
     else:
         outputs = model(inputs)
     return outputs
-
-
-def eval_one_step_knn(get_data_from_loader,
-                      validation_loader,
-                      model, device, criterion,
-                      config, saliency_maps=False):
-    train_loader = validation_loader[1]
-    val_loader = validation_loader[2]
-    batch_size = config['loaders']['batchSize']
-    n_data = len(train_loader)*batch_size
-    K = 1
-    if config['cpu'] == "False":
-        encoder_model = model.module.encoder_projector
-    else:
-        encoder_model = model.encoder_projector
-    # set model in eval mode
-    encoder_model.eval()
-    if str(device) == 'cuda':
-        torch.cuda.empty_cache()
-
-    train_features = torch.zeros([config['model']['feat_dim'], n_data],
-                                 device=device)
-    train_data['labels'] = torch.zeros([config['model']['feat_dim'], n_data],
-                                 device=device)
-    with torch.no_grad():
-        for batch_idx, data in enumerate(train_loader):
-            inputs, data['labels'] = get_data_from_loader(data, config,
-                                                  device, val_phase=True)
-            # forward
-            features = forward_model(inputs, encoder_model, config)
-            features = nn.functional.normalize(features)
-            train_features[:,
-                           batch_idx * batch_size:batch_idx
-                           * batch_size + batch_size] = features.data.t()
-            train_labels[:,
-                         batch_idx * batch_size:batch_idx
-                         * batch_size + batch_size] = labels.data.t()
-
-    total = 0
-    correct = 0
-    with torch.no_grad():
-        for batch_idx, data in enumerate(val_loader):
-            inputs, data['labels'] = get_data_from_loader(data, config,
-                                                  device, val_phase=True)
-            features = forward_model(inputs, encoder_model, config)
-            features = features.type(torch.cuda.FloatTensor)
-            dist = torch.mm(features, train_features)
-            yd, yi = dist.topk(K, dim=1, largest=True, sorted=True)
-            candidates = train_labels.view(1, -1).expand(batch_size, -1)
-            retrieval = torch.gather(candidates, 1, yi)
-
-            retrieval = retrieval.narrow(1, 0, 1).clone().view(-1)
-
-            total += labels.size(0)
-            correct += retrieval.eq(labels.data).sum().item()
-    top1 = correct / total
-    return top1
 
 
 def set_uniform_sample_pct(validation_loader, percentage):

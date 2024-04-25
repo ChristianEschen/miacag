@@ -61,7 +61,7 @@ def train_one_step(model, data, criterion,
             optimizer.zero_grad()
 
     else:
-        outputs = model(data['inputs'].as_tensor())
+        outputs = model(data['inputs'])
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
@@ -234,6 +234,8 @@ def saver(metric_dict_val, writer, config):
             del config_tensorboard[key]
 
     # save tensorboard
+    if config_tensorboard['loss_name0'] =='NNL':
+        config_tensorboard['cuts'] = str(config_tensorboard['cuts'])
     writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()

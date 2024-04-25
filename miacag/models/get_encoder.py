@@ -36,6 +36,7 @@ def getPretrainedWeights(config, model, device):
 
                 model.load_state_dict(loaded_model['model_state'])
             elif config['model']['backbone'] in ["vit_large_3d"]:
+
                 loaded_model = loaded_model["encoder"]
                 loaded_model = {k.replace('module.', ''): v for k, v in loaded_model.items()}
                 loaded_model = {k.replace('backbone.', ''): v for k, v in loaded_model.items()}
@@ -46,6 +47,7 @@ def getPretrainedWeights(config, model, device):
                         print(f'key "{k}" is of different shape in model and loaded state dict')
                         loaded_model[k] = v
                 model.load_state_dict(loaded_model, strict=False)
+
 
             else:
                 model.load_state_dict(loaded_model)
@@ -98,30 +100,70 @@ def getPretrainedWeights(config, model, device):
             # remove all values from loaded_model dict starting with decoder
             # loaded_model = {k:v for k,v in loaded_model['model'].items() if not k.startswith("decoder")}
  
-    else:
+    elif config['model']['pretrained'] in [False, "False", "None", None]:
     #    if torch.distributed.get_rank() == 0:
-        dirname = os.path.dirname(__file__)
-        model_path = os.path.join(
+        print('no pretraining is used')
+        # test if it is a string
+    elif type(config['model']['pretrained']) == str:
+        if config['model']['backbone'] in ["vit_large_3d"]:
+                dirname = os.path.dirname(__file__)
+                model_path = os.path.join(
+                                config['model']['pretrained'])
+                loaded_model = torch.load(
+                        model_path,                    map_location=device)
+
+                loaded_model = loaded_model["encoder"]
+                loaded_model = {k.replace('module.', ''): v for k, v in loaded_model.items()}
+                loaded_model = {k.replace('backbone.', ''): v for k, v in loaded_model.items()}
+                for k, v in model.state_dict().items():
+                    if k not in loaded_model:
+                        print(f'key "{k}" could not be found in loaded state dict')
+                    elif loaded_model[k].shape != v.shape:
+                        print(f'key "{k}" is of different shape in model and loaded state dict')
+                        loaded_model[k] = v
+                model.load_state_dict(loaded_model, strict=False)
+        else:
+            raise ValueError('not implemented')
+            dirname = os.path.dirname(__file__)
+            model_path = os.path.join(
+                
+                            config['model']['pretrain_model'],
+                            'model.pt')
+            loaded_model = torch.load(
+                    model_path,
+                    map_location=device)
+
+            model.load_state_dict(loaded_model)
             
-                        config['model']['pretrain_model'],
-                        'model.pt')
-        loaded_model = torch.load(
-                model_path,
-                map_location=device)
+            loaded_model = {k.replace('encoder.', ''): v for k, v in loaded_model.items()}
+            
+    else:
+        raise ValueError('not implemented')           
 
-        model.load_state_dict(loaded_model)
-        
-        loaded_model = {k.replace('encoder.', ''): v for k, v in loaded_model.items()}
+    if config['model']['checkpoint'] != False:
 
+        if config['model']['pretrain_model'] in  ['None', None, False, "False"]:
+            pass
+        else:
+            if config['cpu'] == 'True':
+                pretrained_dict = torch.load(config['model']['checkpoint'], map_location='cpu')
+            else:
 
-#   #      loaded_model = {k.replace('backbone.', ''): v for k, v in loaded_model.items()}
-#         for k, v in model.state_dict().items():
-#             if k not in loaded_model:
-#                 print(f'key "{k}" could not be found in loaded state dict')
-#             elif loaded_model[k].shape != v.shape:
-#                 print(f'key "{k}" is of different shape in model and loaded state dict')
-#                 loaded_model[k] = v
-#         model.load_state_dict(loaded_model, strict=False)
+                pretrained_dict = torch.load(config['model']['checkpoint'], map_location='cuda:{}'.format(os.environ['LOCAL_RANK']))
+
+            # Load your current model's state dict
+            model_dict = model.module.state_dict()
+
+            # Filter out unnecessary keys from the pre-trained state dict
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and pretrained_dict[k].size() == model_dict[k].size()}
+
+            # Update your current model's state dict with the filtered pre-trained state dict
+            model_dict.update(pretrained_dict)
+
+            # Load the updated state dict into your current model
+            model.module.load_state_dict(model_dict)
+    
+
     return model
 
 

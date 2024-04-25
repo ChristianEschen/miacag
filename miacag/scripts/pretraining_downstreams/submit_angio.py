@@ -99,14 +99,14 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
     print('loading config:', config_path)
     
 
-    with open(config_path_pretraining) as file:
-        config_pretraining = yaml.load(file, Loader=yaml.FullLoader)
+    # with open(config_path_pretraining) as file:
+    #     config_pretraining = yaml.load(file, Loader=yaml.FullLoader)
     with open(config_path) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
         
-    for key, value in config_pretraining.items():
-        if key not in config:
-            config[key] = value
+    # for key, value in config_pretraining.items():
+    #     if key not in config:
+    #         config[key] = value
     mkFolder(config['output'])
     config['master_port'] = os.environ['MASTER_PORT']
     config['num_workers'] = num_workers
@@ -158,8 +158,7 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
         # ...and map data['labels'] test
     # 4.1 Pretrain encoder model
     # raise error if  config['model']['pretrained'] = "Fale" and  config['model']['pretrain_model'] = "None"
-    if config['model']['pretrained'] in ["True"] and config['model']['pretrain_model'] in ["False", "None"]:
-        raise ValueError("pretrained = False but pretrain_model = None")
+
     if config['model']['ssl_pretraining']:
         print('ssl pretraining')
         from ijepa.main_distributed import launch_in_pipeline
@@ -286,8 +285,6 @@ def train_and_test(config_task):
     # clear gpu memory
     torch.cuda.empty_cache()
     # 5 eval model
-    config_task['model']['pretrain_model'] = config_task['output_directory']
-    config_task['model']['pretrained'] = "None"
     test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
   #  config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
   #  config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
@@ -411,9 +408,9 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             config_task_list[0]['loss']['name'] = config_task_list[0]['loss']['name'] + config_task_list[1]['loss']['name']
             config_task_list[0]['model']['num_classes'] = config_task_list[0]['model']['num_classes'] + config_task_list[1]['model']['num_classes']
         if dist.is_initialized():
-            plot_task(config_task_list[0], output_table_name, conf, loss_names)
+            plot_task(config_task, output_table_name, conf, loss_names)
         else:
-            plot_task_not_ddp(config_task_list[0], output_table_name, conf, loss_names)
+            plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
     return None
 
 def change_psql_col_to_dates(config, output_table_name, col):
@@ -565,11 +562,8 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
                 'labels_names': config_task['labels_names'],
                 'schema_name': config_task['schema_name'],
                 'table_name': output_table_name,
-                'query': config_task['query_' +  phase_q +'_plot']})
-        from miacag.plots.plotter import add_misssing_rows
-        for label_name in config_task['labels_names']:
-            df = add_misssing_rows(df, label_name)
-
+                'query': config_task[phase_q +'_plot']})
+        
         df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
         from miacag.plots.plotter import convertConfFloats
         preds = convertConfFloats(df_target[config_task['labels_names'][0]+'_confidences'], config_task['loss']['name'][0], config_task)
@@ -699,14 +693,15 @@ def plot_scores(out_dict, ouput_path):
 
 def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                           output_plots_val, output_plots_test, output_plots_test_large, conf):
+    
     # 6 plot results:
     if config_task['debugging']:
-        queries = [config_task['query_train_plot']]
+        queries = [config_task['train_plot']]
         plots = [output_plots_train]
     else:
-        queries = [config_task['query_train_plot'],
-                config_task['query_val_plot'],
-                config_task['query_test_plot'],
+        queries = [config_task['train_plot'],
+                config_task['val_plot'],
+                config_task['test_plot'],
                # config_task['query_test_large_plot'
                             ]
         plots = [output_plots_train, output_plots_val,
@@ -750,7 +745,49 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                         config_task['labels_names'],
                         conf,
                         plots[idx],
+                        config_task,
                         group_aggregated=False)
+        
+        # also group aggregated
+            plot_i = plots[idx] + '_group_aggregated'
+            mkFolder(plot_i)
+            plot_results({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query},
+                        config_task['labels_names'],
+                        [i + "_predictions" for i in
+                            config_task['labels_names']],
+                        plot_i,
+                        config_task['model']['num_classes'],
+                        config_task,
+                        [i + "_confidences" for i in
+                            config_task['labels_names']],
+                        group_aggregated=True
+                        )
+
+            plotRegression({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query,
+                        'loss_name': config_task['loss']['name'],
+                        'task_type': config_task['task_type']
+                        },
+                        config_task['labels_names'],
+                        conf,
+                        plot_i,
+                        config_task,
+                        group_aggregated=True)
         
 
 
@@ -775,10 +812,7 @@ def plot_classification_tasks(config,
                                 'labels_names': config['labels_names'],
                                 'schema_name': config['schema_name'],
                                 'table_name': output_table_name,
-                                'query': config['query_' + phase_q  +'_plot']})
-        from miacag.plots.plotter import add_misssing_rows
-        for label_name in config['labels_names']:
-            df = add_misssing_rows(df, label_name)
+                                'query': config[phase_q  +'_plot']})
         # test if _confidences exists
         if config['labels_names'][0] +"_confidences" in df.columns:
             labels_names = config['labels_names'][0] +"_confidences"
@@ -796,20 +830,20 @@ def plot_classification_tasks(config,
             col = "treatment_transformed_confidences"
             target_name = "Treatment"
             save_name = "roc_curve_treatment"
-        y_pred = df[label_name + '_predictions']
+        y_pred = df[config['labels_names'][0] + '_predictions']
         support = len(y_pred)
         
         f1_transformed = f1_score(
-            df[label_name],
-            df[label_name + '_predictions'],
+            df[config['labels_names'][0]],
+            df[config['labels_names'][0] + '_predictions'],
             average='macro')
-        mcc = matthews_corrcoef(df[label_name],
-            df[label_name + '_predictions'])
-        #df[target_name] = df[label_name]
+        mcc = matthews_corrcoef(df[config['labels_names'][0]],
+            df[config['labels_names'][0] + '_predictions'])
+        #df[target_name] = df[[config['labels_names'][0]]
         getNormConfMat(
             df,
-            label_name,
-            label_name + '_predictions',
+            config['labels_names'][0],
+            config['labels_names'][0] + '_predictions',
             target_name,
             f1_transformed,
             phase_plot,

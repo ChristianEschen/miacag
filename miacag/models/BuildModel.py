@@ -93,27 +93,7 @@ class ModelBuilder():
                         model.module.load_state_dict(
                             torch.load(os.path.join(path_model, 'model.pt')
                                     ,map_location='cuda:{}'.format(os.environ['LOCAL_RANK'])))
-        else:
-            if self.config['model']['pretrain_model'] in  ['None', None, False, "False"]:
-                pass
-            else:
-                if self.config['cpu'] == 'True':
-                    pretrained_dict = torch.load(os.path.join(path_model, 'model.pt'), map_location='cpu')
-                else:
-
-                    pretrained_dict = torch.load(os.path.join(path_model, 'model.pt'), map_location='cuda:{}'.format(os.environ['LOCAL_RANK']))
-
-                # Load your current model's state dict
-                model_dict = model.module.state_dict()
-
-                # Filter out unnecessary keys from the pre-trained state dict
-                pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and pretrained_dict[k].size() == model_dict[k].size()}
-
-                # Update your current model's state dict with the filtered pre-trained state dict
-                model_dict.update(pretrained_dict)
-
-                # Load the updated state dict into your current model
-                model.module.load_state_dict(model_dict)
+        
         return model
 
     def get_segmentation_model(self):

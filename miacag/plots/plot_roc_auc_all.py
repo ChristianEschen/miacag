@@ -19,7 +19,7 @@ from sklearn.ensemble import RandomForestClassifier
 import os
 from sklearn.metrics import roc_curve, roc_auc_score
 from miacag.utils.script_utils import mkFolder
-from miacag.plots.plotter import rename_columns
+#from miacag.plots.plotter import rename_columns
 from miacag.plots.plot_utils import get_mean_lower_upper
 import statsmodels.api as sm
 from sklearn.metrics import precision_recall_curve
@@ -135,10 +135,10 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     probas_bin = []
     idx = 0
     for seg in confidences_names:
-       # if config['task_type'] != 'mil_classification':
-       #     result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-        #else:
-        result_table_copy = copy.deepcopy(result_table)
+        if config['task_type'] != 'mil_classification':
+           result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        else:
+            result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
@@ -376,7 +376,7 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
     result_table_comb = pd.DataFrame(columns=['segments', 'mse_mean', 'mse_lower', 'mse_upper'])
 
     # list comprehension to rename suffixes of elements in list from _confidences to _predictions
-    confidences_names = [i.replace('_confidences', '_predictions') for i in confidences_names]
+   # confidences_names = [i.replace('_confidences', '_predictions') for i in confidences_names]
     probas = []
     trues = []
     idx = 0

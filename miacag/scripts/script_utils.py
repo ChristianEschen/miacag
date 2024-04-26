@@ -2,8 +2,8 @@ from typing import Any
 import copy
 from miacag.model_utils.get_loss_func import find_matches_two_lists
 import re
-
-
+import os
+from miacag.utils.script_utils import mkFolder
 class ConfigManipulator():
     
     def __init__(self, config, task_index):
@@ -44,6 +44,14 @@ class ConfigManipulator():
 
         self.config_copy_rca["model"]["num_classes"] = [self.config_copy_rca["model"]["num_classes"][i] for i in idx_rca]
         self.config_copy_lca["model"]["num_classes"] = [self.config_copy_lca["model"]["num_classes"][i] for i in idx_lca]
+        
+        
+        self.config_copy_rca["output_directory"] = os.path.join(self.config_copy_rca["output_directory"], "rca")
+        self.config_copy_lca["output_directory"] = os.path.join(self.config_copy_lca["output_directory"], "lca")
+        # add path for rca and lca outputs
+        # make output directories for rca and lca if not exist
+        mkFolder(self.config_copy_rca["output_directory"])
+        mkFolder(self.config_copy_lca["output_directory"])
         return [self.config_copy_rca, self.config_copy_lca]
     
     def change_query_lca_rca_train_test(self, config, idx):

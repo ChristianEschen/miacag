@@ -135,10 +135,10 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     probas_bin = []
     idx = 0
     for seg in confidences_names:
-        if config['task_type'] != 'mil_classification':
-           result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-        else:
-            result_table_copy = copy.deepcopy(result_table)
+       # if config['task_type'] != 'mil_classification':
+       #    result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+       # else:
+        result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
@@ -304,13 +304,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
             if row.startswith(key):
                 roc_result_table_2 = roc_result_table_2.rename(index={row: dictionary[key]})
          #   roc_result_table.rename(index={row: dictionary[row]}, inplace=True)
-            
-    if maybeRCA:
-        location = 'RCA'
-    elif maybeRCA == "":
-        location = ""
-    else:
-        location = 'LCA'
+
     fig = plt.figure(figsize=(8,6))
 
     for i in roc_result_table_2.index:
@@ -330,15 +324,15 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.yticks(np.arange(0.0, 1.1, step=0.1))
     plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
 
-    plt.title('ROC Curve Analysis for ' + plot_type + ' estimation on ' + location, fontweight='bold', fontsize=15)
+    plt.title('ROC Curve Analysis for ' + plot_type + ' estimation on ', fontweight='bold', fontsize=15)
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_roc_all.png'), dpi=100,
+        output_plots, plot_type + '_roc_all.png'), dpi=100,
                 bbox_inches='tight')
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_roc_all.pdf'), dpi=100,
+        output_plots, plot_type + '_roc_all.pdf'), dpi=100,
                 bbox_inches='tight')
     plt.close()
     # plot precision recall curve
@@ -360,15 +354,15 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.yticks(np.arange(0.0, 1.1, step=0.1))
     plt.ylabel("Precision (positive predictive value)", fontsize=15)
 
-    plt.title('Precision recall curve for ' + plot_type + ' estimation on ' + location, fontweight='bold', fontsize=15)
+    plt.title('Precision recall curve for ' + plot_type + ' estimation on ', fontweight='bold', fontsize=15)
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_precision_recall.png'), dpi=100,
+        output_plots, plot_type + '_precision_recall.png'), dpi=100,
                 bbox_inches='tight')
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_precision_recall.pdf'), dpi=100,
+        output_plots, plot_type + '_' + '_precision_recall.pdf'), dpi=100,
                 bbox_inches='tight')
 
 def plot_regression_all(result_table, trues_names, confidences_names, output_plots, config):
@@ -381,11 +375,11 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
     trues = []
     idx = 0
     for seg in confidences_names:
-        if config['task_type'] != 'mil_classification':
-            result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-        else:
-            result_table_copy = result_table.copy()
-            maybeRCA = ""
+        # if config['task_type'] != 'mil_classification':
+        #     result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        # else:
+        result_table_copy = result_table.copy()
+          #  maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
         y_test = result_table_copy[trues_names[idx]].values

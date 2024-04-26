@@ -1,7 +1,9 @@
 import torch
 import os
 import numpy as np
-
+import monai
+from miacag.dataloader.dataloader_base_monai import base_monai_loader
+import monai
 def to_dtype(data,fields, config):
     for c, label_name in enumerate(fields):
         if config['loss']['name'][c].startswith('CE'):
@@ -139,6 +141,16 @@ def get_data_from_loader(data, config, device, val_phase=False):
             # print('data std', data['inputs'][0].std())
             # print('data max', data['inputs'][0].max())
             # print('data min', data['inputs'][0].min())
+        if config['loaders']['mode'] == 'testing':
+            trans = monai.transforms.Compose([monai.transforms.ScaleIntensityd(keys="single_clip"), base_monai_loader.maybeNormalize(config, 'single_clip')])
+
+            transformed_inp = []
+            for i in range(0, data['inputs'].shape[1]):
+                single_clip = data["inputs"][0, i, :, :, :]
+                data['single_clip'] = single_clip
+                transformed_inp.append(trans(data)["single_clip"])
+            data["inputs"] = torch.stack(transformed_inp, dim=0)
+      #      data['inputs'] = torch.unsqueeze(data['inputs'], 0)
         data["inputs"] = torch.tensor(data["inputs"])
         data = to_device(data, device, ['inputs'])
         

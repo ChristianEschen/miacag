@@ -106,7 +106,7 @@ def getPretrainedWeights(config, model, device):
         # test if it is a string
     elif type(config['model']['pretrained']) == str:
         if config['model']['backbone'] in ["vit_large_3d"]:
-                dirname = os.path.dirname(__file__)
+                print('laoading pretrained model from checkpoint')
                 model_path = os.path.join(
                                 config['model']['pretrained'])
                 loaded_model = torch.load(
@@ -163,6 +163,8 @@ def getPretrainedWeights(config, model, device):
             # Load the updated state dict into your current model
             model.module.load_state_dict(model_dict)
     
+
+
 
     return model
 
@@ -386,8 +388,10 @@ def get_encoder(config, device):
         
     elif config['model']['backbone'] == 'vit_large_3d':
         from miacag.models.vision_transformer3d import vit_large
+        from miacag.models.attention_pooler import AttentivePooler
         model = vit_large(patch_size=16, img_size=224, num_frames=config['loaders']['Crop_depth'] )
         model = getPretrainedWeights(config, model, device)
+        
         
         in_features = model.norm.normalized_shape[0]
     else:

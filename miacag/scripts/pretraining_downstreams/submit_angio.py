@@ -73,6 +73,9 @@ parser.add_argument(
     '--config_path', type=str,
     help="path to config file for downstream tasks")
 parser.add_argument(
+    '--table_name_input', type=str, default=None,
+    help="path to config file for downstream tasks")
+parser.add_argument(
     '--config_path_pretraining', type=str,
     help="path to config file for pretraining")
 parser.add_argument("--debugging", action="store_true", help="do debugging")
@@ -95,7 +98,7 @@ def get_exp_name(config, rank, config_path):
     experiment_name = test_for_file(temp_file)[0]
     return experiment_name
 
-def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraining, debugging):
+def pretraining_downstreams(cpu, num_workers, config_path, table_name_input, debugging):
     print('loading config:', config_path)
     
 
@@ -117,8 +120,11 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
     rank = int(os.environ['RANK'])
 
     experiment_name = get_exp_name(config, rank, config_path)
-    output_table_name = \
-        experiment_name + "_" + config['table_name']
+    if table_name_input is not None:
+        output_table_name = experiment_name + "_" + table_name_input
+    else:
+        output_table_name = \
+            experiment_name + "_" + config['table_name']
     output_directory = os.path.join(
                         config['output'],
                         experiment_name)
@@ -135,14 +141,17 @@ def pretraining_downstreams(cpu, num_workers, config_path, config_path_pretraini
   #  torch.distributed.barrier()
 
     if rank == 0:
-        copy_table(sql_config={
-            'database': config['database'],
-            'username': config['username'],
-            'password': config['password'],
-            'host': config['host'],
-            'schema_name': config['schema_name'],
-            'table_name_input': config['table_name'],
-            'table_name_output': output_table_name})
+        if table_name_input is not None:
+            print('not copying table as we have input table name')
+        else:
+            copy_table(sql_config={
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'schema_name': config['schema_name'],
+                'table_name_input': config['table_name'],
+                'table_name_output': output_table_name})
 
         # # 2. copy config
         os.system(
@@ -887,7 +896,7 @@ if __name__ == '__main__':
 
 
     pretraining_downstreams(args.cpu, args.num_workers, args.config_path,
-                        args.config_path_pretraining, args.debugging)
+                        args.table_name_input, args.debugging)
 
     elapsed = timeit.default_timer() - start_time
     print('cpu', args.cpu)

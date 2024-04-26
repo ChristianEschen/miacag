@@ -314,7 +314,7 @@ class train_monai_classification_loader(base_monai_loader):
             )[dist.get_rank()]
 
         # create a training data loader
-        if self.config['cache_num'] != 'None':
+        if type(self.config['cache_num']) == int:
             train_ds = monai.data.SmartCacheDataset(
                 data=self.data_par_train,
                 transform=self.transformations(),
@@ -323,12 +323,17 @@ class train_monai_classification_loader(base_monai_loader):
                 num_init_workers=int(self.config['num_workers']/2),
                 replace_rate=self.config['replace_rate'],
                 num_replace_workers=int(self.config['num_workers']/2))
-        else:
-            train_ds = monai.data.CacheDataset(
+        elif self.config['cache_num'] in [None, 'None', False, 'False']:
+            train_ds = monai.data.Dataset(
                 data=self.data_par_train,
-                transform=self.transformations(),
-                copy_cache=True,
-                num_workers=self.config['num_workers'])
+                transform=self.transformations())
+        else:
+            raise ValueError('Not implemented')
+            # train_ds = monai.data.CacheDataset(
+            #     data=self.data_par_train,
+            #     transform=self.transformations(),
+            #     copy_cache=True,
+            #     num_workers=self.config['num_workers'])
         return train_ds
 
     def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
@@ -530,35 +535,39 @@ class val_monai_classification_loader(base_monai_loader):
             #         replace_rate=self.config['replace_rate'],
             #         num_replace_workers=int(self.config['num_workers']/2))
             # else:
-            val_ds = monai.data.CacheDataset(
-                data=self.data_par_val,
-                transform=self.tansformations(),
-                copy_cache=True,
-                num_workers=self.config['num_workers'],
-                cache_num=self.config['cache_num_val'])
-        else:
             if self.config['cache_test'] == "True":
                 val_ds = monai.data.CacheDataset(
-                        data=self.data_par_val,
-                        transform=self.tansformations(),
-                        copy_cache=True,
-                        num_workers=self.config['num_workers'])
-            elif self.config['cache_test'] == "False":
+                    data=self.data_par_val,
+                    transform=self.tansformations(),
+                    copy_cache=True,
+                    num_workers=self.config['num_workers'],
+                    cache_num=self.config['cache_num_val'])
+            else:
                 val_ds = monai.data.Dataset(
                         data=self.data_par_val,
-                transform=self.tansformations())
-            elif self.config['cache_test'] == "persistant":
-                cachDir = os.path.join(
-                    self.config['model']['pretrain_model'],
-                    'persistent_cache')
-                val_ds = monai.data.PersistentDataset(
-                        data=self.data_par_val, transform=self.tansformations(),
-                        cache_dir=cachDir
-                    )
-            else:
-                raise ValueError(
-                    'this type of test is not implemented! :',
-                    self.config['cache_test'])
+                    transform=self.tansformations())
+        else:
+            # if self.config['cache_test'] == "True":
+            #     val_ds = monai.data.CacheDataset(
+            #             data=self.data_par_val,
+            #             transform=self.tansformations(),
+            #             copy_cache=True,
+            #             num_workers=self.config['num_workers'])
+                val_ds = monai.data.Dataset(
+                        data=self.data_par_val,
+                    transform=self.tansformations())
+            # elif self.config['cache_test'] == "persistant":
+            #     cachDir = os.path.join(
+            #         self.config['model']['pretrain_model'],
+            #         'persistent_cache')
+            #     val_ds = monai.data.PersistentDataset(
+            #             data=self.data_par_val, transform=self.tansformations(),
+            #             cache_dir=cachDir
+            #         )
+            # else:
+            #     raise ValueError(
+            #         'this type of test is not implemented! :',
+            #         self.config['cache_test'])
         return val_ds
 
 

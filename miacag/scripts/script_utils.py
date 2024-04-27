@@ -44,7 +44,7 @@ class ConfigManipulator():
 
         self.config_copy_rca["model"]["num_classes"] = [self.config_copy_rca["model"]["num_classes"][i] for i in idx_rca]
         self.config_copy_lca["model"]["num_classes"] = [self.config_copy_lca["model"]["num_classes"][i] for i in idx_lca]
-        
+
         
         self.config_copy_rca["output_directory"] = os.path.join(self.config_copy_rca["output_directory"], "rca")
         self.config_copy_lca["output_directory"] = os.path.join(self.config_copy_lca["output_directory"], "lca")

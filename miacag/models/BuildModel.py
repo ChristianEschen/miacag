@@ -150,10 +150,10 @@ class ModelBuilder():
             #else:
             #   if self.config['model']['model_name'] in "dinov2_vits14":
             # else:
-                for param in model.module.fcs.parameters():
-                    param.requires_grad = True
-                for param in model.module.attention.parameters():
-                    param.requires_grad = True
+                # for param in model.module.fcs.parameters():
+                #     param.requires_grad = True
+                # for param in model.module.attention.parameters():
+                #     param.requires_grad = True
         return model
 
     def __call__(self):

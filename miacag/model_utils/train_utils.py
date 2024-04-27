@@ -143,9 +143,13 @@ def train_one_epoch(model, criterion,
                                             epoch,
                                             'train')
     if torch.distributed.get_rank() == 0:
+        if config['lr_scheduler']['type'] == 'coswarm':
+            cur_lr = lr_scheduler.optimizer.param_groups[0]['lr']
+        else:
+            cur_lr= lr_scheduler.get_last_lr()[0]
         writer.add_scalar(
             "learning rate",
-             lr_scheduler.get_last_lr()[0],  # losses[loss],
+             cur_lr,  # losses[loss],
              epoch)
     return iter_minibatch
 

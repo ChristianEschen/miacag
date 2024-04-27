@@ -120,11 +120,11 @@ def pretraining_downstreams(cpu, num_workers, config_path, table_name_input, deb
     rank = int(os.environ['RANK'])
 
     experiment_name = get_exp_name(config, rank, config_path)
-    if table_name_input is not None:
-        output_table_name = experiment_name + "_" + table_name_input
-    else:
+    if table_name_input is None:
         output_table_name = \
             experiment_name + "_" + config['table_name']
+    else:
+        output_table_name = table_name_input
     output_directory = os.path.join(
                         config['output'],
                         experiment_name)
@@ -285,9 +285,14 @@ def plot_task_not_ddp(config_task, output_table_name, conf, loss_names):
 ####################################################################################
 def train_and_test(config_task):
    # torch.distributed.barrier()
-    train(config_task)
-    config_task['model']['pretrain_model'] = config_task['output_directory']
-    config_task['model']['pretrained'] = "None"
+    if not config_task['is_already_trained']:
+        print('init training')
+        train(config_task)
+        config_task['model']['pretrain_model'] = config_task['output_directory']
+        config_task['model']['pretrained'] = "None"
+    else:
+        print('model already trained')
+    
  #   config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
  #   config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
     torch.distributed.barrier()
@@ -371,9 +376,12 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     config_task['eval_metric_train']['name'] = eval_names_train
     config_task['eval_metric_val']['name'] = eval_names_val
     config['model']['num_classes'] = num_classes
-    config_task['output'] = output_directory
-    config_task['output_directory'] = os.path.join(output_directory, task_names[0])
-    
+    if not config['is_already_trained']:
+        config_task['output'] = output_directory
+        config_task['output_directory'] = os.path.join(output_directory, task_names[0])
+    else:
+        config_task['output'] = output_directory
+        config_task['output_directory'] = output_directory
     mkFolder(config_task['output_directory'])
     config_task['table_name'] = output_table_name
     config_task['use_DDP'] = 'True'

@@ -303,9 +303,9 @@ def create_nan_tensor_to_remove_segments_from_targets(labels_names, length, iden
 
 
 def find_matches_ll(labels_names_ll, indentify_cor_type):
-    identify_cor_artery_rca = ['_1_prox',  '_2_mi' , '_3_dist', '_4_pda', '_16_pla']
-    identify_cor_artery_lca = [ '_4_pda', '_5_lm', '_6_prox', '_7_mi', '_8_dist',
-                            '_9_d1', '_10_d2', '_11_prox', '_12_om', '_13_midt', '_14_om', '_15_dist', '_16_pla']
+    identify_cor_artery_rca = ['_1_prox',  '_2_mi' , '_3_dist', '_4_pda_trans', '_16_pla_rca']
+    identify_cor_artery_lca = [ '_4_pda_lca', '_5_lm', '_6_prox', '_7_mi', '_8_dist',
+                            '_9_d1', '_10_d2', '_11_prox', '_12_om', '_13_midt', '_14_om', '_15_dist', '_16_pla_lca']
     #indentify_cor_type = indentify_cor_type.item()
     idx_ll = []
     for i, labels_names in enumerate(labels_names_ll):

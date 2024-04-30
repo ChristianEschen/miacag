@@ -78,7 +78,7 @@ parser.add_argument(
 parser.add_argument(
     '--config_path_pretraining', type=str,
     help="path to config file for pretraining")
-parser.add_argument("--debugging", action="store_true", help="do debugging")
+parser.add_argument("--debugging", action="store_true", default=False, help="do debugging")
 parser.add_argument("--output_table_name", type=str, help="table name output table")
 
 
@@ -164,38 +164,31 @@ def pretraining_downstreams(cpu, num_workers, config_path, table_name_input, deb
 
 
 
-        # ...and map data['labels'] test
-    # 4.1 Pretrain encoder model
-    # raise error if  config['model']['pretrained'] = "Fale" and  config['model']['pretrain_model'] = "None"
+    # if config['model']['ssl_pretraining']:
+    #     print('ssl pretraining')
+    #     from ijepa.main_distributed import launch_in_pipeline
+    #     use_cpu = False if cpu == "False" else True
+    #     config['logging']['folder'] = output_directory
+    #     config_pretrain = copy.deepcopy(config)
+    #     torch.distributed.barrier()
+    #     launch_in_pipeline(config_pretrain,
+    #                        num_workers=num_workers, cpu=use_cpu,
+    #                        init_ddp=False)
+    #     torch.distributed.barrier()
 
-    if config['model']['ssl_pretraining']:
-        print('ssl pretraining')
-        from ijepa.main_distributed import launch_in_pipeline
-        use_cpu = False if cpu == "False" else True
-        config['logging']['folder'] = output_directory
-        config_pretrain = copy.deepcopy(config)
-        torch.distributed.barrier()
-        launch_in_pipeline(config_pretrain,
-                           num_workers=num_workers, cpu=use_cpu,
-                           init_ddp=False)
-        torch.distributed.barrier()
+    # else:        # copy model
+    #     if config['model']['pretrain_model'] != 'None':
+    #         print('need to adapt config')
+    #         if rank == 0:
+    #             shutil.copyfile(
+    #                 os.path.join(config['model']['pretrain_model'], 'model.pt'),
+    #                 os.path.join(output_directory, 'model.pt'))
+    #             torch.distributed.barrier()
+    #         config['model']['pretrain_model']  = output_directory
+    #         config['model']['pretrained'] = "True"
+    #     else:
+    #         pass
 
-    else:        # copy model
-        if config['model']['pretrain_model'] != 'None':
-            print('need to adapt config')
-            if rank == 0:
-                shutil.copyfile(
-                    os.path.join(config['model']['pretrain_model'], 'model.pt'),
-                    os.path.join(output_directory, 'model.pt'))
-                torch.distributed.barrier()
-    #if config['model']['pretrain_model'] != 'None':
-            config['model']['pretrain_model']  = output_directory
-            config['model']['pretrained'] = "True"
-        else:
-            pass
-          #  config['model']['pretrain_model']  = output_directory
-           # config['model']['pretrained'] = "None"
-            
     # loop through all indicator tasks
     unique_index = list(dict.fromkeys(config['task_indicator']))
     for task_index in unique_index:
@@ -288,6 +281,7 @@ def train_and_test(config_task):
     if not config_task['is_already_trained']:
         print('init training')
         train(config_task)
+        # config_task_test = copy.deepcopy(config_task)        
         config_task['model']['pretrain_model'] = config_task['output_directory']
         config_task['model']['pretrained'] = "None"
     else:
@@ -299,7 +293,8 @@ def train_and_test(config_task):
     # clear gpu memory
     torch.cuda.empty_cache()
     # 5 eval model
-    test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
+    if not config_task['is_already_tested']:
+        test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
   #  config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
   #  config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
 
@@ -417,6 +412,12 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             print('rca or lca', count)
             count+=1
             train_and_test(config_task_i)
+            conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
+            loss_names_i = config_task_i['loss']['name']
+            if dist.is_initialized():
+                plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+            else:
+                plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
             
 
     else:

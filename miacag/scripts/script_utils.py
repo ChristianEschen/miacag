@@ -18,9 +18,9 @@ class ConfigManipulator():
     def seperate_lca_and_rca(self):
         self.config_copy_lca  = copy.deepcopy(self.config)
         self.config_copy_rca  = copy.deepcopy(self.config)
-        identify_cor_artery_rca = ['_1_prox',  '_2_mi' , '_3_dist', '_4_pda', '_16_pla']
-        identify_cor_artery_lca = [ '_4_pda', '_5_lm', '_6_prox', '_7_mi', '_8_dist',
-                            '_9_d1', '_10_d2', '_11_prox', '_12_om', '_13_midt', '_14_om', '_15_dist', '_16_pla']
+        identify_cor_artery_rca = ['_1_prox',  '_2_mi' , '_3_dist', '_4_pda_transformed', '_16_pla_rca']
+        identify_cor_artery_lca = [ '_4_pda_lca', '_5_lm', '_6_prox', '_7_mi', '_8_dist',
+                            '_9_d1', '_10_d2', '_11_prox', '_12_om', '_13_midt', '_14_om', '_15_dist', '_16_pla_lca']
 
 
         idx_lca = find_matches_two_lists(self.config['labels_names'], identify_cor_artery_lca)

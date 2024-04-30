@@ -173,6 +173,9 @@ def convertConfFloats(confidences, loss_name, config):
         elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel', 'wfocall1']:
             if conf is None:
                 confidences_conv.append(np.nan)
+            # test if conf is np.nan
+            elif conf == np.nan:
+                confidences_conv.append(np.nan)
             else:
                 confidences_conv.append(float(conf.split("0:")[-1][:-1]))
         else:
@@ -574,6 +577,41 @@ def remove_suffix(input_string, suffix):
     return input_string
 
 
+def select_relevant_data_dominans(result_table, segments):
+    # Make a deep copy of the DataFrame to avoid modifying the original data
+    final_table = copy.deepcopy(result_table)
+
+    # Iterate over each row in the DataFrame
+    for index, row in final_table.iterrows():
+        # Check the 'labels_predictions' for each row to determine the logic to apply
+        if row['labels_predictions'] == 1:  # Assuming '1' is for 'right'
+            for seg in segments:
+                if 'pla' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", None]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pda' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", "Balanceret (PDA fra RCA/PLA fra LCX)", None]:
+                        final_table.at[index, seg] = np.nan
+
+        elif row['labels_predictions'] == 0:  # Assuming '0' is for 'left'
+            for seg in segments:
+                if 'pla' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)"]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pda' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)"]:
+                        final_table.at[index, seg] = np.nan
+
+        else:
+            # Raise an error if 'labels_predictions' contains an unexpected value
+            raise ValueError('Unexpected value in labels_predictions')
+
+    return final_table
+
 def simulte_df(label_names, prediction_names, confidence_names):
     np.random.seed(42)
 
@@ -610,6 +648,8 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    
+    df = select_relevant_data_dominans(df, label_names)
     df =df.dropna(subset=confidence_names, how='all')
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
@@ -750,11 +790,14 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         return None
 
 
+
 def plotRegression(sql_config, label_names,
                    confidence_names, output_folder, config, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
     prediction_names = [label_name+'_predictions' for label_name in label_names]
+    df = select_relevant_data_dominans(df, label_names)
     df =df.dropna(subset=confidence_names, how='all')
+    
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], sql_config)
 

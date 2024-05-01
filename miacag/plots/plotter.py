@@ -577,6 +577,8 @@ def remove_suffix(input_string, suffix):
     return input_string
 
 
+
+
 def select_relevant_data_dominans(result_table, segments):
     # Make a deep copy of the DataFrame to avoid modifying the original data
     final_table = copy.deepcopy(result_table)
@@ -586,31 +588,78 @@ def select_relevant_data_dominans(result_table, segments):
         # Check the 'labels_predictions' for each row to determine the logic to apply
         if row['labels_predictions'] == 1:  # Assuming '1' is for 'right'
             for seg in segments:
-                if 'pla' in seg:
+                if 'pla_rca' in seg:
                     # Set values to np.nan based on 'dominans' condition
                     if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", None]:
                         final_table.at[index, seg] = np.nan
-                elif 'pda' in seg:
+                elif 'pda_t' in seg:
                     # Set values to np.nan based on 'dominans' condition
                     if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", "Balanceret (PDA fra RCA/PLA fra LCX)", None]:
                         final_table.at[index, seg] = np.nan
+                elif 'pla_lca' in seg:
+                    final_table.at[index, seg] = np.nan
+                elif 'pda_lca' in seg:
+                    final_table.at[index, seg] = np.nan
+                    
 
         elif row['labels_predictions'] == 0:  # Assuming '0' is for 'left'
             for seg in segments:
-                if 'pla' in seg:
+                if 'pla_lca' in seg:
                     # Set values to np.nan based on 'dominans' condition
                     if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)"]:
                         final_table.at[index, seg] = np.nan
-                elif 'pda' in seg:
+                elif 'pda_lca' in seg:
                     # Set values to np.nan based on 'dominans' condition
                     if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)"]:
                         final_table.at[index, seg] = np.nan
+                elif 'pla_rca' in seg:
+                    final_table.at[index, seg] = np.nan
+                elif 'pda_t' in seg:
+                    final_table.at[index, seg] = np.nan
 
         else:
             # Raise an error if 'labels_predictions' contains an unexpected value
             raise ValueError('Unexpected value in labels_predictions')
+  #  final_table['sten_proc_16_pla_lca_transformed_confidences'] = df2['combined_confidences'].fillna(df2['sten_proc_16_pla_lca_transformed_confidences'])
+    pda_names = [i for i in segments if '4_pda' in i]
+    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    pla_names = [i for i in segments if '16_pla' in i]
+    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    if len(pda_names) > 1:
+        final_table[agg_pda_name[0]] = final_table[pda_names[0]].fillna(final_table[pda_names[1]])
+    else:
+        try:
+            final_table['sten_proc_4_pda_transformed_confidences'] = final_table[pda_names[0]]
+        except:
+            print('No pda_lca found in database')
+    if len(pla_names) > 1:
 
+        final_table[agg_pla_name[0]] = final_table[pla_names[0]].fillna(final_table[pla_names[1]])
+    else:
+        try:
+            final_table['sten_proc_16_pla_rca_transformed_confidences'] = final_table[pla_names[0]]
+        except:
+            print('No pla_lca found in database')
+    # only keep the elemetn without lca
+    
     return final_table
+
+def select_only_aggregates(segments):
+    pda_names = [i for i in segments if '4_pda' in i]
+    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    pla_names = [i for i in segments if '16_pla' in i]
+    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    include = agg_pda_name + agg_pla_name
+    union = pda_names + pla_names
+    exclude = [i for i in union if i not in include]
+    final_segments = [i for i in segments if i not in exclude]
+    return final_segments
+def rename_label_names(label_names, prediction_names, confidence_names):
+    
+    label_names = select_only_aggregates(label_names)
+    prediction_names = select_only_aggregates(prediction_names)
+    confidence_names = select_only_aggregates(confidence_names)
+    return label_names, prediction_names, confidence_names
 
 def simulte_df(label_names, prediction_names, confidence_names):
     np.random.seed(42)
@@ -626,6 +675,18 @@ def simulte_df(label_names, prediction_names, confidence_names):
         confidence_names[1]: np.random.rand(num_rows),
         prediction_names[1]: np.random.rand(num_rows),
         label_names[1]: np.random.rand(num_rows),
+        confidence_names[2]: np.random.rand(num_rows),
+        prediction_names[2]: np.random.rand(num_rows),
+        label_names[2]: np.random.rand(num_rows),
+        # confidence_names[3]: np.random.rand(num_rows),
+        # prediction_names[3]: np.random.rand(num_rows),
+        # label_names[3]: np.random.rand(num_rows),
+        # confidence_names[4]: np.random.rand(num_rows),
+        # prediction_names[4]: np.random.rand(num_rows),
+        # label_names[4]: np.random.rand(num_rows),
+        # confidence_names[5]: np.random.rand(num_rows),
+        # prediction_names[5]: np.random.rand(num_rows),
+        # label_names[5]: np.random.rand(num_rows),
         'labels_predictions': np.random.randint(0, 2, num_rows),
         'dominans': np.random.choice(["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)", "Højre dominans (PDA+PLA fra RCA)", None], num_rows),
         'StudyInstanceUID': [f"1.3.12.2.1107.5.4.3.{np.random.randint(1,3)}.{np.random.randint(1,2)}{np.random.randint(1,2):02d}{np.random.randint(1,2):02d}" for _ in range(num_rows)],
@@ -639,10 +700,10 @@ def simulte_df(label_names, prediction_names, confidence_names):
 
     # Replace random values with NaN to mimic the original pattern
     nan_fill_probability = 0.5  # 20% NaNs in each column approximately
-    for column in large_df.columns[:2]:
+    for column in large_df.columns[:6]:
         large_df[column].iloc[0:500] = np.nan
-    for column in large_df.columns[4:6]:
-        large_df[column].iloc[500:] = np.nan
+    # for column in large_df.columns[3:6]:
+    #     large_df[column].iloc[500:] = np.nan
     return large_df
 def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
@@ -650,6 +711,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     df, _ = getDataFromDatabase(sql_config)
     
     df = select_relevant_data_dominans(df, label_names)
+    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names)
     df =df.dropna(subset=confidence_names, how='all')
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
@@ -796,6 +858,7 @@ def plotRegression(sql_config, label_names,
     df, _ = getDataFromDatabase(sql_config)
     prediction_names = [label_name+'_predictions' for label_name in label_names]
     df = select_relevant_data_dominans(df, label_names)
+    label_names, prediction_names, confidences = rename_label_names(label_names, prediction_names, confidence_names)
     df =df.dropna(subset=confidence_names, how='all')
     
     for conf in confidence_names:
@@ -1110,21 +1173,49 @@ if __name__ == '__main__':
 
     output_plots_Reg = "/home/alatar/miacag/output_plots/test_reg"
     config_path = '/home/alatar/miacag/my_configs/stenosis_regression/classification_config_angio.yaml'
-    # read config file
+    # for combined plots
     import yaml
     with open(config_path, 'r') as stream:
         config = yaml.safe_load(stream)
-    labels = ['ffr_proc_1_prox_rca_transformed', 'ffr_proc_6_prox_lad_transformed']
-    predictions = ['ffr_proc_1_prox_rca_transformed_predictions', 'ffr_proc_6_prox_lad_transformed_predictions']
-    confidences = ['ffr_proc_1_prox_rca_transformed_confidences', 'ffr_proc_6_prox_lad_transformed_confidences']
+    labels = ['sten_proc_1_prox_rca_transformed', 'sten_proc_6_prox_lad_transformed', "sten_proc_16_pla_rca_transformed", "sten_proc_16_pla_lca_transformed", 'sten_proc_4_pda_transformed', 'sten_proc_4_pda_lca_transformed'] #_4_pda_lca
+    predictions = ['sten_proc_1_prox_rca_transformed_predictions', 'sten_proc_6_prox_lad_transformed_predictions', "sten_proc_16_pla_rca_transformed_predictions", "sten_proc_16_pla_lca_transformed_predictions",  'sten_proc_4_pda_transformed_predictions', 'sten_proc_4_pda_lca_transformed-predictions']
+    confidences = ['sten_proc_1_prox_rca_transformed_confidences', 'sten_proc_6_prox_lad_transformed_confidences',  "sten_proc_16_pla_rca_transformed_confidences", "sten_proc_16_pla_lca_transformed_confidences",  'sten_proc_4_pda_transformed_confidences', 'sten_proc_4_pda_lca_transformed_confidences']
+    labels = ['sten_proc_1_prox_rca_transformed', "sten_proc_16_pla_rca_transformed", 'sten_proc_4_pda_transformed'] #_4_pda_lca
+    predictions = ['sten_proc_1_prox_rca_transformed_predictions', "sten_proc_16_pla_rca_transformed_predictions",  'sten_proc_4_pda_transformed_predictions']
+    confidences = ['sten_proc_1_prox_rca_transformed_confidences',  "sten_proc_16_pla_rca_transformed_confidences", 'sten_proc_4_pda_transformed_confidences']
+
     config['query'] = config['query_rca']
-    df, _ = getDataFromDatabase(config)
-    confidence_names = [label_name+'_transformed_confidences' for label_name in config['labels_names']]
-    for conf in confidence_names:
-        df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
+
+    # df, _ = getDataFromDatabase(config)
+    # confidence_names = [label_name+'_transformed_confidences' for label_name in config['labels_names']]
+    # for conf in confidence_names:
+    #     df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
 
     df = simulte_df(labels, predictions, confidences)
 
-
+    df = select_relevant_data_dominans(df,  confidences)
+    labels, predictions, confidences = rename_label_names(labels, predictions, confidences)
+    df = select_relevant_data_dominans(df, labels)
+   # df = select_relevant_data_dominans(df, label_names)
     wrap_plotRegression(df,  labels, predictions,output_plots_Reg, True, config)
     plot_wrapper(df, labels, predictions, confidences, output_plots, config, True)
+    
+    # for individual plots
+    # read config file
+    # import yaml
+    # with open(config_path, 'r') as stream:
+    #     config = yaml.safe_load(stream)
+    # labels = ['ffr_proc_1_prox_rca_transformed', 'ffr_proc_6_prox_lad_transformed']
+    # predictions = ['ffr_proc_1_prox_rca_transformed_predictions', 'ffr_proc_6_prox_lad_transformed_predictions']
+    # confidences = ['ffr_proc_1_prox_rca_transformed_confidences', 'ffr_proc_6_prox_lad_transformed_confidences']
+    # config['query'] = config['query_rca']
+    # df, _ = getDataFromDatabase(config)
+    # confidence_names = [label_name+'_transformed_confidences' for label_name in config['labels_names']]
+    # for conf in confidence_names:
+    #     df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
+
+    # df = simulte_df(labels, predictions, confidences)
+
+
+    # wrap_plotRegression(df,  labels, predictions,output_plots_Reg, True, config)
+    # plot_wrapper(df, labels, predictions, confidences, output_plots, config, True)

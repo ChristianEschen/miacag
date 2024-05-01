@@ -414,11 +414,22 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             train_and_test(config_task_i)
             conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
             loss_names_i = config_task_i['loss']['name']
-            if dist.is_initialized():
-                plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
-            else:
-                plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
-            
+            if count == 0:
+                config_task_i['train_plot'] = config_task_i['train_plot_rca']
+                config_task_i['val_plot'] = config_task_i['val_plot_rca']
+                config_task_i['test_plot'] = config_task_i['test_plot_rca']
+            elif count == 1:
+                config_task_i['train_plot'] = config_task_i['train_plot_lca']
+                config_task_i['val_plot'] = config_task_i['val_plot_lca']
+                config_task_i['test_plot'] = config_task_i['test_plot_lca']
+                
+            if not config_task_i['debugging']:
+                
+                if dist.is_initialized():
+                    plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+                else:
+                    plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
+                
 
     else:
         if len(config_task_list)>1:

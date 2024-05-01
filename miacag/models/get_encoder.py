@@ -354,7 +354,7 @@ def get_encoder(config, device):
             #     from timm.models import vit_small_patch16_224
             #     import timm
             #   #  model = timm.create_model('vit_small_patch16_224.augreg_in21k', pretrained=False)
-                from dinov2.models.vision_transformer import DinoVisionTransformer, vit_small
+              #  from dinov2.models.vision_transformer import DinoVisionTransformer, vit_small
         #    model = vit_small()
                 model = vit.__dict__[config['model']['backbone']](
                     img_size=[config['loaders']['Resize_height']],

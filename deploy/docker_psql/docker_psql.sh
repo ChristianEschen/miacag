@@ -5,6 +5,6 @@ psql -h localhost -p 5432 -U alatar -d mydb
 # save docker image
 sudo docker save -o my-custom-postgres.tar my-custom-postgres
 
-
+sudo docker start my-custom-postgres-instance
 sudo docker stop my-custom-postgres
 sudo docker rm my-custom-postgres

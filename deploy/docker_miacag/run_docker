@@ -3,3 +3,4 @@ sudo docker run --gpus all -it --network my_network   -v /home/alatar/miacag:/ho
 export DB_HOST=my-custom-postgres-instance
 
 psql -h $DB_HOST -p 5432 -U alatar -d mydb
+pg_dump -U alatar -h $DB_HOST -d mydb -t cag.test_deploy > output_file.sql

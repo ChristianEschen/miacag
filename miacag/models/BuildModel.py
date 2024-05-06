@@ -1,7 +1,6 @@
 import yaml
 import torch
 import os
-from miacag.models.milmodel_from_features import MILModel
 
 class ModelBuilder():
     def __init__(self, config, device):

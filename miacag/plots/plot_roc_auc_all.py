@@ -157,7 +157,11 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         ypred_bin  = np.clip(ypred_bin, a_min=0, a_max=1)
         ypred_bin = threshold_continues(
             pd.DataFrame(ypred_bin), threshold=theshold, name=seg)
+        print('ypred_bin', ypred_bin)
+        print('y_test', y_test)
+        print('yproba', yproba)
         yproba = np.clip(yproba, a_min=0, a_max=1)
+        print('yproba post clip', yproba)
         #DEBUG
         # probas = np.random.rand(len(probas))
         # y_test = np.random.randint(2, size=len(y_test))
@@ -201,7 +205,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
    # probas_bin = np.random.randint(2, size=8)
 
     # plot roc curve for all segments combined
-    fpr, tpr, _ = roc_curve(y_test,  yproba)
+    fpr, tpr, _ = roc_curve(trues,  probas)
     mean_auc_all, lower_auc_all, upper_auc_all = get_mean_lower_upper(probas, trues, 'roc_auc_score')
     fig = plt.figure(figsize=(8,6))
     plt.plot(fpr, 

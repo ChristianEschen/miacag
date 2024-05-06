@@ -87,16 +87,6 @@ def train(config):
         # print only every 100 epochs
         if epoch % 100 == 0:
             print('epoch nr', epoch)
-        # train one epoch
-        iter_minibatch = train_one_epoch(model, criterion_train,
-                        train_loader, device, epoch,
-                        optimizer, lr_scheduler,
-                        running_metric_train, running_loss_train,
-                        writer, config, scaler, iter_minibatch)
-
-        if config['cache_num'] not in  ['standard', 'None']:
-            train_ds.update_cache()
-           # train_ds.set_data()
 
         # Check elapsed time since last validation
         if dist.get_rank() == 0:
@@ -130,6 +120,16 @@ def train(config):
             last_validation_time = time.time()  # Reset last validation time
             if early_stop is True:
                 break
+        # train one epoch
+        iter_minibatch = train_one_epoch(model, criterion_train,
+                        train_loader, device, epoch,
+                        optimizer, lr_scheduler,
+                        running_metric_train, running_loss_train,
+                        writer, config, scaler, iter_minibatch)
+
+        if config['cache_num'] not in  ['standard', 'None']:
+            train_ds.update_cache()
+           # train_ds.set_data()
 
     if config['cache_num'] not in ['standard', 'None']:
         train_ds.shutdown()

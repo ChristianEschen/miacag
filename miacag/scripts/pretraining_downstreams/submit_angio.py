@@ -285,6 +285,8 @@ def train_and_test(config_task):
         config_task['model']['pretrain_model'] = config_task['output_directory']
         config_task['model']['pretrained'] = "None"
     else:
+        # crawl one level up in the direcotry fir config_task['output_directory]
+        config_task['model']['pretrain_model'] = os.path.join(config_task['base_model'], config_task['artery_type'])
         print('model already trained')
     
  #   config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
@@ -375,6 +377,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
         config_task['output'] = output_directory
         config_task['output_directory'] = os.path.join(output_directory, task_names[0])
     else:
+        config_task['base_model'] = config['output']
         config_task['output'] = output_directory
         config_task['output_directory'] = output_directory
     mkFolder(config_task['output_directory'])

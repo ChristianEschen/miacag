@@ -709,13 +709,13 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
-    
-    df = select_relevant_data_dominans(df, label_names)
-    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names)
-    df =df.dropna(subset=confidence_names, how='all')
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
     
+    df = select_relevant_data_dominans(df, confidence_names)
+    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names)
+    df =df.dropna(subset=confidence_names, how='all')
+
     #df = simulte_df(label_names, prediction_names, confidence_names)
 
     plot_wrapper(df, label_names, prediction_names, confidence_names, output_plots, config, group_aggregated)
@@ -856,13 +856,14 @@ def plotStenoserTrueVsPred(sql_config, label_names,
 def plotRegression(sql_config, label_names,
                    confidence_names, output_folder, config, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    for conf in confidence_names:
+        df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], sql_config)
+
     prediction_names = [label_name+'_predictions' for label_name in label_names]
-    df = select_relevant_data_dominans(df, label_names)
+    df = select_relevant_data_dominans(df, confidence_names)
     label_names, prediction_names, confidences = rename_label_names(label_names, prediction_names, confidence_names)
     df =df.dropna(subset=confidence_names, how='all')
     
-    for conf in confidence_names:
-        df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], sql_config)
 
    # df = simulte_df(label_names, prediction_names, confidence_names)
 
@@ -983,6 +984,8 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     mask = mask | y.isna()
     x = x[~mask]
     y = y[~mask]
+    # test for NaN values and None
+
     if label_name_ori.startswith('ffr'):
         max_v = 1
     elif label_name_ori.startswith('sten'):

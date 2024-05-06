@@ -93,6 +93,8 @@ class ModelBuilder():
                         model.module.load_state_dict(
                             torch.load(os.path.join(path_model, 'model.pt')
                                     ,map_location='cuda:{}'.format(os.environ['LOCAL_RANK'])))
+            else:
+                raise ValueError('No model to load in test mode??')
         
         return model
 

@@ -394,13 +394,16 @@ class val_monai_classification_loader(base_monai_loader):
             self.max_target = 3
         else:
             self.max_target = 100    
-        for label_name in config['labels_names']:
-            self.df[label_name] = self.df[label_name].fillna(0)
+        if config['labels_names'][0].startswith('sten') or config['labels_names'][0].startswith('ffr') or config['labels_names'][0].startswith('timi'):
+            for label_name in config['labels_names']:
+                if config['labels_names'][0].startswith('ffr'):
+                    print('consider if we should implement replacement of ffr nan values just for validation...')
+                #self.df[label_name] = self.df[label_name].fillna(0)
 
-            self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
-            w_label_names.append('weights_' + label_name)
-            self.df['weights_' + label_name] = self.weights
-        #self.data = self.df[self.features + config['labels_na
+                self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+                w_label_names.append('weights_' + label_name)
+                self.df['weights_' + label_name] = self.weights
+
         if self.config['loss']['name'][0] == 'NNL':
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
 

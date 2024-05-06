@@ -14,6 +14,9 @@ import matplotlib
 from matplotlib.ticker import MaxNLocator
 matplotlib.use('Agg')
 import os
+import torch
+
+
 
 def idx_at_times(index_surv, times, steps='pre', assert_sorted=True):
     """Gives index of `index_surv` corresponding to `time`, i.e. 
@@ -539,9 +542,36 @@ def compute_concordance(df_target, base_haz, bch, config_task):
     c_index = c_index[0]
 
 
+
     return c_index, None
 
-def compute_brier(df_target, base_haz, bch, config_task):
+def compute_concordance_discrete(surv, duration, event, config_task):
+    ev = EvalSurv(surv, duration, event, censor_surv='km')
+    #auc_1_year = get_roc_auc_ytest_1_year_surv(survival_etimates, config_task, len(surv_preds_observed.columns))
+    # if config_task['debugging']:
+    #     try:
+            
+    #         c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
+    #     except:
+    #         c_index = [0.5]
+    # else:
+    #c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
+    c_index = ev.concordance_td('antolini')
+    #c_index = c_index[0]
+    return c_index
+def compute_brier_discrete(surv, duration, event, config_task):
+    time_grid = np.linspace(duration.min(), duration.max(), 100)
+
+    ev = EvalSurv(surv, duration, event, censor_surv='km')
+    
+    #concordance = ev.concordance_td()
+
+
+    brier_scores = ev.brier_score(time_grid)
+    ibs = ev.integrated_brier_score(time_grid)
+    return ibs, brier_scores
+
+def compute_brier(surv, duration, event, config_task):
     survival_etimates = predict_surv_df(df_target, base_haz, bch, config_task)
 
     ev = EvalSurv(survival_etimates, df_target[config_task['labels_names'][0]].to_numpy(), df_target['event'].to_numpy(), censor_surv='km')
@@ -572,7 +602,7 @@ def compute_bootstrapped_scores(df_target, base_haz, bch, config_task, flag='con
                 
             scores, _ = compute_concordance(df_target.iloc[indices], base_haz, bch, config_task)
         else:
-            scores, _ = compute_brier(df_target.iloc[indices], base_haz, bch, config_task)
+            scores, brier_scores_ = compute_brier(df_target.iloc[indices], base_haz, bch, config_task)
         bootstrapped_scores.append(scores)
 
     
@@ -580,15 +610,63 @@ def compute_bootstrapped_scores(df_target, base_haz, bch, config_task, flag='con
 
     return bootstrapped_scores
 
+def compute_bootstrapped_scores_discrete(surv, durations, event, config_task, flag='concordance'):
+    n_bootstraps = 1000
+    rng_seed = 42 # control reproducibility
+
+    bootstrapped_scores = []
+    rng = np.random.RandomState(rng_seed)
+    for i in range (n_bootstraps):
+        
+        #bootstrap by sampling with replacement on the prediction indices
+        indices = rng.randint(0, len(surv), len(surv))
+        indices =  rng.randint(0, len(surv.columns), len(surv.columns))
+      #  surv_b = surv.iloc[indices].sort_index()
+      #  order = np.argsort(surv_b.index) 
+
+       # if flag == 'concordance':
+        if len(np.unique(event[indices])) < 2:
+            # We need at least one positive and one negative sample for ROC AUC
+            # # to be defined: reject the sample
+            continue
+        if flag == 'concordance':
+          #  if len(np.unique(df_target['event'][indices])) < 2:
+                
+            scores = compute_concordance_discrete(surv[indices], durations[indices], event[indices], config_task)
+        else:
+            scores, brier_scores_ = compute_brier_discrete(surv[indices], durations[indices], event[indices],  config_task)
+        bootstrapped_scores.append(scores)
+
+    
+
+    if flag == 'concordance':
+        return bootstrapped_scores
+    else:
+        return bootstrapped_scores, brier_scores_
+
 
 def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
     compute_bootstrapped_scores_conc = compute_bootstrapped_scores(
         df_target, base_haz, bch, config_task, flag='concordance')
-    compute_bootstrapped_scores_ibs = compute_bootstrapped_scores(
+    compute_bootstrapped_scores_ibs, brier = compute_bootstrapped_scores(
         df_target, base_haz, bch, config_task, flag='brier')
     _, brier_scores = compute_brier(df_target, base_haz, bch, config_task)
-    mean_conc, upper_conc, lower_conc = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
-    mean_brier, upper_brier, lower_brier = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
+    mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
+    mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
+    variable_dict = {
+        k: v for k, v in locals().items() if k in [
+            "mean_conc", "upper_conc", "lower_conc",
+            "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
+    return variable_dict
+
+
+def confidences_upper_lower_survival_discrete(surv, duration, test, config_task):
+    compute_bootstrapped_scores_conc = compute_bootstrapped_scores_discrete(
+        surv, duration, test, config_task, flag='concordance')
+    compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores_discrete(
+        surv, duration, test, config_task, flag='brier')
+    mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
+    mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
     variable_dict = {
         k: v for k, v in locals().items() if k in [
             "mean_conc", "upper_conc", "lower_conc",

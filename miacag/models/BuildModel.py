@@ -70,7 +70,7 @@ class ModelBuilder():
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
 
-        if self.config['loaders']['mode'] in ['testing', 'prediction']:
+        if self.config['loaders']['mode'] in ['testing', 'prediction']: # or (self.config['model']['pretrain_model'] != 'None'):
             if path_model != 'None':
                 if self.config["use_DDP"] == "False":
                     #if self.config['use_DDP'] == 'True':
@@ -92,6 +92,9 @@ class ModelBuilder():
                         model.module.load_state_dict(
                             torch.load(os.path.join(path_model, 'model.pt')
                                     ,map_location='cuda:{}'.format(os.environ['LOCAL_RANK'])))
+            else:
+                raise ValueError('No model to load in test mode??')
+        
         return model
 
     def get_segmentation_model(self):
@@ -145,13 +148,17 @@ class ModelBuilder():
             if self.config['model']['freeze_backbone']:
                 for param in model.module.encoder.parameters():
                     param.requires_grad = False
+                if self.config['model']['aggregation'] == 'cross_attention':
+                    for param in model.module.att_pool.parameters():
+                        param.requires_grad = True
+                        
             #else:
             #   if self.config['model']['model_name'] in "dinov2_vits14":
-            # else:
-                for param in model.module.fcs.parameters():
-                    param.requires_grad = True
-                for param in model.module.attention.parameters():
-                    param.requires_grad = True
+                else:
+                    for param in model.module.fcs.parameters():
+                        param.requires_grad = True
+                    for param in model.module.attention.parameters():
+                        param.requires_grad = True
         return model
 
     def __call__(self):

@@ -1,24 +1,61 @@
 import os
 import torch
 from miacag.model_utils.scheduler import WarmupMultiStepLR
+import math
+class WarmupCosineSchedule(object):
 
+    def __init__(
+        self,
+        optimizer,
+        warmup_steps,
+        start_lr,
+        ref_lr,
+        T_max,
+        last_epoch=-1,
+        final_lr=0.
+    ):
+        self.optimizer = optimizer
+        self.start_lr = start_lr
+        self.ref_lr = ref_lr
+        self.final_lr = final_lr
+        self.warmup_steps = warmup_steps
+        self.T_max = T_max - warmup_steps
+        self._step = 0.
 
+    def step(self):
+        self._step += 1
+        if self._step < self.warmup_steps:
+            progress = float(self._step) / float(max(1, self.warmup_steps))
+            new_lr = self.start_lr + progress * (self.ref_lr - self.start_lr)
+        else:
+            # -- progress after warmup
+            progress = float(self._step - self.warmup_steps) / float(max(1, self.T_max))
+            new_lr = max(self.final_lr,
+                         self.final_lr + (self.ref_lr - self.final_lr) * 0.5 * (1. + math.cos(math.pi * progress)))
+
+        for group in self.optimizer.param_groups:
+            group['lr'] = new_lr
+
+        return new_lr
+    
 def get_optimizer(config, model, len_train):
     if config['use_DDP'] == 'False':
         os.environ['WORLD_SIZE'] = '1'
     if config['optimizer']['type'] == 'adam':
         optimizer = torch.optim.Adam(
             model.parameters(),
-            lr=config['optimizer']['learning_rate'] *
-            float(os.environ['WORLD_SIZE']),
+            lr=config['optimizer']['learning_rate'],
             weight_decay=config['optimizer']['weight_decay'])
-
+    elif config['optimizer']['type'] == 'adamw':
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'],
+            weight_decay=config['optimizer']['weight_decay'])
     elif config['optimizer']['type'] == 'sgd':
 
         optimizer = torch.optim.SGD(
             model.parameters(),
-            lr=config['optimizer']['learning_rate'] *
-            float(os.environ['WORLD_SIZE']),
+            lr=config['optimizer']['learning_rate'],
             momentum=config['optimizer']['momentum'],
             weight_decay=config['optimizer']
                                 ['weight_decay'])
@@ -28,7 +65,10 @@ def get_optimizer(config, model, len_train):
             optimizer,
             step_size=config['lr_scheduler']['steps_for_drop'],
             gamma=0.1)
-    elif config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos']:
+    elif config['lr_scheduler']['type'] == 'OneCycleLR':
+        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config['optimizer']['learning_rate'],
+                                                           steps_per_epoch=config['lr_scheduler']["steps_per_epoch"], epochs=config['trainer']['epochs'])
+    elif config['lr_scheduler']['type'] in ['MultiStepLR', 'poly', 'cos', "warmup_const", "coswarm"]:
         if config['lr_scheduler']['type'] == 'poly':
             print('to be implemented')
             lr_scheduler = PolynomialLRDecay(
@@ -49,11 +89,28 @@ def get_optimizer(config, model, len_train):
                     warmup_iters=warmup_iters,
                     warmup_factor=1e-5,
                 )
+        elif config['lr_scheduler']['type'] == 'warmup_const':
+            scheduler1 = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=config['lr_scheduler']['lr_warmup'], total_iters=config['lr_scheduler']['nr_warmup_epochs'])
+            scheduler2 = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=config['optimizer']['learning_rate'], total_iters=config['lr_scheduler']['nr_warmup_epochs'])
+            lr_scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer, schedulers=[scheduler1, scheduler2], milestones=[2])
         elif config['lr_scheduler']['type'] == 'cos':
             lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, config['trainer']['epochs'])
+        elif config['lr_scheduler']['type'] == 'coswarm':
+            lr_scheduler = WarmupCosineSchedule(
+                optimizer,
+                warmup_steps=int(5),
+                start_lr=1e-6,
+                ref_lr=0.02,
+                final_lr=1e-6,
+                T_max=config['trainer']['epochs'])
     else:
         lr_scheduler = False
+
+    # warmup_steps = 200
+    # base_lr = 0.000001
+    # lambda1 = lambda step: step / warmup_steps if step < warmup_steps else 1
+    # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
     return optimizer, lr_scheduler
 

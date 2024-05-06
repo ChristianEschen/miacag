@@ -41,42 +41,40 @@ def train_one_step(model, data, criterion,
                    running_loss_train,
                    running_metric_train,
                    epoch,
-                   tb_step_writer, scaler, device):
-    model.train()
-    # combined_tensor = torch.cat([data[label_name] for label_name in config['labels_names']], dim=0)
-    
-    # # Check if all values in the combined tensor are NaNs
-    # if torch.isnan(combined_tensor).all():
-    #     #print(f"Skipping iteration {i} as all values in data are NaNs.")
-    #     del combined_tensor
-    # else:
-    # zero the parameter gradients
-    optimizer.zero_grad()
-    # if config['labels_names'][0].startswith("sten"):
-    #     criterion[0].__defaults__[0][1] = 1
-    # forward + backward + optimize
+                   tb_step_writer, scaler, device, iter_minibatch):
+    model.train()    
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
-            outputs = model(data['inputs'].as_tensor())
+       # with torch.autocast(device_type='cuda', dtype=torch.float16):
+            outputs = model(data['inputs'])
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
                                             criterion,
                                             device)
+        loss = loss / config['accum_iter']
 
         scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-      #  optimizer.step()
+        if (iter_minibatch + 1) % config['accum_iter'] == 0:
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+
     else:
-        outputs = model(data['inputs'].as_tensor())
+        outputs = model(data['inputs'])
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
                                         criterion,
                                         device)
+        loss = loss / config['accum_iter']
+
         loss.backward()
-        optimizer.step()
+
+        if (iter_minibatch + 1) % config['accum_iter'] == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+    
     outputs = wrap_outputs_to_dict(outputs, config)
     losses = create_loss_dict(config, losses, loss)
     metrics, losses_metric = get_loss_metric_class(
@@ -90,12 +88,20 @@ def train_one_epoch(model, criterion,
                     train_loader, device, epoch,
                     optimizer, lr_scheduler,
                     running_metric_train, running_loss_train,
-                    writer, config, scaler):
+                    writer, config, scaler, iter_minibatch):
         # if config['loaders']['mode'] == 'testing':
    # train_loader.dataset.data = train_loader.dataset.data*400
-    
     for i, data in enumerate(train_loader, 0):
+        iter_minibatch += 1
+
         data = get_data_from_loader(data, config, device)
+      #  if epoch >= 2:
+      
+        # from miacag.dataloader.get_dataloader import display_input, display_input_stats
+        #from miacag.dataloader.get_dataloader import display_input
+        #if i ==1:
+        #    display_input(data["inputs"], config)
+        #display_input_stats(data)
        # print('1 prox', data['sten_proc_1_prox_rca_transformed'])
       # print('2 midt', data['sten_proc_2_midt_rca_transformed'])
         # if epoch < 10:
@@ -116,7 +122,8 @@ def train_one_epoch(model, criterion,
             epoch,
             tb_step_writer=i,
             scaler=scaler,
-            device=device)
+            device=device,
+            iter_minibatch=iter_minibatch)
         # running_metric_train = increment_metrics(running_metric_train,
         #                                          metrics)
        # running_loss_train = increment_metrics(running_loss_train, loss)
@@ -129,17 +136,22 @@ def train_one_epoch(model, criterion,
         metrics, device)
     running_loss_train, loss_tb = normalize_metrics(
         loss_metric, device)
-    # running_loss_train = normalize_metrics(
-    #     running_loss_train,
-    #     config,
-    #     len(train_loader.dataset.data)
-    #     if config['cache_num'] == 'None' else config['cache_num_train'])
 
     loss_tbe, metric_tb = write_tensorboard(loss_tb,
                                             metric_tb,
                                             writer,
                                             epoch,
                                             'train')
+    if torch.distributed.get_rank() == 0:
+        if config['lr_scheduler']['type'] == 'coswarm':
+            cur_lr = lr_scheduler.optimizer.param_groups[0]['lr']
+        else:
+            cur_lr= lr_scheduler.get_last_lr()[0]
+        writer.add_scalar(
+            "learning rate",
+             cur_lr,  # losses[loss],
+             epoch)
+    return iter_minibatch
 
 
 def test_best_loss(best_val_loss, best_val_epoch, val_loss, epoch):
@@ -226,6 +238,8 @@ def saver(metric_dict_val, writer, config):
             del config_tensorboard[key]
 
     # save tensorboard
+    if config_tensorboard['loss_name0'] =='NNL':
+        config_tensorboard['cuts'] = str(config_tensorboard['cuts'])
     writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()

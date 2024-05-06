@@ -5,7 +5,6 @@ from miacag.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
 import numpy as np
-from miacag.models.fds import FDS
 
 def getCountsLoss(losses):
     count_regression = 0
@@ -141,31 +140,61 @@ class ImageToScalarModel(EncoderModel):
             #         self.config['loss']['name'],
             #         loss_type, self.config['model']['num_classes'])
             count_loss = self.config['loss']['groups_counts'][loss_count_idx]
-            if loss_type.startswith('CE'):
+            if loss_type.startswith(tuple(['CE'])):
                 self.fcs.append(nn.Linear(
                         self.in_features,
                         config['model']['num_classes'][loss_count_idx]).to(device))
+                
+            elif loss_type.startswith(tuple(['NNL'])):
+                self.fcs.append(nn.Linear(
+                        self.in_features,
+                        config['model']['num_classes'][loss_count_idx]).to(device))
+                # if loss_type.startswith(tuple(['NNL'])):
+                #     self.fcs.append(nn.Sigmoid())
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(
-                        # nn.Linear(
-                        #     self.in_features, self.in_features),
+                        nn.Linear(
+                            self.in_features, self.in_features).to(device),
+                        nn.ReLU(),
                         nn.Linear(
                             self.in_features, count_loss)
-                        ).to(device))
+                        ).to(device),
+                        nn.ReLU())
             # test if loss_type startswith three conditions
             
-            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'NNL', 'wfocall1'])):
-                # if config['model']['sigm'] == 'True':
-                self.fcs.append(
-                    nn.Sequential(
-                        # nn.Linear(
-                        #     self.in_features, self.in_features),
-                        nn.Linear(
-                            self.in_features,
-                            count_loss).to(device)
-                        ))
- 
+            elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'wfocall1'])):
+                if config['model']['aggregation'] == 'mean':   
+                    self.fcs.append(
+                        nn.Sequential(
+                            nn.Linear(
+                                self.in_features, self.in_features).to(device),
+                            nn.ReLU(),
+                            nn.Linear(
+                                self.in_features,
+                                count_loss).to(device),
+                            nn.ReLU(),
+
+                            ))
+                elif config['model']['aggregation'] == 'cross_attention':
+                    from miacag.models.attention_pooler import AttentivePooler, AttentiveClassifier
+                    self.att_pool = AttentiveClassifier(
+                        embed_dim=self.encoder.embed_dim,
+                        num_heads=self.encoder.num_heads,
+                        depth=1,
+                        num_classes=count_loss,
+                    ).to(device)
+
+                    #self.att_pool = AttentivePooler(embed_dim=self.in_features,num_heads=1)
+                    # self.fcs.append(
+                    #     nn.Sequential(
+                    #         nn.Linear(
+                    #             self.in_features, count_loss).to(device),
+                    #         ))
+                    
+                else:
+                    ValueError('aggregation not implemented', config['models']['aggregation'])
+
             else:
                 raise ValueError('loss not implemented')
             
@@ -180,24 +209,36 @@ class ImageToScalarModel(EncoderModel):
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
-        if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in [
-                "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
-                "vit_small_patch16_224", "vit_large_patch16_224",
-                "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
-                "vit_huge_patch14"]:
-                p = p.mean(dim=(-3, -2, -1))
+        if self.config['model']['aggregation'] == 'mean':
+            if self.dimension in ['3D', '2D+T']:
+                if self.config['model']['backbone'] not in [
+                    "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
+                    "vit_small_patch16_224", "vit_large_patch16_224",
+                    "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
+                    "vit_huge_patch14"]:
+                    
+                    if self.config['model']['backbone'] in [
+                    "vit_tiny_3d", "vit_small_3d", "vit_base_3d", "vit_large_3d"]:
+                        p = p.mean(dim=(-2))
+                    else:
+                        p = p.mean(dim=(-3, -2, -1))
+                else:
+                    pass
+            elif self.dimension == 'tabular':
+                p = p
             else:
-                pass
-        elif self.dimension == 'tabular':
-            p = p
+                p = p.mean(dim=(-2, -1))
+            ps = []
+            for fc in self.fcs:
+                features = fc(p)
+                ps.append(features)
         else:
-            p = p.mean(dim=(-2, -1))
-        ps = []
-        for fc in self.fcs:
-            features = fc(p)
-            ps.append(features)
+        #    print('aggregation is cross attention')
+            ps = [self.att_pool(p)]
+          #  p = p.mean(dim=(1))
+
         return ps
+
 
     def forward_saliency(self, x):
         x = maybePermuteInput(x, self.config)

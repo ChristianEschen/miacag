@@ -7,7 +7,6 @@ from torch.utils.data import WeightedRandomSampler
 import os
 #from miacag.dataloader.dataloader_base import DataloaderTrain
 from monai.transforms import (
-    AddChanneld,
     Compose,
     LoadImaged,
     RepeatChanneld,
@@ -74,8 +73,9 @@ class DataloaderBase(data.Dataset):
         return self.num_samples
 
     def getSampler(self):
+        #if not self.config['labels_names'][0] == 'duration_transformed'
         self.class_weights = [self.num_samples/self.class_counts[i] for
-                              i in range(len(self.class_counts))]  # [::-1]
+                            i in range(len(self.class_counts))]  # [::-1]
         self.weights = [self.class_weights[
             self.df[self.config['labels_names']].squeeze().to_list()[i]]
                         for i in range(int(self.num_samples))]

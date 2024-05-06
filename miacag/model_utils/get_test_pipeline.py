@@ -69,7 +69,8 @@ class TestPipeline():
                 #     count,
                 #     config)
             #     self.insert_data_to_db(test_loader, label, config)
-    
+            if config['loss']['name'][0] == 'NNL':
+                config['cuts'] = str(config['cuts'])
                 
             log_name = config["table_name"] +  '_log.txt'
             with open(
@@ -193,7 +194,7 @@ class TestPipeline():
         return delimiter.join(t)
 
     def saveCsvFiles(self, label_name, df, config, count):
-        if config['loss']['name'][count].startswith('CE'):
+        if config['loss']['name'][count].startswith(tuple(['CE', 'NNL'])):
             confidences = label_name + '_confidence'
            # confidences = confidences[count]
             confidence_col = [
@@ -212,17 +213,26 @@ class TestPipeline():
         array = np.concatenate(
             (np.expand_dims(df[confidences].to_numpy(), 1),
              np.expand_dims(df["rowid"].to_numpy(), 1)), axis=1)
-      
+        print('Warning this is not correct for CE loss, maybe ok for regression')
         cols = confidence_col + ['rowid']
-        if config['loss']['name'][count].startswith('CE'):
+        if config['loss']['name'][count].startswith(tuple(['CE', 'NNL'])):
             # convert array with rows with liusts to liste
+            
             liste = []
             for i in range(0, config['model']['num_classes'][count]):
                 liste.append(array[i, 0] + [array[i,1]])
-            array = liste
-        df = pd.DataFrame(
-            array,
-            columns=cols)
+            l = []
+            for i in array:
+                l.append(i[0])
+            l = np.vstack(l)
+            df_new = pd.DataFrame(l, columns=confidence_col)
+            df_new["rowid"] = df["rowid"]
+            df = df_new
+            #array = liste
+        else:
+            df = pd.DataFrame(
+                array,
+                columns=cols)
         df.to_csv(
             os.path.join(label_name_csv_files, str(torch.distributed.get_rank()))+'.csv')
         return csv_files

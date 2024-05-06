@@ -1,7 +1,9 @@
 import torch
 import os
-
-
+import numpy as np
+import monai
+from miacag.dataloader.dataloader_base_monai import base_monai_loader
+import monai
 def to_dtype(data,fields, config):
     for c, label_name in enumerate(fields):
         if config['loss']['name'][c].startswith('CE'):
@@ -28,7 +30,99 @@ def to_device(data, device, fields):
         data[field] = data[field].to(device)
     return data
 
+    
 
+def map_category(value):
+    if torch.isnan(value):
+        return 2.0
+    elif value == 0:
+        return 0.5
+    elif value == 1:
+        return 1.0
+    elif value == 2:
+        return 1.5
+    elif value == None:
+        return 2.0
+
+def display_input_stats(data):
+    print('rowid', data['rowid'])
+    print('data shape', data['inputs'].shape)
+    print('data mean', data['inputs'].mean())
+    print('data std', data['inputs'].std())
+    print('data max', data['inputs'].max())
+    print('data min', data['inputs'].min())
+    for p in range(0, data["inputs"].shape[1]):
+        print('patch', p)
+        print('patch mean', data['inputs'][:, p, :, :, :, :].mean())
+        print('patch std', data['inputs'][:, p, :, :, :, :].std())
+        print('patch max', data['inputs'][:, p, :, :, :, :].max())
+        print('patch min', data['inputs'][:, p, :, :, :, :].min())
+def display_input(data, config):
+    # data is a torch tensor of size [bs, patches, ch, h, w, depth]
+    if config['model']['dimension'] == '2D':
+        counter = 0
+        for i in range(0, data.shape[0]):
+            for p in range(0, data.shape[1]):
+                print('counter', counter)   
+
+                counter += 1
+                slice = data[i, p, :, :, :]
+                # normalize slice to [0, 1]
+                slice = (slice - slice.min()) / (slice.max() - slice.min())
+                slice = slice.cpu().numpy()
+                # cast to uint8
+                slice = (slice * 255).astype(np.uint8)
+                # permute slice to [h, w, ch]
+                slice = np.transpose(slice, (1, 2, 0))
+                
+                
+                # show torch tensor as image
+                import matplotlib.pyplot as plt
+                import matplotlib
+                matplotlib.use('TkAgg')
+                plt.imshow(slice)
+                # set grayscale color map
+                plt.set_cmap('gray')
+                plt.show()
+    else:
+        
+        counter = 0
+        for i in range(0, data.shape[0]):
+            for p in range(0, data.shape[1]):
+                for d in range(0, data.shape[5]):
+                    print('counter', counter)   
+
+                    counter += 1
+                    slice = data[i, p, :, :, :, d]
+                    # normalize slice to [0, 1]
+                    slice = (slice - slice.min()) / (slice.max() - slice.min())
+                    slice = slice.cpu().numpy()
+                    # cast to uint8
+                    slice = (slice * 255).astype(np.uint8)
+                    # permute slice to [h, w, ch]
+                    slice = np.transpose(slice, (1, 2, 0))
+                    
+                    
+                    # show torch tensor as image
+                    import matplotlib.pyplot as plt
+                    import matplotlib
+                    matplotlib.use('TkAgg')
+                    plt.imshow(slice)
+                    # set grayscale color map
+                    plt.set_cmap('gray')
+                    plt.show()
+    print('done')
+def encode_labels_predictions_in_corner(data, categories):
+    batch_size = data["inputs"].shape[0]
+    # Encode categorical values into the top-left corner of each patch
+    for i in range(batch_size):
+        # Map the category value to the desired encoding
+        encoded_value = map_category(categories[i])
+
+        # Apply the encoded value to the top-left 2x2 pixels of each patch
+        #for j in range(patches):
+        data['inputs'][i, :, 0:2, 0:2, :] = encoded_value
+    return data
 def get_data_from_loader(data, config, device, val_phase=False):
     if config['loaders']['store_memory'] is True:
         data = {
@@ -36,7 +130,39 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 config['labels_names']: data[1]
                 }
     if config['task_type'] in ["classification", "regression", "mil_classification"]:
+        # rename data["DcmPathFlatten"] to data["inputs"]
+        if config["task_type"] == "mil_classification":
+            data['inputs'] = data['DcmPathFlatten']
+            display_input_stats(data)
+
+       # else:
+            # print('data shape', data['inputs'][0].shape)
+            # print('data mean', data['inputs'][0].mean())
+            # print('data std', data['inputs'][0].std())
+            # print('data max', data['inputs'][0].max())
+            # print('data min', data['inputs'][0].min())
+        if config['loaders']['mode'] == 'testing':
+            trans = monai.transforms.Compose([monai.transforms.ScaleIntensityd(keys="single_clip"), base_monai_loader.maybeNormalize(config, 'single_clip')])
+
+            transformed_inp = []
+            for i in range(0, data['inputs'].shape[1]):
+                single_clip = data["inputs"][0, i, :, :, :]
+                data['single_clip'] = single_clip
+                transformed_inp.append(trans(data)["single_clip"])
+            data["inputs"] = torch.stack(transformed_inp, dim=0)
+      #      data['inputs'] = torch.unsqueeze(data['inputs'], 0)
+        data["inputs"] = torch.tensor(data["inputs"])
         data = to_device(data, device, ['inputs'])
+        
+       # data = encode_labels_predictions_in_corner(data, data['labels_predictions'])
+        # display_input_stats(data)
+        # import matplotlib.pyplot as plt
+        # import matplotlib
+        # matplotlib.use('TkAgg')
+        # display_input(data['inputs'])
+      #  print('data mean', data['inputs'].mean())
+      #  print('data std', data['inputs'].std())
+        # display each frame it consit of tensor of shape [bs, pathcies, ch, h, w, depth]
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
             data = to_device(data, device, ["weights_" + i for i in config['labels_names']])
         data = to_dtype(data, config['labels_names'], config)
@@ -131,7 +257,8 @@ def get_dataloader_train(config):
                 "Data type is not implemented")
 
     return train_loader, val_loader, train_ds, val_ds
-
+    
+#    return train_loader, val_loader, train_ds, val_ds
 
 def get_dataloader_test(config):
     if config['task_type'] in ["classification", "regression", "mil_classification"]:

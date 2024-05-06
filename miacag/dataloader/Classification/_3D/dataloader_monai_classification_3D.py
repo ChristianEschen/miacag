@@ -403,7 +403,7 @@ class val_monai_classification_loader(base_monai_loader):
                 self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
                 w_label_names.append('weights_' + label_name)
                 self.df['weights_' + label_name] = self.weights
-        #self.data = self.df[self.features + config['labels_na
+
         if self.config['loss']['name'][0] == 'NNL':
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
 

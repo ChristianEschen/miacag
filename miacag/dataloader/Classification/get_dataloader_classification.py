@@ -19,6 +19,186 @@ from torch.utils.data import DistributedSampler as _TorchDistributedSampler
 
 __all__ = ["DistributedSampler", "DistributedWeightedRandomSampler"]
 
+def replicate_until_length(lst, target_length):
+    """
+    Replicate elements in a list until it reaches the target length.
+
+    Args:
+    lst (list): The original list.
+    target_length (int): The desired length of the list.
+
+    Returns:
+    list: The list with elements replicated until it reaches the target length.
+    """
+    if not lst:
+        raise ValueError("List is empty")
+
+    # Repeat the list until it reaches or exceeds the target length
+    repeated_list = lst * (target_length // len(lst) + 1)
+
+    # Slice the list to the exact target length
+    return repeated_list[:target_length]
+
+def patches_list_data_collate_fn(batch: collections.abc.Sequence, nr_patches=1, nr_cine_loops=1, batch_size=1):
+    '''
+        Combine instances from a list of dicts into a single dict, by stacking them along first dim
+        [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+        followed by the default collate which will form a batch BxNx3xHxW
+    '''
+    batch_data =batch
+
+    # for i, item in enumerate(batch):
+    #     data = item[0]
+    #     data['inputs'] = torch.concatenate([it["inputs"] for it in item], dim=-1)
+    #  #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+    #     # zero pad if nr_patches is not reached
+    #     if data["inputs"].shape[-1] < nr_patches:
+    #         # zero pad
+    #         diff = nr_patches - data["inputs"].shape[-1]
+    #         data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+    #     # trim to nr_patches
+    #     data["inputs"] = data["inputs"][:, :, :, 0:nr_patches]
+    #     # drop SOPInstanceUID from dict
+    #     data.pop('SOPInstanceUID', None)
+    #     data["DcmPathFlatten"] = data["DcmPathFlatten"][0]
+    #     data["SeriesInstanceUID"] = data["SeriesInstanceUID"][0]
+    #     batch[i] = data
+    batch = default_collate(batch)
+   # batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
+    return batch
+
+def patches_list_data_collate(batch: collections.abc.Sequence, nr_patches=1, nr_cine_loops=1, batch_size=1):
+    '''
+        Combine instances from a list of dicts into a single dict, by stacking them along first dim
+        [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+        followed by the default collate which will form a batch BxNx3xHxW
+    '''
+    batch_data =batch
+
+    for i, item in enumerate(batch):
+        data = item[0]
+        data['inputs'] = torch.concatenate([it["inputs"] for it in item], dim=-1)
+     #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+        # zero pad if nr_patches is not reached
+        if data["inputs"].shape[-1] < nr_patches:
+            # zero pad
+            diff = nr_patches - data["inputs"].shape[-1]
+            data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+        # trim to nr_patches
+        data["inputs"] = data["inputs"][:, :, :, 0:nr_patches]
+        # drop SOPInstanceUID from dict
+        data.pop('SOPInstanceUID', None)
+        data["DcmPathFlatten"] = data["DcmPathFlatten"][0]
+        data["SeriesInstanceUID"] = data["SeriesInstanceUID"][0]
+        batch[i] = data
+    batch = default_collate(batch)
+    batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
+    return batch
+
+def patches_list_data_collate_read_patches_individual(batch: collections.abc.Sequence, nr_cine_loops=1, nr_patches=1, batch_size=1):
+    '''
+        Combine instances from a list of dicts into a single dict, by stacking them along first dim
+        [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+        followed by the default collate which will form a batch BxNx3xHxW
+    '''
+    grouped = {}
+
+    for item in batch:
+        key = (item['PatientID'], item['StudyInstanceUID'])
+        if key not in grouped:
+            grouped[key] = {}
+            # but the inputs should be a list
+            grouped[key]['inputs'] = []
+        grouped[key]['inputs'].append(item['inputs'])  #
+        item.pop('inputs', None)
+        grouped[key].update(item)
+        grouped[key].pop('SOPInstanceUID', None)
+        grouped[key]["SeriesInstanceUID"] = grouped[key]["SeriesInstanceUID"][0]
+        
+        
+    # Stack images for each group along the second dimension
+    for key in grouped:
+        grouped[key]['inputs'] = torch.concatenate(grouped[key]['inputs'], dim=-1)  # Stacking along last dimension
+
+    for key in grouped:
+        # zero pad if nr_patches is not reached
+        if grouped[key]['inputs'].shape[-1]  < nr_patches:
+            # zero pad
+            diff = nr_patches - grouped[key]['inputs'].shape[-1]
+            grouped[key]['inputs'] = torch.nn.functional.pad(grouped[key]['inputs'], (diff, 0, 0, 0,),  mode='constant', value=0)
+        else:
+            # trim
+            grouped[key]['inputs'] = grouped[key]['inputs'][:, :, :, 0:nr_patches]
+        
+    # Prepare the final batch
+    batch = list(grouped.values())
+    # trim or pad batch
+    if len(batch) >= batch_size:
+        batch = batch[:batch_size]
+
+    # If the list is shorter than the target length, pad it.
+    elif len(batch) < batch_size:
+        diff = batch_size - len(batch)
+        batch = replicate_until_length(batch, batch_size)
+    else:
+        print('not implemented in this costum collate fn')
+    
+
+    # Apply the default collate if needed for other operations
+    batch = default_collate(batch)
+
+    # If there's any additional manipulation needed, do it here
+    batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
+
+    return batch
+
+# def patches_list_data_collate(batch: collections.abc.Sequence, nr_patches=1):
+#     '''
+#         Combine instances from a list of dicts into a single dict, by stacking them along first dim
+#         [{'image' : 3xHxW}, {'image' : 3xHxW}, {'image' : 3xHxW}...] - > {'image' : Nx3xHxW}
+#         followed by the default collate which will form a batch BxNx3xHxW
+#     '''
+
+#     for i, item in enumerate(batch):
+#         data = item[0]
+#         data['inputs'] = torch.concatenate([it[0]["inputs"] for it in batch], dim=-1) # this does not work
+#      #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+#         # zero pad if nr_patches is not reached
+#         if data["inputs"].shape[-1] < nr_patches:
+#             # zero pad
+#             diff = nr_patches - data["inputs"].shape[-1]
+#             data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
+#         # trim to nr_patches
+#         data["inputs"] = data["inputs"][:nr_patches]
+#         batch[i] = data
+#     return default_collate(batch)
+
+
+
+# def patches_list_data_collate(batch: collections.abc.Sequence):
+#     '''
+#         Combine instances from a list of dicts into a single dict, by stacking them along first dim
+#         [{'image' : 3xHxWxD}, {'image' : 3xHxWxD}, {'image' : 3xHxWxD}...] - > {'image' : Nx3xHxWxD}
+#         followed by the default collate which will form a batch BxNx3xHxW
+#     '''
+    
+#     # concatenate items with the same studyUID and PatientID along the last dimension
+    
+    
+#     #torch.concatenate([item["inputs"] for item in batch], dim=-1)
+#     pid = "None"
+    
+#     for i, item in enumerate(batch):
+        
+#         if pid == item["Patient"]:
+#             torch.concatenate([item["inputs"] for item in batch], dim=-1)
+
+#         pid = item["PatientID"]
+
+#     for i, item in enumerate(batch):
+#         data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
+#         batch[i] = data
+#     return default_collate(batch)
 
 class DistributedSampler(_TorchDistributedSampler):
     """
@@ -205,6 +385,7 @@ class ClassificationLoader():
     def __init__(self, config) -> None:
         self.config = config
         self.df, self.connection = getDataFromDatabase(self.config)
+        
         if self.config['loaders']['mode'] != 'prediction':
             # set iloc of 0 to nan
             
@@ -216,13 +397,23 @@ class ClassificationLoader():
                 # except:
                 #     print('column not found')
                 #     pass
-
+        print('please changes these')
         if self.config['loaders']['mode'] in ['prediction', 'testing']:
-            self.val_df = self.df
+            if self.config['debugging'] == True:
+                self.val_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
+            else:
+                self.val_df = self.df
         else:
-            self.train_df = self.df[self.df['phase'] == 'train']
-            self.val_df = self.df[self.df['phase'] == 'val']
+           # self.train_df = self.df
+           # self.val_df = self.df
+            if self.config['debugging'] == True:
 
+                self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
+                self.val_df = self.df[self.df['phase'].isin(['val', 'val_train'])]
+            else:
+                self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
+                self.val_df = self.df[self.df['phase'].isin(['val','arcade_val'])]
+                
  
     def get_classification_loader_train(self, config):
         if config['loaders']['format'] in ['dicom']:
@@ -231,12 +422,12 @@ class ClassificationLoader():
                     train_monai_classification_loader, val_monai_classification_loader
             elif config['task_type'] in ["mil_classification"]:
                 if config['model']['dimension'] in ['2D+T']:
-                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                    from miacag.dataloader.Classification.dataloader_monai_classification_mil import \
                         train_monai_classification_loader
-                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                    from miacag.dataloader.Classification.dataloader_monai_classification_mil import \
                         val_monai_classification_loader
                 elif config['model']['dimension'] in ['2D']:
-                    from miacag.dataloader.Classification._2D.dataloader_monai_classification_2D_mil import \
+                    from miacag.dataloader.Classification.dataloader_monai_classification_mil import \
                         train_monai_classification_loader, val_monai_classification_loader
                 elif config['model']['dimension'] in ['1D']:
                     from miacag.dataloader.Classification._1D.Feature_vector_dataset import \
@@ -256,11 +447,6 @@ class ClassificationLoader():
         train_ds = train_monai_classification_loader(
             self.train_df,
             config)
-        # else:
-        #     from miacag.dataloader.Classification._1D.Feature_vector_dataset import FeatureVectorDataset
-        #     train_ds = FeatureVectorDataset(self.train_df, config)
-            
-
 
         if config['weighted_sampler'] == 'True':
             weights = train_ds.weights
@@ -272,7 +458,9 @@ class ClassificationLoader():
                     even_divisible=True,
                     shuffle=True)
             elif self.config['loss']['name'][0] == 'NNL':
-                sampler = DistributedBalancedRandomSampler(
+#                sampler = DistributedBalancedRandomSampler(
+                sampler = DistributedWeightedRandomSampler(
+
                     dataset=train_ds,
                     weights=weights,
                     even_divisible=True,
@@ -297,8 +485,8 @@ class ClassificationLoader():
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
                 num_workers=config['num_workers'],
-                persistent_workers=True if config['num_workers'] > 0 else False,
-                collate_fn=pad_list_data_collate,
+                persistent_workers=True,
+                collate_fn=list_data_collate, #patches_pad_list_data_collate_read_patches_individual, #pad_list_data_collate,
                 pin_memory=True,
                 drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
@@ -308,17 +496,20 @@ class ClassificationLoader():
                     shuffle=False,
                     num_workers=config['num_workers'],
                     persistent_workers=False,
-                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,
                     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) 
         else:
             train_loader = ThreadDataLoader(
                 train_ds,
+                repeats=1, #repeats=10 gives improve utilization of the gpu
+                buffer_size=1,
                 sampler=sampler,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
+              #  persistent_workers=True,
                 num_workers=0, #config['num_workers'],
-                collate_fn=pad_list_data_collate,
+                collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
                 pin_memory=False,
                 drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
@@ -327,9 +518,10 @@ class ClassificationLoader():
                     batch_size=config['loaders']['batchSize'],
                     shuffle=False,
                     num_workers=0,
-                    collate_fn=pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False,
                     drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
+        
         return train_loader, val_loader, train_ds, val_ds
 
     def get_classificationloader_patch_lvl_test(self, config):
@@ -338,19 +530,15 @@ class ClassificationLoader():
                 from miacag.dataloader.Classification._3D. \
                     dataloader_monai_classification_3D import \
                     val_monai_classification_loader
-                # nr_repeat = config['loaders']['val_method']['patches']
-                # self.val_df = pd.DataFrame(np.repeat(
-                #     self.val_df.values, nr_repeat,
-                #     axis=0), columns=self.val_df.columns)
                 self.val_ds = val_monai_classification_loader(
                     self.val_df,
                     config)
             elif config['task_type'] in ["mil_classification"]:
                 if config['model']['dimension'] in ['2D']:
-                    from miacag.dataloader.Classification._2D.dataloader_monai_classification_2D_mil import \
+                    from miacag.dataloader.Classification.dataloader_monai_classification_mil import \
                         val_monai_classification_loader
                 elif config['model']['dimension'] in ['2D+T']:
-                    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D_mil import \
+                    from miacag.dataloader.Classification.dataloader_monai_classification_mil import \
                         val_monai_classification_loader
                 else:
                     raise ValueError('this dimension is not implemented')
@@ -381,7 +569,7 @@ class ClassificationLoader():
                 self.val_ds,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=config['num_workers'], #0
+                num_workers=4, #0
                 collate_fn=list_data_collate if
                         config['loaders']['val_method']['type'] != 'sliding_window' else pad_list_data_collate,
                # pin_memory=False if config['cpu'] == "False" else True,)

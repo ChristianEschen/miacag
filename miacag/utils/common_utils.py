@@ -40,7 +40,7 @@ def wrap_outputs_to_dict(outputs, config):
     outputs_dict = {}
     for group_count, group in enumerate(config['loss']['groups_names']):
         outputs_group = outputs[group_count]
-        if group.startswith('CE'):
+        if group.startswith(tuple(['CE', 'NNL'])):
             dim = 0
             outputs_dict[config['labels_names'][dim]] = outputs[dim]
         else:
@@ -59,8 +59,8 @@ def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
-    if config['loaders']['mode'] != 'testing':
-        loss_tot = loss_tot.requires_grad_()
+    # if config['loaders']['mode'] != 'testing':
+    #     loss_tot = loss_tot.requires_grad_()
 
     for count_idx, loss_name in enumerate(config['loss']['groups_names']):
         labels = stack_labels(data, config, loss_name)
@@ -71,9 +71,14 @@ def get_losses_class(config, outputs, data, criterion, device):
         event = None
         if loss_name.startswith('NNL'):
             event = data['event']
+      #  print('outputs', outputs)
+        #survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
+        #survival_estimates = survival_estimates.reset_index()
+     #   print('targets', data["duration_transformed"])
+     #   print('event', data["event"])
         loss = get_loss(
             config, outputs[count_idx],
-            labels, criterion[count_idx], loss_name, event, weights)
+            labels, criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
         #print('done')
         if torch.isnan(loss) == torch.tensor(True, device=device):
             #raise ValueError('the loss is nan!')
@@ -99,7 +104,7 @@ def get_losses_class(config, outputs, data, criterion, device):
     return losses, loss_tot
 
 # get loss function
-def get_loss(config, outputs, labels, criterion, loss_name, event=None, weights=None):
+def get_loss(config, outputs, labels, criterion, loss_name, event=None, weights=None, cor_artey_type=None):
     if 'Siam' in config['loss']['name']:
         loss = criterion(outputs)
     elif loss_name.startswith('CE'):
@@ -109,6 +114,7 @@ def get_loss(config, outputs, labels, criterion, loss_name, event=None, weights=
     elif loss_name.startswith('NNL'):
         loss = criterion(outputs, labels, event)
     elif loss_name.startswith(tuple(['MSE', '_L1', 'L1smooth', 'wfocall1'])):
+        labels = (labels, cor_artey_type, config['labels_names'], config)
         loss = criterion(outputs, labels, weights)
     else:
         loss = criterion(outputs, labels)

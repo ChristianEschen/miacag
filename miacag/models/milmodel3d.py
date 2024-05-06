@@ -32,8 +32,10 @@ class MILModel(ImageToScalarModel):
         self.mil_mode = self.config['model']['mil_mode'].lower()
         self.attention = nn.Sequential()
         self.transformer = None  # type: Optional[nn.Module]
-        self.my_fc_temp = nn.Linear(self.in_features, self.in_features)
-        self.loss_uniques, self.count_loss_unique = unique_counts(self.config)
+        self.my_fc_temp = nn.Sequential(nn.Linear(self.in_features, self.in_features), nn.ReLU(), nn.LayerNorm(self.in_features))
+        #nn.Linear(self.in_features, len(config['labels_names']))
+     #   self.conv1d = nn.Conv1d(self.in_features, self.in_features, 1)
+        self.loss_uniques = self.config['labels_names']
         # define mil_mode
         if self.mil_mode in ["mean", "max"]:
             pass
@@ -41,9 +43,9 @@ class MILModel(ImageToScalarModel):
             self.attention = nn.ModuleList()
             for c, head in enumerate(self.loss_uniques):
                 self.attention.append(nn.Sequential(
-                    nn.Linear(self.in_features, 2048),
+                    nn.Linear(self.in_features, self.config['model']['embed_dim']),
                     nn.Tanh(),
-                    nn.Linear(2048, 1)))
+                    nn.Linear(self.config['model']['embed_dim'], 1)))
 
         elif self.mil_mode == "att_trans":
             self.attention = nn.ModuleList()
@@ -56,9 +58,9 @@ class MILModel(ImageToScalarModel):
                     transformer,
                     num_layers=self.config['model']['trans_blocks']))
                 self.attention.append(nn.Sequential(
-                    nn.Linear(self.in_features, 2048),
+                    nn.Linear(self.in_features, self.config['model']['embed_dim']),
                     nn.Tanh(),
-                    nn.Linear(2048, 1)))
+                    nn.Linear(self.config['model']['embed_dim'], 1)))
 
         elif self.mil_mode == "att_trans_pyramid":
             
@@ -103,9 +105,9 @@ class MILModel(ImageToScalarModel):
                 self.transformer.append(transformer_list)
                 self.in_features = self.in_features + 256
                 self.attention.append(nn.Sequential(
-                    nn.Linear(self.in_features, 2048),
+                    nn.Linear(self.in_features, self.config['model']['embed_dim']),
                     nn.Tanh(),
-                    nn.Linear(2048, 1)))
+                    nn.Linear(self.config['model']['embed_dim'], 1)))
 
         else:
             raise ValueError("Unsupported mil_mode: " + str(self.mil_mode))
@@ -119,36 +121,36 @@ class MILModel(ImageToScalarModel):
 
         if self.mil_mode == "mean":
             #x = self.fcs_func(self.fcs, c)(x)
-            x = self.fcs[0](x)
+            x = self.fcs[c](x)
             x = torch.mean(x, dim=1)
             a = None
         elif self.mil_mode == "max":
-            x = self.fcs[0](x)
+            x = self.fcs[c](x)
           #  x = self.fcs_func(self.fcs, c)(x)
             x, _ = torch.max(x, dim=1)
             a = None
         elif self.mil_mode == "att":
-            a = self.attention[0](x)
+            a = self.attention[c](x)
             #a = self.attention_func(self.attention, c)(x)
             a = torch.softmax(a, dim=1)
             x = torch.sum(x * a, dim=1)
-            x = self.fcs[0](x)
+            x = self.fcs[c](x)
             #x = self.fcs_func(self.fcs, c)(x)
 
         elif self.mil_mode == "att_trans" and self.transformer is not None:
 
             x = x.permute(1, 0, 2)
-            a = self.attention[0](x)
+            a = self.attention[c](x)
          #   x = self.transform_func(self.transformer, c)(x)
 
             x = x.permute(1, 0, 2)
-            a = self.attention[0](x)
+            a = self.attention[c](x)
            # a = self.attention_func(self.attention, c)(x)
 
             a = torch.softmax(a, dim=1)
             x = torch.sum(x * a, dim=1)
             #x = self.fcs_func(self.fcs, c)(x)
-            x = self.fcs[0](x)
+            x = self.fcs[c](x)
 
         elif self.mil_mode == "att_trans_pyramid" \
                 and self.transformer is not None:
@@ -209,8 +211,8 @@ class MILModel(ImageToScalarModel):
                 xs.append(x_c)
            # xs = self.calc_head(x)
         else:
-            xs = x
-        return xs
+            xs = x  
+        return [torch.concat(xs, dim=1)]
 
     def get_attention(self, x: torch.Tensor, no_head: bool = False):
       #  self.config['loaders']['val_method']['saliency'] = 'False'
@@ -310,6 +312,13 @@ class MILModel(ImageToScalarModel):
         if self.config['model']['pretrain_type'] in ['dinov2', 'mae_ct', 'supervised']:
             if self.config['model']['backbone'] in ["r50"]:
                 x = x.mean(dim=(-2, -1))
+                return x
+            elif self.config['model']['backbone'] in ["r2plus1_18", "x3d_s"]:
+                x = x.mean(dim=(-3, -2, -1))
+                return x
+
+            elif self.config['model']['backbone'] in ["vit_small"]:
+                x =  x.mean(dim=(-2))
                 return x
             else:
                 return x

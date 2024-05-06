@@ -20,7 +20,9 @@ from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from decimal import Decimal
 from miacag.utils.script_utils import mkFolder
-
+from functools import reduce
+import re
+import copy
 
 def rename_columns(df, label_name):
     if '_1_prox' in label_name:
@@ -90,7 +92,55 @@ def map_1abels_to_0neTohree():
     return labels_dict
 
 
-def convertConfFloats(confidences, loss_name):
+def aggregate_pr_group(df, aggregated_cols_list, agg_type):
+    cols_select = aggregated_cols_list + ["PatientID", "StudyInstanceUID", "rowid"]
+def compute_aggregation(df, aggregated_cols_list, agg_type="max"):
+        # return records from dataframe to update
+        df_copy = copy.deepcopy(df)
+        df_copy.drop(columns=aggregated_cols_list, inplace=True)
+        cols_select = aggregated_cols_list + ["PatientID", "StudyInstanceUID"]
+        df = df[cols_select]
+        count = 0
+        df_frames = []
+        for field in aggregated_cols_list:
+            df_field = df.copy()
+            df_field = df_field[df_field[field].notna()]
+            agg_field = aggregated_cols_list[count]
+            confidences = df_field[field]
+
+            df_new = df_field.copy()
+           # self.df[agg_field] = confidences
+            df_new[agg_field] = confidences
+            if agg_type == "mean":
+                df_new = df_new.groupby(
+                    ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
+            elif agg_type == "max":
+                if field.startswith('ffr'):
+                    df_new = df_new.groupby(
+                        ['PatientID', 'StudyInstanceUID'])[agg_field].min()
+                elif field.startswith('sten'):
+                    df_new = df_new.groupby(
+                        ['PatientID', 'StudyInstanceUID'])[agg_field].max()
+                else:
+                    raise ValueError('not implemented')
+            else:
+                raise ValueError('agg_type must be either mean or max')
+            df_new = df_new.to_frame()
+            df_new.reset_index(inplace=True)
+            df_field.drop(columns=aggregated_cols_list, inplace=True)
+
+            
+            df2 = df_new.merge(df_field, left_on=['PatientID', 'StudyInstanceUID'],
+                    right_on=['PatientID', 'StudyInstanceUID'],
+                    how='right').drop_duplicates(["StudyInstanceUID", "PatientID"])
+            df_frames.append(df2)
+            count += 1
+        result_df = reduce(lambda  left,right: pd.merge(left,right,on=['PatientID', "StudyInstanceUID"],
+                                            how='inner'), df_frames)
+        result_df = result_df.merge(df_copy, on=['PatientID', 'StudyInstanceUID'],how='inner')
+        return result_df
+        
+def convertConfFloats(confidences, loss_name, config):
     confidences_conv = []
     for conf in confidences:
         if loss_name.startswith('CE'):
@@ -99,8 +149,32 @@ def convertConfFloats(confidences, loss_name):
             else:
                 confidences_conv.append(float(conf.split(";1:")[-1][:-1]))
 
+        elif loss_name.startswith('NNL'):
+            if conf is None:
+                float_converted = []
+                for i, c in enumerate(range(0,config['model']['num_classes'][0])):
+                    float_converted.append(np.nan)
+                confidences_conv.append(float_converted)
+            
+            else:
+                strings = ""
+                float_converted = []
+                for i, c in enumerate(range(0,config['model']['num_classes'][0])):
+                    if i <config['model']['num_classes'][0]-1:
+
+                        match =  re.search('{}:(.*){}:'.format(c, c+1), conf)
+                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-3]
+                    else:
+                        match =  re.search('{}:(.*)'.format(c), conf)
+                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-1]
+                    #   strings = conf[idx[0]+2:idx[1]]
+                    float_converted.append(float(strings))
+                confidences_conv.append(float_converted)
         elif loss_name in ['MSE', '_L1', 'L1smooth', 'BCE_multilabel', 'wfocall1']:
             if conf is None:
+                confidences_conv.append(np.nan)
+            # test if conf is np.nan
+            elif conf == np.nan:
                 confidences_conv.append(np.nan)
             else:
                 confidences_conv.append(float(conf.split("0:")[-1][:-1]))
@@ -157,7 +231,7 @@ def getNormConfMat_3class(df, labels_col, preds_col,
 
 
 def getNormConfMat(df, labels_col, preds_col,
-                   plot_name, f1, output, num_classes, support, c):
+                   plot_name, f1, output, num_classes, support, c, mcc=None):
     num_classes_for_plot = num_classes[c]
     if num_classes_for_plot == 1:
         num_classes_for_plot = 2
@@ -192,9 +266,23 @@ def getNormConfMat(df, labels_col, preds_col,
     plt.savefig(os.path.join(output, plot_name + '_cmat.png'), dpi=100,
                 bbox_inches='tight')
     plt.close()
-
+    fig = plt.figure()
+    plt.clf()
+    ax = fig.add_subplot(111)
+    ax.set_aspect(1)
+    cmap = sns.cubehelix_palette(light=1, as_cmap=True)
+    res = sns.heatmap(df_cm, annot=True, vmin=0.0, fmt='g',
+                      square=True, linewidths=0.1, annot_kws={"size": 8},
+                      cmap=cmap)
+    res.invert_yaxis()
+    f1 = np.round(f1, 3)
     plt.title(
         plot_name + ': Confusion Matrix, F1-macro:' + str(f1) +
+        ',support(N)=' + str(support))
+    if mcc is not None:
+        plt.title(
+            
+        plot_name + ': Confusion Matrix, F1-macro:' +  str(f1) +  ' ,MCC:' + str(mcc) +
         ',support(N)=' + str(support))
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
@@ -272,9 +360,7 @@ def plot_roc_curve(labels, confidences, output_plots,
 def plot_results_regression(df_label, confidence_name,
                             label_name, config, c, support,
                             output_plots, group_aggregated):
-    if not group_aggregated:
-        df_label[confidence_name] = convertConfFloats(
-            df_label[confidence_name], config['loss']['name'][c])
+
 
     df_label[label_name] = threshold_continuois(
         df_label[label_name],
@@ -344,12 +430,12 @@ def plot_results_classification(df_label,
 
     if not group_aggregated:
         df_label[confidence_name] = convertConfFloats(
-            df_label[confidence_name], config['loss']['name'][c])
-    if label_nam.startswith('ffr'):
+            df_label[confidence_name], config['loss']['name'][c], config)
+    if label_name.startswith('ffr'):
         max_v = 1
-    elif label_nam.startswith('sten'):
+    elif label_name.startswith('sten'):
         max_v = 1
-    elif label_nam.startswith('timi'):
+    elif label_name.startswith('timi'):
         max_v = 3
     else:
         raise ValueError('label_name_ori must be either sten or ffr or timi')
@@ -393,11 +479,6 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
     sten_cols_true = select_relevant_columns(label_names, 'sten')
     if len(sten_cols_conf) > 0:
-        if not group_aggregated:
-            for sten_col_conf in sten_cols_conf:
-                df_sten[sten_col_conf] = convertConfFloats(
-                    df[sten_col_conf],
-                    config['loss']['name'][0])
         sten_trues_concat = []      
         sten_conf_concat = []  
         #concantenating all stenosis columns
@@ -425,11 +506,7 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
     if len(ffr_cols_true) > 0:
         ffr_cols_conf = select_relevant_columns(confidence_names, 'ffr')
-        if not group_aggregated:
-            for ffr_col_conf in ffr_cols_conf:
-                df_ffr[ffr_col_conf] = convertConfFloats(
-                    df_ffr[ffr_col_conf],
-                    config['loss']['name'][0])
+        
         ffr_trues_concat = []      
         ffr_conf_concat = []  
         #concantenating all stenosis columns
@@ -469,11 +546,6 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
     sten_cols_conf = select_relevant_columns(confidence_names, 'sten')
     sten_cols_true = select_relevant_columns(label_names, 'sten')
     if len(sten_cols_true) > 0:
-        if not group_aggregated:
-            for sten_col_conf in sten_cols_conf:
-                df_sten[sten_col_conf] = convertConfFloats(
-                    df[sten_col_conf],
-                    config['loss']['name'][0])
         plot_roc_all(df_sten, sten_cols_true, sten_cols_conf, output_plots,
                     plot_type='stenosis',
                     config=config,
@@ -482,11 +554,7 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
     if len(ffr_cols_true) > 0:
         ffr_cols_conf = select_relevant_columns(confidence_names, 'ffr')
-        if not group_aggregated:
-            for ffr_col_conf in ffr_cols_conf:
-                df_ffr[ffr_col_conf] = convertConfFloats(
-                    df_ffr[ffr_col_conf],
-                    config['loss']['name'][0])
+      
         plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
                      plot_type='FFR',
                      config=config,
@@ -508,15 +576,157 @@ def remove_suffix(input_string, suffix):
         return input_string[:-len(suffix)]
     return input_string
 
+
+
+
+def select_relevant_data_dominans(result_table, segments):
+    # Make a deep copy of the DataFrame to avoid modifying the original data
+    final_table = copy.deepcopy(result_table)
+
+    # Iterate over each row in the DataFrame
+    for index, row in final_table.iterrows():
+        # Check the 'labels_predictions' for each row to determine the logic to apply
+        if row['labels_predictions'] == 1:  # Assuming '1' is for 'right'
+            for seg in segments:
+                if 'pla_rca' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", None]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pda_t' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Højre dominans (PDA+PLA fra RCA)", "Balanceret (PDA fra RCA/PLA fra LCX)", None]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pla_lca' in seg:
+                    final_table.at[index, seg] = np.nan
+                elif 'pda_lca' in seg:
+                    final_table.at[index, seg] = np.nan
+                    
+
+        elif row['labels_predictions'] == 0:  # Assuming '0' is for 'left'
+            for seg in segments:
+                if 'pla_lca' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)"]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pda_lca' in seg:
+                    # Set values to np.nan based on 'dominans' condition
+                    if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)"]:
+                        final_table.at[index, seg] = np.nan
+                elif 'pla_rca' in seg:
+                    final_table.at[index, seg] = np.nan
+                elif 'pda_t' in seg:
+                    final_table.at[index, seg] = np.nan
+
+        else:
+            # Raise an error if 'labels_predictions' contains an unexpected value
+            raise ValueError('Unexpected value in labels_predictions')
+  #  final_table['sten_proc_16_pla_lca_transformed_confidences'] = df2['combined_confidences'].fillna(df2['sten_proc_16_pla_lca_transformed_confidences'])
+    pda_names = [i for i in segments if '4_pda' in i]
+    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    pla_names = [i for i in segments if '16_pla' in i]
+    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    if len(pda_names) > 1:
+        final_table[agg_pda_name[0]] = final_table[pda_names[0]].fillna(final_table[pda_names[1]])
+    else:
+        try:
+            final_table['sten_proc_4_pda_transformed_confidences'] = final_table[pda_names[0]]
+        except:
+            print('No pda_lca found in database')
+    if len(pla_names) > 1:
+
+        final_table[agg_pla_name[0]] = final_table[pla_names[0]].fillna(final_table[pla_names[1]])
+    else:
+        try:
+            final_table['sten_proc_16_pla_rca_transformed_confidences'] = final_table[pla_names[0]]
+        except:
+            print('No pla_lca found in database')
+    # only keep the elemetn without lca
+    
+    return final_table
+
+def select_only_aggregates(segments):
+    pda_names = [i for i in segments if '4_pda' in i]
+    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    pla_names = [i for i in segments if '16_pla' in i]
+    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    include = agg_pda_name + agg_pla_name
+    union = pda_names + pla_names
+    exclude = [i for i in union if i not in include]
+    final_segments = [i for i in segments if i not in exclude]
+    return final_segments
+def rename_label_names(label_names, prediction_names, confidence_names):
+    
+    label_names = select_only_aggregates(label_names)
+    prediction_names = select_only_aggregates(prediction_names)
+    confidence_names = select_only_aggregates(confidence_names)
+    return label_names, prediction_names, confidence_names
+
+def simulte_df(label_names, prediction_names, confidence_names):
+    np.random.seed(42)
+
+    # Define the number of rows
+    num_rows = 1000
+
+    # Creating synthetic data for the DataFrame
+    data = {
+        confidence_names[0]: np.random.rand(num_rows),
+        prediction_names[0]: np.random.rand(num_rows),
+        label_names[0]: np.random.rand(num_rows),
+        confidence_names[1]: np.random.rand(num_rows),
+        prediction_names[1]: np.random.rand(num_rows),
+        label_names[1]: np.random.rand(num_rows),
+        confidence_names[2]: np.random.rand(num_rows),
+        prediction_names[2]: np.random.rand(num_rows),
+        label_names[2]: np.random.rand(num_rows),
+        # confidence_names[3]: np.random.rand(num_rows),
+        # prediction_names[3]: np.random.rand(num_rows),
+        # label_names[3]: np.random.rand(num_rows),
+        # confidence_names[4]: np.random.rand(num_rows),
+        # prediction_names[4]: np.random.rand(num_rows),
+        # label_names[4]: np.random.rand(num_rows),
+        # confidence_names[5]: np.random.rand(num_rows),
+        # prediction_names[5]: np.random.rand(num_rows),
+        # label_names[5]: np.random.rand(num_rows),
+        'labels_predictions': np.random.randint(0, 2, num_rows),
+        'dominans': np.random.choice(["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)", "Højre dominans (PDA+PLA fra RCA)", None], num_rows),
+        'StudyInstanceUID': [f"1.3.12.2.1107.5.4.3.{np.random.randint(1,3)}.{np.random.randint(1,2)}{np.random.randint(1,2):02d}{np.random.randint(1,2):02d}" for _ in range(num_rows)],
+        'PatientID': [f"{np.random.choice(['D97258', 'X82947', 'Z78325'])}/{np.random.randint(1,3)}" for _ in range(num_rows)]
+    }
+
+    # Create the DataFrame
+    large_df = pd.DataFrame(data)
+    # use index to create a column with unique values
+    large_df['rowid'] = large_df.index
+
+    # Replace random values with NaN to mimic the original pattern
+    nan_fill_probability = 0.5  # 20% NaNs in each column approximately
+    for column in large_df.columns[:6]:
+        large_df[column].iloc[0:500] = np.nan
+    # for column in large_df.columns[3:6]:
+    #     large_df[column].iloc[500:] = np.nan
+    return large_df
 def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    for conf in confidence_names:
+        df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
     
-    for label_name in label_names:
-        df = add_misssing_rows(df, label_name)
+    df = select_relevant_data_dominans(df, confidence_names)
+    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names)
+    df =df.dropna(subset=confidence_names, how='all')
+
+    #df = simulte_df(label_names, prediction_names, confidence_names)
+
+    plot_wrapper(df, label_names, prediction_names, confidence_names, output_plots, config, group_aggregated)
+    
+    
+def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plots, config, group_aggregated=False):
+    # create simulated df with columns: label_names, prediction_names, confidence_names
+
     if group_aggregated:
-        confidence_names = [c + '_aggregated' for c in confidence_names]
+        df = compute_aggregation(df, confidence_names, agg_type="max")
+        # insert group_aggregation function here
     # test if a element is a list starts with a string: "sten"
     stens = select_relevant_columns(label_names, 'sten')
     # copy row values in _transfored if PatientID and StudyInstanceUID are the same
@@ -533,7 +743,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
       #  df = add_misssing_rows(df, label_name)
         df_label = df[df[label_name].notna()]
         df_label = df_label[df_label[confidence_name].notna()]
-        df_label = df_label[df_label[prediction_name].notna()]
+       # df_label = df_label[df_label[prediction_name].notna()]
         if group_aggregated:
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
@@ -642,12 +852,27 @@ def plotStenoserTrueVsPred(sql_config, label_names,
         return None
 
 
+
 def plotRegression(sql_config, label_names,
-                   prediction_names, output_folder, group_aggregated=False):
+                   confidence_names, output_folder, config, group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    for conf in confidence_names:
+        df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], sql_config)
+
+    prediction_names = [label_name+'_predictions' for label_name in label_names]
+    df = select_relevant_data_dominans(df, confidence_names)
+    label_names, prediction_names, confidences = rename_label_names(label_names, prediction_names, confidence_names)
+    df =df.dropna(subset=confidence_names, how='all')
+    
+
+   # df = simulte_df(label_names, prediction_names, confidence_names)
+
+    wrap_plotRegression(df, label_names, prediction_names, output_folder, group_aggregated, sql_config)
+    return None
+def wrap_plotRegression(df, label_names, prediction_names, output_folder, group_aggregated, sql_config):
     from miacag.plots.plot_roc_auc_all import plot_regression_all
-    for label_name in label_names:
-        df = add_misssing_rows(df, label_name)
+    if group_aggregated:
+        df = compute_aggregation(df, prediction_names, agg_type="max")
     plot_regression_all(df,
                         label_names, prediction_names,
                         output_folder, sql_config)
@@ -676,11 +901,6 @@ def plotRegression(sql_config, label_names,
         df_plot_rep, label_name = rename_columns(df_plot_rep, label_name)
         df_plot_rep = df_plot_rep.astype({label_name: float})
 
-        if group_aggregated is False:
-            df_plot_rep[prediction_name] = \
-                convertConfFloats(
-                    df_plot_rep[prediction_name],
-                    sql_config['loss_name'][c])
 
         if label_name_ori.startswith('ffr'):
             max_v = 1
@@ -764,6 +984,8 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     mask = mask | y.isna()
     x = x[~mask]
     y = y[~mask]
+    # test for NaN values and None
+
     if label_name_ori.startswith('ffr'):
         max_v = 1
     elif label_name_ori.startswith('sten'):
@@ -949,5 +1171,54 @@ if __name__ == '__main__':
     path_lca = "/home/alatar/miacag/output/outputs_stenosis_reg/classification_config_angio_SEP_Jan21_15-19-24/plots/train/probas_trues.csv"
     path_rca = "/home/alatar/miacag/output/outputs_stenosis_reg/classification_config_angio_SEP_Jan21_15-38-35/plots/train/probas_trues.csv"
     output_path = "/home/alatar/miacag/output/outputs_stenosis_identi/classification_config_angio_SEP_Jan21_15-32-06/plots/comb"
-    make_plots(path_rca_bce, path_lca_bce, path_rca, path_lca, output_path)
+  #  make_plots(path_rca_bce, path_lca_bce, path_rca, path_lca, output_path)
+    output_plots = "/home/alatar/miacag/output_plots/test"
+
+    output_plots_Reg = "/home/alatar/miacag/output_plots/test_reg"
+    config_path = '/home/alatar/miacag/my_configs/stenosis_regression/classification_config_angio.yaml'
+    # for combined plots
+    import yaml
+    with open(config_path, 'r') as stream:
+        config = yaml.safe_load(stream)
+    labels = ['sten_proc_1_prox_rca_transformed', 'sten_proc_6_prox_lad_transformed', "sten_proc_16_pla_rca_transformed", "sten_proc_16_pla_lca_transformed", 'sten_proc_4_pda_transformed', 'sten_proc_4_pda_lca_transformed'] #_4_pda_lca
+    predictions = ['sten_proc_1_prox_rca_transformed_predictions', 'sten_proc_6_prox_lad_transformed_predictions', "sten_proc_16_pla_rca_transformed_predictions", "sten_proc_16_pla_lca_transformed_predictions",  'sten_proc_4_pda_transformed_predictions', 'sten_proc_4_pda_lca_transformed-predictions']
+    confidences = ['sten_proc_1_prox_rca_transformed_confidences', 'sten_proc_6_prox_lad_transformed_confidences',  "sten_proc_16_pla_rca_transformed_confidences", "sten_proc_16_pla_lca_transformed_confidences",  'sten_proc_4_pda_transformed_confidences', 'sten_proc_4_pda_lca_transformed_confidences']
+    labels = ['sten_proc_1_prox_rca_transformed', "sten_proc_16_pla_rca_transformed", 'sten_proc_4_pda_transformed'] #_4_pda_lca
+    predictions = ['sten_proc_1_prox_rca_transformed_predictions', "sten_proc_16_pla_rca_transformed_predictions",  'sten_proc_4_pda_transformed_predictions']
+    confidences = ['sten_proc_1_prox_rca_transformed_confidences',  "sten_proc_16_pla_rca_transformed_confidences", 'sten_proc_4_pda_transformed_confidences']
+
+    config['query'] = config['query_rca']
+
+    # df, _ = getDataFromDatabase(config)
+    # confidence_names = [label_name+'_transformed_confidences' for label_name in config['labels_names']]
+    # for conf in confidence_names:
+    #     df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
+
+    df = simulte_df(labels, predictions, confidences)
+
+    df = select_relevant_data_dominans(df,  confidences)
+    labels, predictions, confidences = rename_label_names(labels, predictions, confidences)
+    df = select_relevant_data_dominans(df, labels)
+   # df = select_relevant_data_dominans(df, label_names)
+    wrap_plotRegression(df,  labels, predictions,output_plots_Reg, True, config)
+    plot_wrapper(df, labels, predictions, confidences, output_plots, config, True)
     
+    # for individual plots
+    # read config file
+    # import yaml
+    # with open(config_path, 'r') as stream:
+    #     config = yaml.safe_load(stream)
+    # labels = ['ffr_proc_1_prox_rca_transformed', 'ffr_proc_6_prox_lad_transformed']
+    # predictions = ['ffr_proc_1_prox_rca_transformed_predictions', 'ffr_proc_6_prox_lad_transformed_predictions']
+    # confidences = ['ffr_proc_1_prox_rca_transformed_confidences', 'ffr_proc_6_prox_lad_transformed_confidences']
+    # config['query'] = config['query_rca']
+    # df, _ = getDataFromDatabase(config)
+    # confidence_names = [label_name+'_transformed_confidences' for label_name in config['labels_names']]
+    # for conf in confidence_names:
+    #     df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
+
+    # df = simulte_df(labels, predictions, confidences)
+
+
+    # wrap_plotRegression(df,  labels, predictions,output_plots_Reg, True, config)
+    # plot_wrapper(df, labels, predictions, confidences, output_plots, config, True)

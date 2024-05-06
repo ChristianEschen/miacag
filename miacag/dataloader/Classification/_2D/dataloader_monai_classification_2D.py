@@ -200,7 +200,7 @@ class val_monai_classification_loader(base_monai_loader):
         #     fig_train = plt.figure()
         #     plt.imshow(img2d, cmap="gray", interpolation="None")
         #     plt.show()
-        val_transforms = Compose(val_transforms, log_stats=True)
+        val_transforms = Compose(val_transforms, log_stats=False)
         val_transforms.set_random_state(seed=0)
         if self.config['use_DDP'] == 'True':
             self.data_par_val = monai.data.partition_dataset(

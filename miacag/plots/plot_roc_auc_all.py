@@ -19,11 +19,11 @@ from sklearn.ensemble import RandomForestClassifier
 import os
 from sklearn.metrics import roc_curve, roc_auc_score
 from miacag.utils.script_utils import mkFolder
-from miacag.plots.plotter import rename_columns
+#from miacag.plots.plotter import rename_columns
 from miacag.plots.plot_utils import get_mean_lower_upper
 import statsmodels.api as sm
 from sklearn.metrics import precision_recall_curve
-
+import copy
 def generate_data():
     data = datasets.load_breast_cancer()
 
@@ -47,8 +47,6 @@ def generate_data():
     confidences = [i + "_confidences" for i in segments]
 
     trues = [i + "_transformed" for i in segments]
-    
-
     result_table = pd.DataFrame(columns=confidences + trues + ['labels_predictions'] + ['dominans'])
     domianse = [
         "Balanceret (PDA fra RCA/PLA fra LCX)",
@@ -138,9 +136,9 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     idx = 0
     for seg in confidences_names:
        # if config['task_type'] != 'mil_classification':
-       #     result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-        #else:
-        result_table_copy = result_table.copy()
+       #    result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+       # else:
+        result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
@@ -155,10 +153,15 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         y_test = y_test[~mask]
         yproba = yproba[~mask]
         # deepcopy yproba
-        ypred_bin = yproba.copy()
+        ypred_bin = copy.deepcopy(yproba)
+        ypred_bin  = np.clip(ypred_bin, a_min=0, a_max=1)
         ypred_bin = threshold_continues(
             pd.DataFrame(ypred_bin), threshold=theshold, name=seg)
+        print('ypred_bin', ypred_bin)
+        print('y_test', y_test)
+        print('yproba', yproba)
         yproba = np.clip(yproba, a_min=0, a_max=1)
+        print('yproba post clip', yproba)
         #DEBUG
         # probas = np.random.rand(len(probas))
         # y_test = np.random.randint(2, size=len(y_test))
@@ -170,9 +173,9 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         # compute alse precision and recall
         precision, recall, _ = precision_recall_curve(y_test, yproba)
         mean_f1, lower_f1, upper_f1 = get_mean_lower_upper(ypred_bin, y_test, 'f1')
-        if config['debugging']:
-            y_test[0] = 1
-            y_test[1] = 0
+        # if config['debugging']:
+        #     y_test[0] = 1
+        #     y_test[1] = 0
         auc = roc_auc_score(y_test, yproba)
         probas.append(yproba)
         trues.append(y_test)
@@ -202,7 +205,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
    # probas_bin = np.random.randint(2, size=8)
 
     # plot roc curve for all segments combined
-    fpr, tpr, _ = roc_curve(y_test,  yproba)
+    fpr, tpr, _ = roc_curve(trues,  probas)
     mean_auc_all, lower_auc_all, upper_auc_all = get_mean_lower_upper(probas, trues, 'roc_auc_score')
     fig = plt.figure(figsize=(8,6))
     plt.plot(fpr, 
@@ -231,8 +234,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                 bbox_inches='tight')
     plt.close()
     # plot precision recall curve for all segments combined
-    precision, recall, _ = precision_recall_curve(trues, probas_bin)
-    mean_f1_all,  lower_f1_all, upper_f1_all= get_mean_lower_upper(ypred_bin, trues, 'f1')
+    precision, recall, _ = precision_recall_curve(trues, probas)
+    mean_f1_all,  lower_f1_all, upper_f1_all= get_mean_lower_upper(probas_bin, trues, 'f1')
     fig = plt.figure(figsize=(8,6))
     plt.plot(recall, 
                 precision, 
@@ -305,13 +308,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
             if row.startswith(key):
                 roc_result_table_2 = roc_result_table_2.rename(index={row: dictionary[key]})
          #   roc_result_table.rename(index={row: dictionary[row]}, inplace=True)
-            
-    if maybeRCA:
-        location = 'RCA'
-    elif maybeRCA == "":
-        location = ""
-    else:
-        location = 'LCA'
+
     fig = plt.figure(figsize=(8,6))
 
     for i in roc_result_table_2.index:
@@ -331,15 +328,15 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.yticks(np.arange(0.0, 1.1, step=0.1))
     plt.ylabel("True Positive Rate (Sensitivity)", fontsize=15)
 
-    plt.title('ROC Curve Analysis for ' + plot_type + ' estimation on ' + location, fontweight='bold', fontsize=15)
+    plt.title('ROC Curve Analysis for ' + plot_type + ' estimation on ', fontweight='bold', fontsize=15)
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_roc_all.png'), dpi=100,
+        output_plots, plot_type + '_roc_all.png'), dpi=100,
                 bbox_inches='tight')
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_roc_all.pdf'), dpi=100,
+        output_plots, plot_type + '_roc_all.pdf'), dpi=100,
                 bbox_inches='tight')
     plt.close()
     # plot precision recall curve
@@ -361,15 +358,15 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.yticks(np.arange(0.0, 1.1, step=0.1))
     plt.ylabel("Precision (positive predictive value)", fontsize=15)
 
-    plt.title('Precision recall curve for ' + plot_type + ' estimation on ' + location, fontweight='bold', fontsize=15)
+    plt.title('Precision recall curve for ' + plot_type + ' estimation on ', fontweight='bold', fontsize=15)
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_precision_recall.png'), dpi=100,
+        output_plots, plot_type + '_precision_recall.png'), dpi=100,
                 bbox_inches='tight')
     plt.savefig(os.path.join(
-        output_plots, plot_type + '_' + location + '_precision_recall.pdf'), dpi=100,
+        output_plots, plot_type + '_' + '_precision_recall.pdf'), dpi=100,
                 bbox_inches='tight')
 
 def plot_regression_all(result_table, trues_names, confidences_names, output_plots, config):
@@ -377,16 +374,16 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
     result_table_comb = pd.DataFrame(columns=['segments', 'mse_mean', 'mse_lower', 'mse_upper'])
 
     # list comprehension to rename suffixes of elements in list from _confidences to _predictions
-    confidences_names = [i.replace('_confidences', '_predictions') for i in confidences_names]
+   # confidences_names = [i.replace('_confidences', '_predictions') for i in confidences_names]
     probas = []
     trues = []
     idx = 0
     for seg in confidences_names:
-        if config['task_type'] != 'mil_classification':
-            result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-        else:
-            result_table_copy = result_table.copy()
-            maybeRCA = ""
+        # if config['task_type'] != 'mil_classification':
+        #     result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
+        # else:
+        result_table_copy = result_table.copy()
+          #  maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
         y_test = result_table_copy[trues_names[idx]].values

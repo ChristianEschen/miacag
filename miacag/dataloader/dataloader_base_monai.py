@@ -5,7 +5,6 @@ import pandas as pd
 from miacag.dataloader.dataloader_base import DataloaderBase
 from monai.transforms import Transform
 from monai.transforms import (
-    AddChanneld,
     Compose,
     LoadImaged,
     RepeatChanneld,
@@ -149,7 +148,8 @@ class base_monai_loader(DataloaderBase):
                 keys=keys_,
                 spatial_size=[self.config['loaders']['Crop_height'],
                               self.config['loaders']['Crop_width'],
-                              self.config['loaders']['Crop_depth']])
+                              self.config['loaders']['Crop_depth']],
+                mode="constant")
         elif self.config['loaders']['mode'] in ['testing', 'prediction']:
             if self.config['task_type'] in ["classification",
                                             "regression",
@@ -159,7 +159,8 @@ class base_monai_loader(DataloaderBase):
                     keys=keys_,
                     spatial_size=[self.config['loaders']['Crop_height'],
                                   self.config['loaders']['Crop_width'],
-                                  self.config['loaders']['Crop_depth']])
+                                  self.config['loaders']['Crop_depth']],
+                    mode="constant")
             elif self.config['task_type'] == "segmentation":
                 pad = Identityd(keys=self.features + [self.config["labels_names"]])
             else:
@@ -234,12 +235,31 @@ class base_monai_loader(DataloaderBase):
             if self.config['use_DDP'] == 'False':
                 device = Identityd(keys=keys + [self.config["labels_names"]])
             else:
-                device = ToDeviced(
-                    keys=keys,
-                    device="cuda:{}".format(os.environ['LOCAL_RANK']))
+                if self.config['loaders']['mode'] == 'training':
+                    device = ToDeviced(
+                        keys=keys,
+                        device="cuda:{}".format(os.environ['LOCAL_RANK']))
+                else:
+                    device = Identityd(keys=keys)
 
         return device
 
+    def maybeCenterFrameCrop(self, features):
+        crop = CenterSpatialCropd(
+            keys=features,
+            roi_size=[
+                self.config['loaders']['Crop_height'],
+                self.config['loaders']['Crop_width'],
+                1])
+        # replicate the frame to the depth of the crop
+        if self.config['model']['dimension'] == '2D+T':
+            replicate = Lambdad(keys=features,
+                           func=lambda x: np.repeat(x, self.config['loaders']['Crop_depth'], axis=2))
+        else:
+            raise ValueError('model dimension is not implemented')
+        return crop, replicate
+    
+    
     def maybeCenterCrop(self, features):
         if self.config['loaders']['mode'] == 'training':
             crop = CenterSpatialCropd(
@@ -311,7 +331,7 @@ class base_monai_loader(DataloaderBase):
         if self.config['loaders']['translate'] == 'True':
             translation = RandAffined(
                     keys=self.features,
-                    mode="bilinear",
+                    mode="nearest",
                     prob=0.2,
                     spatial_size=(self.config['loaders']['Resize_height'],
                                   self.config['loaders']['Resize_width'],
@@ -319,7 +339,7 @@ class base_monai_loader(DataloaderBase):
                     translate_range=(
                          int(0.22*self.config['loaders']['Resize_height']),
                          int(0.22*self.config['loaders']['Resize_width']),
-                         int(0.5*self.config['loaders']['Resize_depth'])),
+                         int(0.3*self.config['loaders']['Resize_depth'])),
                     padding_mode="zeros")
         else:
             translation = Identityd(keys=self.features)
@@ -354,6 +374,8 @@ class base_monai_loader(DataloaderBase):
             temporal_scaling = Identityd(keys=self.features)
         return temporal_scaling
 
+
+
     def maybeRotate(self):
         if self.config['loaders']['rotate'] == 'True':
             rotate = RandAffined(
@@ -368,9 +390,9 @@ class base_monai_loader(DataloaderBase):
         else:
             rotate = Identityd(keys=self.features)
         return rotate
-
-    def maybeNormalize(self):
-        if self.config['model']['backbone'] in [
+    @staticmethod
+    def maybeNormalize(config, features):
+        if config['model']['backbone'] in [
             'x3d_s', 'slowfast8x8', "mvit_base_16x4", 'mvit_base_32x3', 'debug_3d',
             "pretrain_videomae_base_patch16_224",
             'pretrain_videomae_small_patch16_224',
@@ -382,19 +404,19 @@ class base_monai_loader(DataloaderBase):
             'vit_large_patch16',
             'vit_huge_patch14']:
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.45, 0.45, 0.45),#(0.43216, 0.394666, 0.37645),
                 divisor=(0.225, 0.225, 0.225),#(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] == 'r2plus1_18':
+        elif config['model']['backbone'] == 'r2plus1_18':
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif self.config['model']['backbone'] in ['r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+        elif config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
             normalize = NormalizeIntensityd(
-                keys=self.features,
+                keys=features,
                 subtrahend=(0.485, 0.456, 0.406),
                 divisor=(0.229, 0.224, 0.225),
                 channel_wise=True)
@@ -432,7 +454,7 @@ class base_monai_loader(DataloaderBase):
         crop = RandSpatialCropd(
             keys=self.features,
             roi_size=[
-                -1,
+              #  -1,
                 self.config['loaders']['Crop_height'],
                 self.config['loaders']['Crop_width'],
                 self.config['loaders']['Crop_depth']],

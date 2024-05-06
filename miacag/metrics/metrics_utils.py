@@ -185,6 +185,7 @@ def get_metrics(outputs,
             c = 0
             if metric.startswith('acc_top_1'):
             #    labels, outputs = remove_nans(labels, outputs)
+                labels = labels.long()
                 if outputs.nelement() != 0:
                     labels = F.one_hot(
                         labels,
@@ -199,7 +200,7 @@ def get_metrics(outputs,
                         post_trans = Compose(
                             [EnsureType(),
                              Activations(softmax=True),
-                             AsDiscrete(threshold=0.5)]
+                             AsDiscrete(treshold=0.5)] #argmax=True)]
                             )
                         outputs = [post_trans(i) for i in decollate_batch(outputs)]
                         metrics[metric](y_pred=outputs, y=labels)

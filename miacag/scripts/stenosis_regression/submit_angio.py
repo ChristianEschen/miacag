@@ -27,7 +27,7 @@ from miacag.postprocessing.aggregate_pr_group import Aggregator
 from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
 import timeit
-
+from miacag.scripts.script_utils import ConfigManipulator
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -51,411 +51,223 @@ parser.add_argument(
 
 
 def stenosis_identifier(cpu, num_workers, config_path, table_name_input=None):
-    config_path = [
-        os.path.join(config_path, i) for i in os.listdir(config_path)]
 
-    for i in range(0, len(config_path)):
-        print('loading config:', config_path[i])
-        with open(config_path[i]) as file:
-            config = yaml.load(file, Loader=yaml.FullLoader)
-        mkFolder(config['output'])
-        csv_exists, output_csv_test = checkCsvExists(config['output'])
-        # if csv_exists is False:
-        #     trans_label = \
-        #         [i + '_transformed' for i in config['labels_names']]
-        #     df_results = create_empty_csv(output_csv_test, trans_label)
-        # else:
-        #     df_results = pd.read_csv(output_csv_test)
+    print('loading config:', config_path)
+    with open(config_path) as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+    mkFolder(config['output'])
+    # if csv_exists is False:
+    #     trans_label = \
+    #         [i + '_transformed' for i in config['labels_names']]
+    #     df_results = create_empty_csv(output_csv_test, trans_label)
+    # else:
+    #     df_results = pd.read_csv(output_csv_test)
 
-        exp_exists = checkExpExists(config_path[i], config['output'])
-        if exp_exists is False:
 
-            config['master_port'] = os.environ['MASTER_PORT']
-            config['num_workers'] = num_workers
-            config['cpu'] = cpu
-            tensorboard_comment = os.path.basename(config_path[i])[:-5]
-            temp_file = os.path.join(config['output'], 'temp.txt')
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                maybe_remove(temp_file)
-                experiment_name = tensorboard_comment + '_' + \
-                    "SEP_" + \
-                    datetime.now().strftime('%b%d_%H-%M-%S')
-                write_file(temp_file, experiment_name)
-            torch.distributed.barrier()
-            experiment_name = test_for_file(temp_file)[0]
-            output_directory = os.path.join(
-                        config['output'],
-                        experiment_name)
-            mkFolder(output_directory)
-            output_config = os.path.join(output_directory,
-                                         os.path.basename(config_path[i]))
-            if table_name_input is None:
-                output_table_name = \
-                    experiment_name + "_" + config['table_name']
-            else:
-                output_table_name = table_name_input
+    config['master_port'] = os.environ['MASTER_PORT']
+    config['num_workers'] = num_workers
+    config['cpu'] = cpu
+    tensorboard_comment = os.path.basename(config_path)[:-5]
+    temp_file = os.path.join(config['output'], 'temp.txt')
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        maybe_remove(temp_file)
+        experiment_name = tensorboard_comment + '_' + \
+            "SEP_" + \
+            datetime.now().strftime('%b%d_%H-%M-%S')
+        write_file(temp_file, experiment_name)
+    torch.distributed.barrier()
+    experiment_name = test_for_file(temp_file)[0]
+    output_directory = os.path.join(
+                config['output'],
+                experiment_name)
+    mkFolder(output_directory)
+    output_config = os.path.join(output_directory,
+                                    os.path.basename(config_path))
+    if table_name_input is None:
+        output_table_name = \
+            experiment_name + "_" + config['table_name']
+    else:
+        output_table_name = table_name_input
 
-            output_plots = os.path.join(output_directory, 'plots')
-            mkFolder(output_plots)
+    output_plots = os.path.join(output_directory, 'plots')
+    mkFolder(output_plots)
 
-            output_plots_train = os.path.join(output_plots, 'train')
-            output_plots_val = os.path.join(output_plots, 'val')
-            output_plots_test = os.path.join(output_plots, 'test')
+    output_plots_train = os.path.join(output_plots, 'train')
+    output_plots_val = os.path.join(output_plots, 'val')
+    output_plots_test = os.path.join(output_plots, 'test')
 
-            mkFolder(output_plots_train)
-            mkFolder(output_plots_test)
-            mkFolder(output_plots_val)
+    mkFolder(output_plots_train)
+    mkFolder(output_plots_test)
+    mkFolder(output_plots_val)
 
-            # begin pipeline
-            # 1. copy table
-            os.system("mkdir -p {output_dir}".format(
-                output_dir=output_directory))
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                if table_name_input is None:
-                    copy_table(sql_config={
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'schema_name': config['schema_name'],
-                        'table_name_input': config['table_name'],
-                        'table_name_output': output_table_name})
+    # begin pipeline
+    # 1. copy table
+    os.system("mkdir -p {output_dir}".format(
+        output_dir=output_directory))
+    torch.distributed.barrier()
+    if torch.distributed.get_rank() == 0:
+        if table_name_input is None:
+            copy_table(sql_config={
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'schema_name': config['schema_name'],
+                'table_name_input': config['table_name'],
+                'table_name_output': output_table_name})
 
-                # # 2. copy config
-                os.system(
-                    "cp {config_path} {config_file_temp}".format(
-                        config_path=config_path[i],
-                        config_file_temp=output_config))
-            # rename labels and add columns;
-            if not config['is_already_trained']:
+        # # 2. copy config
+        os.system(
+            "cp {config_path} {config_file_temp}".format(
+                config_path=config_path,
+                config_file_temp=output_config))
+    # rename labels and add columns;
 
-                trans_label = [i + '_transformed' for i in config['labels_names']]
-                config['labels_names'] = trans_label
-            labels_names_original = config['labels_names']
+    trans_label = [i + '_transformed' for i in config['labels_names']]
+    config['labels_names'] = trans_label
+    labels_names_original = config['labels_names']
 
-            # add placeholder for confidences
-            conf = [i + '_confidences' for i in config['labels_names']]
-            conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
-            conf_agg_t = [i + '_confidences_aggregated_thres' for i in config['labels_names']]
+    # add placeholder for confidences
+    conf = [i + '_confidences' for i in config['labels_names']]
+    conf_agg = [i + '_confidences_aggregated' for i in config['labels_names']]
+    conf_agg_t = [i + '_confidences_aggregated_thres' for i in config['labels_names']]
 
-            # add placeholder for predictions
-            pred = [i + '_predictions' for i in config['labels_names']]
+    # add placeholder for predictions
+    pred = [i + '_predictions' for i in config['labels_names']]
 
-            # # 4. Train model
-            torch.distributed.barrier()
-            config['output'] = output_directory
-            config['output_directory'] = output_directory
-            config['table_name'] = output_table_name
-            config['use_DDP'] = 'True'
-            config['datasetFingerprintFile'] = None
-            if not config['is_already_trained']:
+    # # 4. Train model
+    torch.distributed.barrier()
+    config['output'] = output_directory
+    config['output_directory'] = output_directory
+    config['table_name'] = output_table_name
+    config['use_DDP'] = 'True'
+    config['datasetFingerprintFile'] = None
+    if not config['is_already_trained']:
+        print('training')
+        train(config)
 
-                train(config)
+    # 5 eval model
 
-            # 5 eval model
+    #config['model']['pretrain_model'] = output_directory
+    if not config['is_already_tested']:
+        print('testing')
+        test({**config, 'query': config["query_test"], 'TestSize': 1})
 
-            config['model']['pretrain_model'] = output_directory
-            if not config['is_already_trained']:
-                test({**config, 'query': config["query_test"], 'TestSize': 1})
+    print('kill gpu processes')
+    if table_name_input is not None:
+        torch.distributed.barrier()
+        torch.cuda.empty_cache()
+        torch.distributed.destroy_process_group()
 
-            print('kill gpu processes')
-            if table_name_input is not None:
-                torch.distributed.barrier()
-                torch.cuda.empty_cache()
-                torch.distributed.destroy_process_group()
-
-            # 6 plot results:
-            # train
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_train_plot']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        output_plots_train,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']]
-                        )
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_train_plot'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']
-                        },
-                        config['labels_names'],
-                        conf,
-                        output_plots_train)
-            
-            # aggregate stenosis for all groups :
-            # entryids or (PatientID, StudyInstanceUID)
-            agg = Aggregator({
-                                'labels_names': config['labels_names'],
-                                'database': config['database'],
-                                'username': config['username'],
-                                'password': config['password'],
-                                'host': config['host'],
-                                'table_name': output_table_name,
-                                'schema_name': config['schema_name'],
-                                'query':
-                                config['query_train_plot'],
-                                "num_classes":
-                                config["model"]["num_classes"],
-                                'loss_name': config['loss']['name']
-                                },
-                                [i + "_confidences" for i in
-                                config['labels_names']])
-            agg()
-
-            # plot results for entire cag
-            cag_segment = os.path.join(output_plots_train, 'cag_segment')
-            mkFolder(cag_segment)
-
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_train']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        cag_segment,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']],
-                        group_aggregated=True
-                        )
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_train'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']
-                        },
-                        config['labels_names'],
-                        conf_agg,
-                        cag_segment,
-                        group_aggregated=True)
-                
-            # val
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_val_plot']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        output_plots_val,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']]
-                        )
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_val_plot'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']},
-                        config['labels_names'],
-                        conf,
-                        output_plots_val)
-            # aggregate stenosis for all groups :
-            # entryids or (PatientID, StudyInstanceUID)
-            agg = Aggregator({
-                                'labels_names': config['labels_names'],
-                                'database': config['database'],
-                                'username': config['username'],
-                                'password': config['password'],
-                                'host': config['host'],
-                                'schema_name': config['schema_name'],
-                                'table_name': output_table_name,
-                                'query':
-                                config['query_val_plot'],
-                                "num_classes":
-                                config["model"]["num_classes"],
-                                'loss_name': config['loss']['name']
-                                },
-                                [i + "_confidences" for i in
-                                config['labels_names']])
-            agg()
+    # 6 plot results:
+    # train
+    plot_results({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_train_plot']},
+                config['labels_names'],
+                [i + "_predictions" for i in
+                    config['labels_names']],
+                output_plots_train,
+                config['model']['num_classes'],
+                config,
+                confidence_names=[i + "_confidences" for i in
+                                    config['labels_names']]
+                )
+    plotRegression({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_train_plot'],
+                'loss_name': config['loss']['name'],
+                'task_type': config['task_type']
+                },
+                config['labels_names'],
+                conf,
+                output_plots_train)
+    
         
-            # plot results for entire cag
-            cag_segment = os.path.join(output_plots_val, 'cag_segment')
-            mkFolder(cag_segment)
-
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_val']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        cag_segment,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']],
-                        group_aggregated=True
-                        )
-
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_val'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']},
-                        config['labels_names'],
-                        conf_agg,
-                        cag_segment,
-                        group_aggregated=True)
+    # val
+    plot_results({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_val_plot']},
+                config['labels_names'],
+                [i + "_predictions" for i in
+                    config['labels_names']],
+                output_plots_val,
+                config['model']['num_classes'],
+                config,
+                confidence_names=[i + "_confidences" for i in
+                                    config['labels_names']]
+                )
+    plotRegression({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_val_plot'],
+                'loss_name': config['loss']['name'],
+                'task_type': config['task_type']},
+                config['labels_names'],
+                conf,
+                output_plots_val)
 
 
-            # test
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_test_plot']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        output_plots_test,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']]
-                        )
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_test_plot'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']},
-                        config['labels_names'],
-                        conf,
-                        output_plots_test)
-            # aggregate stenosis for all groups :
-            # entryids or (PatientID, StudyInstanceUID)
+    # test
+    plot_results({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_test_plot']},
+                config['labels_names'],
+                [i + "_predictions" for i in
+                    config['labels_names']],
+                output_plots_test,
+                config['model']['num_classes'],
+                config,
+                confidence_names=[i + "_confidences" for i in
+                                    config['labels_names']]
+                )
+    plotRegression({
+                'database': config['database'],
+                'username': config['username'],
+                'password': config['password'],
+                'host': config['host'],
+                'labels_names': config['labels_names'],
+                'schema_name': config['schema_name'],
+                'table_name': output_table_name,
+                'query': config['query_test_plot'],
+                'loss_name': config['loss']['name'],
+                'task_type': config['task_type']},
+                config['labels_names'],
+                conf,
+                output_plots_test)
+        # aggregate stenosis for all groups :
+    
 
-            agg = Aggregator({
-                                'labels_names': config['labels_names'],
-                                'database': config['database'],
-                                'username': config['username'],
-                                'password': config['password'],
-                                'host': config['host'],
-                                'schema_name': config['schema_name'],
-                                'table_name': output_table_name,
-                                'query':
-                                config['query_test_plot'],
-                                "num_classes":
-                                config["model"]["num_classes"],
-                                'loss_name': config['loss']['name']},
-                                [i + "_confidences" for i in
-                                config['labels_names']])
-            agg()
-
-            # plot results for entire cag
-            cag_segment = os.path.join(output_plots_test, 'cag_segment')
-            mkFolder(cag_segment)
-
-            plot_results({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_test']},
-                        config['labels_names'],
-                        [i + "_predictions" for i in
-                            config['labels_names']],
-                        cag_segment,
-                        config['model']['num_classes'],
-                        config,
-                        confidence_names=[i + "_confidences" for i in
-                                            config['labels_names']],
-                        group_aggregated=True
-                        )
-            plotRegression({
-                        'database': config['database'],
-                        'username': config['username'],
-                        'password': config['password'],
-                        'host': config['host'],
-                        'labels_names': config['labels_names'],
-                        'schema_name': config['schema_name'],
-                        'table_name': output_table_name,
-                        'query': config['query_count_stenosis_test'],
-                        'loss_name': config['loss']['name'],
-                        'task_type': config['task_type']},
-                        config['labels_names'],
-                        conf_agg,
-                        cag_segment,
-                        group_aggregated=True)
-
-
-            print('config files processed', str(i+1))
-            print('config files to process in toal:', len(config_path))
-
-        if csv_exists:
-            return None
-        else:
-            return output_table_name
 
 
 if __name__ == '__main__':
@@ -480,3 +292,64 @@ if __name__ == '__main__':
     print('cpu', args.cpu)
     print(f"Execution time: {elapsed} seconds")
 
+
+
+################################ GRAVEYARD #####################################################
+
+    # # entryids or (PatientID, StudyInstanceUID)
+
+    #         agg = Aggregator({
+    #                             'labels_names': config['labels_names'],
+    #                             'database': config['database'],
+    #                             'username': config['username'],
+    #                             'password': config['password'],
+    #                             'host': config['host'],
+    #                             'schema_name': config['schema_name'],
+    #                             'table_name': output_table_name,
+    #                             'query':
+    #                             config['query_test_plot'],
+    #                             "num_classes":
+    #                             config["model"]["num_classes"],
+    #                             'loss_name': config['loss']['name']},
+    #                             [i + "_confidences" for i in
+    #                             config['labels_names']])
+    #         agg()
+
+    #         # plot results for entire cag
+    #         cag_segment = os.path.join(output_plots_test, 'cag_segment')
+    #         mkFolder(cag_segment)
+
+    #         plot_results({
+    #                     'database': config['database'],
+    #                     'username': config['username'],
+    #                     'password': config['password'],
+    #                     'host': config['host'],
+    #                     'labels_names': config['labels_names'],
+    #                     'schema_name': config['schema_name'],
+    #                     'table_name': output_table_name,
+    #                     'query': config['query_count_stenosis_test']},
+    #                     config['labels_names'],
+    #                     [i + "_predictions" for i in
+    #                         config['labels_names']],
+    #                     cag_segment,
+    #                     config['model']['num_classes'],
+    #                     config,
+    #                     confidence_names=[i + "_confidences" for i in
+    #                                         config['labels_names']],
+    #                     group_aggregated=True
+    #                     )
+    #         plotRegression({
+    #                     'database': config['database'],
+    #                     'username': config['username'],
+    #                     'password': config['password'],
+    #                     'host': config['host'],
+    #                     'labels_names': config['labels_names'],
+    #                     'schema_name': config['schema_name'],
+    #                     'table_name': output_table_name,
+    #                     'query': config['query_count_stenosis_test'],
+    #                     'loss_name': config['loss']['name'],
+    #                     'task_type': config['task_type']},
+    #                     config['labels_names'],
+    #                     conf_agg,
+    #                     cag_segment,
+    #                     group_aggregated=True)

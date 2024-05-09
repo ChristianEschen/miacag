@@ -1,5 +1,8 @@
 sudo docker run --gpus all -it --network my_network   -v /home/alatar/miacag:/home/alatar/miacag/data/angio   -v /home/alatar/DicomDatabase:/home/alatar/DicomDatabase   f6e64f73fe24
+docker run --shm-size 20g  --gpus all -it --network my_network   -v "C:\Users\chris":"/deploy"  miacag_sing
+docker run --shm-size 20g  --gpus all -it --network my_network -e DISPLAY=host.docker.internal:0.0 -v "C:\Users\chris":"/deploy"  miacag_sing
 
+-e DISPLAY=host.docker.internal:0.0
 export DB_HOST=my-custom-postgres-instance
 
 psql -h $DB_HOST -p 5432 -U alatar -d mydb

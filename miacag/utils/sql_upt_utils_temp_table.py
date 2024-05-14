@@ -131,7 +131,7 @@ def handle_CE_NLL_loss(df, parent_folder_basename, config, update_column_name):
         max_vals.append(max_v)
   #  max_vals = ["{"+";".join(map(str, row)) +"}"for row in df_to_array]
     
-    
+        
     
     df_res = pd.DataFrame([list(idx), list(max_vals), list(df["rowid"])], [update_column_name[:-11]+ 'predictions', update_column_name, "rowid"]).transpose()
 
@@ -147,8 +147,11 @@ def comnbine_csv_files(df_list, config):
 
     update_column_names = []
     for df in df_list:
-        mask  =[i.startswith('sten') for i in list(df.columns)]
-        label_name = np.array(list(df.columns))[np.array(mask)][0]
+        if config["loss"]["name"][0] == 'CE':
+            label_name = config['labels_names'][0] + '_confidence_0'
+        else:
+            mask  =[i.startswith('sten') for i in list(df.columns)]
+            label_name = np.array(list(df.columns))[np.array(mask)][0]
         parent_folder_basename = label_name[0:-13]
         confidence_name = label_name[0:-2] + 's'
         prediction_name = label_name[0:-12] + 'predictions'

@@ -17,7 +17,7 @@ from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict, ge
 import pandas as pd
 import os
 import psutil
-
+from tqdm import tqdm
 
 
 
@@ -126,7 +126,12 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
     #config['loaders']['batchSize']= 2
     model.eval()
     with torch.no_grad():
-        for data in validation_loader:
+        if config['loaders']['mode'] == 'testing':
+        # Wrap the validation_loader with tqdm only in testing mode
+            iterable = tqdm(validation_loader, desc="Testing", unit="batch")
+        else:
+            iterable = validation_loader  # No progress bar for other modes
+        for data in iterable:
             data = get_data_from_loader(data, config, device)
             outputs, loss, metrics, cams = eval_one_step(
                                             model, data, device,

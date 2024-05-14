@@ -502,6 +502,12 @@ class val_monai_classification_loader(base_monai_loader):
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
+                CenterSpatialCropd(
+                    keys=self.features,
+                    roi_size=[
+                        self.config['loaders']['Crop_height'],
+                        self.config['loaders']['Crop_width'],
+                        32]),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(config=self.config, features=self.features),
                 EnsureTyped(keys=self.features, data_type='tensor'),

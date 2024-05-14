@@ -143,7 +143,7 @@ def get_data_from_loader(data, config, device, val_phase=False):
             # print('data min', data['inputs'][0].min())
         if config['loaders']['mode'] == 'testing':
             trans = monai.transforms.Compose([monai.transforms.ScaleIntensityd(keys="single_clip"), base_monai_loader.maybeNormalize(config, 'single_clip')])
-
+            trans = monai.transforms.Compose([monai.transforms.Identityd(keys="single_clip")])
             transformed_inp = []
             for i in range(0, data['inputs'].shape[1]):
                 single_clip = data["inputs"][0, i, :, :, :]

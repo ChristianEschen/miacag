@@ -278,6 +278,8 @@ class train_monai_classification_loader(base_monai_loader):
             #     keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True), #FIXME
             self.getMaybePad(),
             self.getCopy1to3Channels(),
+            ScaleIntensityd(keys=self.features),
+            self.maybeNormalize(config=self.config, features=self.features),
             EnsureTyped(keys=self.features, data_type='tensor'),
             self.maybeToGpu(self.features),
           #  RandReplicateSliceTransform(keys=self.features, num_slices=self.config['loaders']['Crop_depth'], prob=0.5),
@@ -286,8 +288,7 @@ class train_monai_classification_loader(base_monai_loader):
             self.maybeTemporalScaling(),
             self.maybeRotate(),
             self.CropTemporal(),
-            ScaleIntensityd(keys=self.features),
-            self.maybeNormalize(config=self.config, features=self.features),
+
             ConcatItemsd(keys=self.features, name='inputs'),
             DeleteItemsd(keys=self.features),
             ]
@@ -491,14 +492,18 @@ class val_monai_classification_loader(base_monai_loader):
             scaling = len(weights) / np.sum(weights)
             weights = [scaling * x for x in weights]
             return weights
+    
+
     def tansformations(self):
         self.transforms = [
-                LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
+                LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)",  reader="PydicomReader"),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
+                ScaleIntensityd(keys=self.features),
+                self.maybeNormalize(config=self.config, features=self.features),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features)
@@ -510,8 +515,8 @@ class val_monai_classification_loader(base_monai_loader):
                                                     self.config['loaders']['Crop_depth']),
                                                 pad_mode="constant",
                                                 ),
-                ScaleIntensityd(keys=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
-                self.maybeNormalize(config=self.config, features=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
+                #ScaleIntensityd(keys=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
+                #self.maybeNormalize(config=self.config, features=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]

@@ -496,33 +496,25 @@ class val_monai_classification_loader(base_monai_loader):
 
     def tansformations(self):
         self.transforms = [
-                LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)",  reader="PydicomReader"),
+                LoadImaged(keys=self.features, prune_meta_pattern="(^0008|^6000|^0010|^5004|^5006|^5|^0)"),
                 EnsureChannelFirstD(keys=self.features),
                 self.resampleORresize(),
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
-                CenterSpatialCropd(
-                    keys=self.features,
-                    roi_size=[
-                        self.config['loaders']['Crop_height'],
-                        self.config['loaders']['Crop_width'],
-                        32]),
                 ScaleIntensityd(keys=self.features),
                 self.maybeNormalize(config=self.config, features=self.features),
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                self.maybeCenterCrop(self.features)
-                    if self.config['loaders']['mode'] == 'training'
-                    else monai.transforms.GridPatchd(keys=self.features,
-                                                patch_size=(
-                                                    self.config['loaders']['Crop_height'],
-                                                    self.config['loaders']['Crop_width'],
-                                                    self.config['loaders']['Crop_depth']),
-                                                pad_mode="constant",
-                                                ),
-                #ScaleIntensityd(keys=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
-                #self.maybeNormalize(config=self.config, features=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
+                self.maybeCenterCrop(self.features),
+                    # if self.config['loaders']['mode'] == 'training'
+                    # else monai.transforms.GridPatchd(keys=self.features,
+                    #                             patch_size=(
+                    #                                 self.config['loaders']['Crop_height'],
+                    #                                 self.config['loaders']['Crop_width'],
+                    #                                 self.config['loaders']['Crop_depth']),
+                    #                             pad_mode="constant",
+                    #                             ),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]

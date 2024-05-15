@@ -78,15 +78,14 @@ def eval_one_step(model, data, device, criterion,
         
         outputs = maybe_sliding_window(data['inputs'], model, config)
         # max pooling on first dimension
-        if config['loaders']['mode'] == 'testing':
-         #   outputs = [torch.unsqueeze(torch.mean(outputs[0], dim=0), dim=0)]
-            if config['labels_names'][0].startswith('ffr'):
-                outputs = [torch.unsqueeze(torch.amin(outputs[0], dim=0), dim=0)]
-            elif config['labels_names'][0].startswith('sten'):
+        # if config['loaders']['mode'] == 'testing':
+        #     if config['labels_names'][0].startswith('ffr'):
+        #         outputs = [torch.unsqueeze(torch.amin(outputs[0], dim=0), dim=0)]
+        #     elif config['labels_names'][0].startswith('sten'):
 
-                outputs = [torch.unsqueeze(torch.amax(outputs[0], dim=0), dim=0)]
-            else:
-                pass
+        #         outputs = [torch.unsqueeze(torch.amax(outputs[0], dim=0), dim=0)]
+        #     else:
+        #         pass
         if config['loaders']['mode'] != 'testing':
             losses, loss = get_losses_class(config, outputs,
                                             data, criterion, device)

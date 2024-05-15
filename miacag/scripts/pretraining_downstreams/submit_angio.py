@@ -39,7 +39,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.ticker import MaxNLocator
 matplotlib.use('Agg')
-from miacag.features import feature_forward_dino
 import shutil
 import timeit
 import torch.distributed as dist

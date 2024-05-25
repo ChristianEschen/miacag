@@ -12,3 +12,15 @@ export DB_HOST=my-custom-postgres-instance
 
 psql -h $DB_HOST -p 5432 -U alatar -d mydb
 pg_dump -U alatar -h $DB_HOST -d mydb -t cag.test_deploy > output_file.sql
+
+DO
+$$
+DECLARE
+    table_name text;
+BEGIN
+    FOR table_name IN SELECT tablename FROM pg_tables WHERE schemaname = 'cag' AND tablename <> 'dicom_table2x'
+    LOOP
+        EXECUTE 'DROP TABLE ' || quote_ident('cag') || '.' || quote_ident(table_name) || ' CASCADE;';
+    END LOOP;
+END;
+$$;

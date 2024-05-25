@@ -84,6 +84,7 @@ class ModelBuilder():
                     #     else:
                     # model.module.load_state_dict(
                     #     torch.load(os.path.join(path_model, 'model.pt')))
+                    print('loading inference model fron', path_model)
                     if self.config['cpu'] == 'True':
                         model.load_state_dict(
                             torch.load(os.path.join(path_model, 'model.pt')

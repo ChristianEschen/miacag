@@ -502,8 +502,7 @@ class val_monai_classification_loader(base_monai_loader):
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
                 self.getCopy1to3Channels(),
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(config=self.config, features=self.features),
+        
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features),
@@ -514,7 +513,8 @@ class val_monai_classification_loader(base_monai_loader):
                     #                                 self.config['loaders']['Crop_width'],
                     #                                 self.config['loaders']['Crop_depth']),
                     #                             pad_mode="constant",
-                    #                             ),
+                ScaleIntensityd(keys=self.features),
+                self.maybeNormalize(config=self.config, features=self.features),            #                             ),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]

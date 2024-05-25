@@ -111,20 +111,20 @@ def compute_aggregation(df, aggregated_cols_list, agg_type="max"):
             df_new = df_field.copy()
            # self.df[agg_field] = confidences
             df_new[agg_field] = confidences
-            if agg_type == "mean":
-                df_new = df_new.groupby(
-                    ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
-            elif agg_type == "max":
-                if field.startswith('ffr'):
-                    df_new = df_new.groupby(
-                        ['PatientID', 'StudyInstanceUID'])[agg_field].min()
-                elif field.startswith('sten'):
-                    df_new = df_new.groupby(
-                        ['PatientID', 'StudyInstanceUID'])[agg_field].max()
-                else:
-                    raise ValueError('not implemented')
-            else:
-                raise ValueError('agg_type must be either mean or max')
+            # if agg_type == "mean":
+            df_new = df_new.groupby(
+                ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
+            # elif agg_type == "max":
+            #     if field.startswith('ffr'):
+            #         df_new = df_new.groupby(
+            #             ['PatientID', 'StudyInstanceUID'])[agg_field].min()
+            #     elif field.startswith('sten'):
+            # df_new = df_new.groupby(
+            #     ['PatientID', 'StudyInstanceUID'])[agg_field].max()
+            #     else:
+            #         raise ValueError('not implemented')
+            # else:
+            #     raise ValueError('agg_type must be either mean or max')
             df_new = df_new.to_frame()
             df_new.reset_index(inplace=True)
             df_field.drop(columns=aggregated_cols_list, inplace=True)
@@ -888,11 +888,11 @@ def wrap_plotRegression(df, label_names, prediction_names, output_folder, group_
                     ['PatientID',
                     'StudyInstanceUID'])
         #if sql_config['task_type'] != 'regression':
-        if sql_config['task_type'] != 'mil_classification':
-            df_plot_rep, _ = select_relevant_data(
-                df_plot, prediction_name, label_name)
-        else:
-            df_plot_rep = df_plot.copy()
+        # if sql_config['task_type'] != 'mil_classification':
+        #     df_plot_rep, _ = select_relevant_data(
+        #         df_plot, prediction_name, label_name)
+        # else:
+        df_plot_rep = df_plot.copy()
         mask1 = df_plot_rep[prediction_name].isna()
         mask2 = df_plot_rep[label_name].isna()
         mask = mask1 | mask2

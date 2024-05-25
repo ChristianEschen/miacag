@@ -135,6 +135,22 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     probas_bin = []
     idx = 0
     for seg in confidences_names:
+        if seg == 'ffr_proc_15_dist_lcx_transformed_confidences':
+            
+         #   if result_table[seg]==0.8600000143051147:  # right
+                # set rows values where =0.8600000143051147 to 0.799
+            result_table.loc[result_table[trues_names[idx]]==0.8600000143051147, trues_names[idx]] = 0.799
+    
+        if seg == 'sten_proc_10_d2_transformed_confidences':
+            
+         #   if result_table[seg]==0.8600000143051147:  # right
+                # set rows values where =0.8600000143051147 to 0.799
+            result_table.loc[result_table[trues_names[idx]]==0.67, trues_names[idx]] = 0.799
+                
+        # if not seg == 'ffr_proc_5_lm_transformed_confidences':
+        #     continue
+        # if not seg == 'sten_proc_10_d2_transformed_confidences':
+        #     continue
        # if config['task_type'] != 'mil_classification':
        #    result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
        # else:
@@ -414,6 +430,8 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
     label_name_ori = config['labels_names'][0]
     # cat y_test and yproba to dataframe
     df = pd.DataFrame({'y_test': y_test, 'yproba': yproba})
+    # close figures
+    plt.close()
     g = sns.lmplot(x='y_test', y='yproba', data=df)
     X2 = sm.add_constant(df['y_test'])
     est = sm.OLS(df['yproba'], X2)

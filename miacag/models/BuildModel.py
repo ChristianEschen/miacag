@@ -90,6 +90,7 @@ class ModelBuilder():
                             torch.load(os.path.join(path_model, 'model.pt')
                                     ,map_location='cpu'))
                     else:
+                        print('loading pretrained model from:', os.path.join(path_model, 'model.pt'))
                         model.module.load_state_dict(
                             torch.load(os.path.join(path_model, 'model.pt')
                                     ,map_location='cuda:{}'.format(os.environ['LOCAL_RANK'])))

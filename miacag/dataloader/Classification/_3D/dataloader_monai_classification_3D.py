@@ -501,20 +501,19 @@ class val_monai_classification_loader(base_monai_loader):
                 self.resampleORresize(),
                # self.maybeDeleteMeta(), #FIXME
                 self.getMaybePad(),
+
                 self.getCopy1to3Channels(),
         
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                self.maybeCenterCrop(self.features),
-                    # if self.config['loaders']['mode'] == 'training'
-                    # else monai.transforms.GridPatchd(keys=self.features,
-                    #                             patch_size=(
-                    #                                 self.config['loaders']['Crop_height'],
-                    #                                 self.config['loaders']['Crop_width'],
-                    #                                 self.config['loaders']['Crop_depth']),
-                    #                             pad_mode="constant",
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(config=self.config, features=self.features),            #                             ),
+                monai.transforms.GridPatchd(keys=self.features,
+                                                        patch_size=(
+                                                            self.config['loaders']['Crop_height'],
+                                                            self.config['loaders']['Crop_width'],
+                                                            self.config['loaders']['Crop_depth']),
+                                                        pad_mode="constant"),
+                # ScaleIntensityd(keys=self.features),
+                # self.maybeNormalize(config=self.config, features=self.features),            #                             ),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]

@@ -409,7 +409,8 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
         mask = mask_propa + mask_test
         y_test = y_test[~mask]
         yproba = yproba[~mask]
-        #syproba = np.clip(yproba, a_min=0, a_max=1)
+        yproba = np.clip(yproba, a_min=0, a_max=1)
+        y_test = np.clip(y_test, a_min=0, a_max=1)
        # fpr, tpr, _ = roc_curve(y_test,  yproba)
         mean_mse,  lower_mse, upper_mse = get_mean_lower_upper(yproba, y_test, 'mse_score')
        # upper_mse = np.clip(upper_mse, a_min=0, a_max=1)

@@ -24,6 +24,20 @@ from functools import reduce
 import re
 import copy
 
+def bland_altman_plot(data1, data2, *args, **kwargs):
+    data1     = np.asarray(data1)
+    data2     = np.asarray(data2)
+    mean      = np.mean([data1, data2], axis=0)
+    diff      = data1 - data2                   # Difference between data1 and data2
+    md        = np.mean(diff)                   # Mean of the difference
+    sd        = np.std(diff, axis=0)            # Standard deviation of the difference
+
+    plt.scatter(mean, diff, *args, **kwargs)
+    plt.axhline(md,           color='gray', linestyle='--')
+    plt.axhline(md + 1.96*sd, color='gray', linestyle='--')
+    plt.axhline(md - 1.96*sd, color='gray', linestyle='--')
+    
+    
 def rename_columns(df, label_name):
     if '_1_prox' in label_name:
         value = '1: Proximal RCA'
@@ -63,7 +77,6 @@ def rename_columns(df, label_name):
     return df, value
 
 from miacag.plots.plot_roc_auc_all import plot_roc_all
-from miacag.plots.plot_roc_auc_all import select_relevant_data
 
 
 def map_1abels_to_0neTohree():
@@ -94,6 +107,7 @@ def map_1abels_to_0neTohree():
 
 def aggregate_pr_group(df, aggregated_cols_list, agg_type):
     cols_select = aggregated_cols_list + ["PatientID", "StudyInstanceUID", "rowid"]
+
 def compute_aggregation(df, aggregated_cols_list, agg_type="max"):
         # return records from dataframe to update
         df_copy = copy.deepcopy(df)
@@ -111,33 +125,35 @@ def compute_aggregation(df, aggregated_cols_list, agg_type="max"):
             df_new = df_field.copy()
            # self.df[agg_field] = confidences
             df_new[agg_field] = confidences
-            # if agg_type == "mean":
-            df_new = df_new.groupby(
-                ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
-            # elif agg_type == "max":
-            #     if field.startswith('ffr'):
-            #         df_new = df_new.groupby(
-            #             ['PatientID', 'StudyInstanceUID'])[agg_field].min()
-            #     elif field.startswith('sten'):
-            # df_new = df_new.groupby(
-            #     ['PatientID', 'StudyInstanceUID'])[agg_field].max()
-            #     else:
-            #         raise ValueError('not implemented')
-            # else:
-            #     raise ValueError('agg_type must be either mean or max')
+            if agg_type == "mean":
+                df_new = df_new.groupby(
+                    ['PatientID', 'StudyInstanceUID'])[agg_field].mean()
+            elif agg_type == "max":
+                if field.startswith('ffr'):
+                    df_new = df_new.groupby(
+                        ['PatientID', 'StudyInstanceUID'])[agg_field].min()
+                elif field.startswith('sten'):
+                    df_new = df_new.groupby(
+                        ['PatientID', 'StudyInstanceUID'])[agg_field].max()
+                else:
+                    raise ValueError('not implemented')
+            else:
+                raise ValueError('agg_type must be either mean or max')
             df_new = df_new.to_frame()
             df_new.reset_index(inplace=True)
             df_field.drop(columns=aggregated_cols_list, inplace=True)
 
             
-            df2 = df_new.merge(df_field, left_on=['PatientID', 'StudyInstanceUID'],
+            df_field_res = df_new.merge(df_copy, left_on=['PatientID', 'StudyInstanceUID'],
                     right_on=['PatientID', 'StudyInstanceUID'],
-                    how='right').drop_duplicates(["StudyInstanceUID", "PatientID"])
-            df_frames.append(df2)
+                    how='right')[[agg_field] + ['rowid']]
+            
+            
+            df_frames.append(df_field_res)
             count += 1
-        result_df = reduce(lambda  left,right: pd.merge(left,right,on=['PatientID', "StudyInstanceUID"],
+        result_df = reduce(lambda  left,right: pd.merge(left,right,on=['rowid'],
                                             how='inner'), df_frames)
-        result_df = result_df.merge(df_copy, on=['PatientID', 'StudyInstanceUID'],how='inner')
+        result_df = result_df.merge(df_copy, on=['rowid'],how='right')
         return result_df
         
 def convertConfFloats(confidences, loss_name, config):
@@ -471,6 +487,149 @@ def select_relevant_columns(label_names, label_type):
         raise ValueError('label_type must be either sten or ffr')
 
 
+def get_mae_estimates(x, y, output_plots): 
+        from miacag.plots.plot_utils import get_mean_lower_upper
+        # convert 
+     #   
+        mask = x.isna()
+        mask = mask | y.isna()
+        x = x[~mask]
+        y = y[~mask]
+        x = x.to_numpy()
+        y = y.to_numpy()
+        
+        # clip values
+        x = np.clip(x, a_min=0, a_max=1)
+        y = np.clip(y, a_min=0, a_max=1)
+        mean_mae, lower_mae, upper_mae = get_mean_lower_upper(x, y, 'mae_score')
+        # stack a
+        # save as csv
+        data_results = pd.DataFrame([upper_mae], columns=['upper_mae'])
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'upper_mae.csv'), index=False)
+        
+        data_results = pd.DataFrame([lower_mae], columns=['lower_mae'])
+        
+        
+        
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'lower_mae.csv'), index=False)
+        
+        data_results = pd.DataFrame([mean_mae], columns=['mean_mae'])
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'mean_mae.csv'), index=False)
+        
+        f, ax = plt.subplots(1, figsize = (8,5))
+        sm.graphics.mean_diff_plot(x, y, ax = ax)
+
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots, 'all_bland_altman.png'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        
+        
+        f, ax = plt.subplots(1, figsize = (8,5))
+        sm.graphics.mean_diff_plot(x, y, ax = ax)
+
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots, 'all_bland_altman.pdf'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        
+        from scipy import stats
+        res = stats.normaltest(x - y)
+        res.statistic
+        print('res', res.pvalue)
+        diff = x - y
+        plt.hist(diff, bins=50)
+        plt.show()
+        plt.savefig(
+        os.path.join(
+            output_plots,  '_hist.png'), dpi=100,
+        bbox_inches='tight')
+        plt.close()
+        
+        data_results = pd.DataFrame([res.pvalue], columns=['p_val_norm'])
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'p_val_norm.csv'), index=False)
+        
+        
+        # send x and y to dataframe
+        dici= {'QCA stenosis': x, 'Estimated stenosis': y}
+        data_results =pd.DataFrame(dici)
+        sns.regplot(data_results, x = 'QCA stenosis', y = 'Estimated stenosis', scatter_kws={'alpha':0.1}, marker="$\circ$")
+        
+        # compute r2
+        r2 = r2_score(x, y)
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots,  '_seascatter.png'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+                
+
+        sns.regplot(data_results, x = 'QCA stenosis', y = 'Estimated stenosis', scatter_kws={'alpha':0.1}, marker="$\circ$")
+        
+        # compute r2
+        r2 = r2_score(x, y)
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots,  '_seascatter.pdf'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        
+        
+        sns.lmplot(data_results, x = 'QCA stenosis', y = 'Estimated stenosis')
+        # compute r2
+        r2 = r2_score(x, y)
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots,  '_lmscatter.png'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        
+        
+                
+        sns.lmplot(data_results, x = 'QCA stenosis', y = 'Estimated stenosis')
+        # compute r2
+        r2 = r2_score(x, y)
+        plt.show()
+        plt.savefig(
+            os.path.join(
+                output_plots,  '_lmscatter.pdf'), dpi=100,
+            bbox_inches='tight')
+        plt.close()
+        
+
+        X2 = sm.add_constant(data_results['QCA stenosis'])
+        est = sm.OLS(data_results['Estimated stenosis'], X2)
+        est2 = est.fit()
+        r = est2.rsquared
+        p = est2.pvalues['QCA stenosis']
+        p = '%.2E' % Decimal(p)
+
+
+        # create dataframe 
+        
+        # create dataframe 
+        # with r2
+        data_results = pd.DataFrame([p], columns=['pval_reg'])
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'pval_reg.csv'), index=False)
+            
+        
+        # with r2
+        data_results = pd.DataFrame([r], columns=['r_sq'])
+        # save as csv
+        data_results.to_csv(os.path.join(output_plots, 'r_sq.csv'), index=False)
+            
 def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                            group_aggregated, config):
     threshold_ffr = config['loaders']['val_method']['threshold_ffr']
@@ -502,6 +661,11 @@ def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                                 plot_type='stenosis',
                                 output_folder=output_plots,
                                 label_name_ori='sten_all')
+        
+        get_mae_estimates(stenosis[plot_col[0]], stenosis[plot_col[1]], output_plots)
+    
+
+        
     df_ffr = df.copy()
     ffr_cols_true = select_relevant_columns(label_names, 'ffr')
     if len(ffr_cols_true) > 0:
@@ -579,7 +743,7 @@ def remove_suffix(input_string, suffix):
 
 
 
-def select_relevant_data_dominans(result_table, segments):
+def select_relevant_data_dominans(result_table, segments, artery_type='rca'):
     # Make a deep copy of the DataFrame to avoid modifying the original data
     final_table = copy.deepcopy(result_table)
 
@@ -600,6 +764,8 @@ def select_relevant_data_dominans(result_table, segments):
                     final_table.at[index, seg] = np.nan
                 elif 'pda_lca' in seg:
                     final_table.at[index, seg] = np.nan
+                else:
+                    pass
                     
 
         elif row['labels_predictions'] == 0:  # Assuming '0' is for 'left'
@@ -612,19 +778,36 @@ def select_relevant_data_dominans(result_table, segments):
                     # Set values to np.nan based on 'dominans' condition
                     if row['dominans'] not in ["Venstre dominans (PDA+PLA fra LCX)"]:
                         final_table.at[index, seg] = np.nan
+
                 elif 'pla_rca' in seg:
                     final_table.at[index, seg] = np.nan
                 elif 'pda_t' in seg:
                     final_table.at[index, seg] = np.nan
+                else:
+                    pass
 
         else:
             # Raise an error if 'labels_predictions' contains an unexpected value
             raise ValueError('Unexpected value in labels_predictions')
   #  final_table['sten_proc_16_pla_lca_transformed_confidences'] = df2['combined_confidences'].fillna(df2['sten_proc_16_pla_lca_transformed_confidences'])
+   
     pda_names = [i for i in segments if '4_pda' in i]
-    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    if artery_type in ['rca', 'both']:
+        agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    else:
+        agg_pda_name = [i for i in pda_names if 'lca' in i]
     pla_names = [i for i in segments if '16_pla' in i]
-    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    if artery_type in ['rca', 'both']:
+        agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    else:
+        agg_pla_name = [i for i in pla_names if 'lca' in i]
+
+    
+    # old
+    # pda_names = [i for i in segments if '4_pda' in i]
+    # agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    # pla_names = [i for i in segments if '16_pla' in i]
+    # agg_pla_name = [i for i in pla_names if 'lca' not in i]
     if len(pda_names) > 1:
         final_table[agg_pda_name[0]] = final_table[pda_names[0]].fillna(final_table[pda_names[1]])
     else:
@@ -644,21 +827,46 @@ def select_relevant_data_dominans(result_table, segments):
     
     return final_table
 
-def select_only_aggregates(segments):
+def select_only_aggregates(segments, artery_type='rca'):
     pda_names = [i for i in segments if '4_pda' in i]
-    agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    if artery_type in ['rca', 'both']:
+        agg_pda_name = [i for i in pda_names if 'lca' not in i]
+    else:
+        agg_pda_name = [i for i in pda_names if 'lca' in i]
     pla_names = [i for i in segments if '16_pla' in i]
-    agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    if artery_type in ['rca', 'both']:
+        agg_pla_name = [i for i in pla_names if 'lca' not in i]
+    else:
+        agg_pla_name = [i for i in pla_names if 'lca' in i]
     include = agg_pda_name + agg_pla_name
     union = pda_names + pla_names
     exclude = [i for i in union if i not in include]
     final_segments = [i for i in segments if i not in exclude]
     return final_segments
-def rename_label_names(label_names, prediction_names, confidence_names):
-    
-    label_names = select_only_aggregates(label_names)
-    prediction_names = select_only_aggregates(prediction_names)
-    confidence_names = select_only_aggregates(confidence_names)
+
+### old
+# def select_only_aggregates(segments, artery_type='rca'):
+#     pda_names = [i for i in segments if '4_pda' in i]
+#     #if artery_type in ['rca', 'both']:
+#     agg_pda_name = [i for i in pda_names if 'lca' not in i]
+#     #else:
+#     #    agg_pda_name = [i for i in pda_names if 'lca' in i]
+#     pla_names = [i for i in segments if '16_pla' in i]
+#     #if artery_type in ['rca', 'both']:
+#     agg_pla_name = [i for i in pla_names if 'lca' not in i]
+#     #else:
+#     #    agg_pla_name = [i for i in pla_names if 'lca' in i]
+#     include = agg_pda_name + agg_pla_name
+#     union = pda_names + pla_names
+#     exclude = [i for i in union if i not in include]
+#     final_segments = [i for i in segments if i not in exclude]
+#     return final_segments
+
+
+def rename_label_names(label_names, prediction_names, confidence_names, artery_type):
+    label_names = select_only_aggregates(label_names, artery_type)
+    prediction_names = select_only_aggregates(prediction_names, artery_type)
+    confidence_names = select_only_aggregates(confidence_names, artery_type)
     return label_names, prediction_names, confidence_names
 
 def simulte_df(label_names, prediction_names, confidence_names):
@@ -712,8 +920,8 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
     
-    df = select_relevant_data_dominans(df, confidence_names)
-    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names)
+    df = select_relevant_data_dominans(df, confidence_names, config['artery_type'])
+    label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names, config['artery_type'])
     df =df.dropna(subset=confidence_names, how='all')
 
     #df = simulte_df(label_names, prediction_names, confidence_names)
@@ -723,19 +931,18 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     
 def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plots, config, group_aggregated=False):
     # create simulated df with columns: label_names, prediction_names, confidence_names
+    print('max -4', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     if group_aggregated:
         df = compute_aggregation(df, confidence_names, agg_type="max")
+        df = df.drop_duplicates(
+            subset=['StudyInstanceUID', "PatientID"])
         # insert group_aggregation function here
     # test if a element is a list starts with a string: "sten"
     stens = select_relevant_columns(label_names, 'sten')
     # copy row values in _transfored if PatientID and StudyInstanceUID are the same
     
-    wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
-                        group_aggregated, config)    
-    wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
-                      group_aggregated,
-                      config=config)
+    print('max-3', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     for c, label_name in enumerate(label_names):
         confidence_name = confidence_names[c]
@@ -748,13 +955,16 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
+        print('max -2', df[["sten_proc_4_pda_lca_transformed"]].max())
         if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth', 'wfocall1']:
             df_to_process = df_label.copy()
-            plot_results_regression(df_to_process, confidence_name,
-                                    label_name, config, c, support,
-                                    output_plots,
-                                    group_aggregated)
-            #if any(item.startswith('ffr') for item in config['labels_names']):
+            try:
+                plot_results_regression(df_to_process, confidence_name,
+                                        label_name, config, c, support,
+                                        output_plots,
+                                        group_aggregated)
+            except:
+                print('Error in regression plot')
             if label_name.startswith('sten_'):
                 try:
                     df_to_process_ffr = df_label.copy()
@@ -792,6 +1002,16 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
                                         support,
                                         c,
                                         group_aggregated)
+    print('max -1', df[["sten_proc_4_pda_lca_transformed"]].max())
+
+    wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
+                        group_aggregated, config)    
+    print('max last', df[["sten_proc_4_pda_lca_transformed"]].max())
+
+    wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
+                      group_aggregated,
+                      config=config)
+
     return None
 
 
@@ -809,8 +1029,6 @@ def annotate(data, label_name, prediction_name, **kws):
 def plotStenoserTrueVsPred(sql_config, label_names,
                            prediction_names, output_folder):
     df, _ = getDataFromDatabase(sql_config)
-    for label_name in label_names:
-        df = add_misssing_rows(df, label_name)
     df = df.drop_duplicates(
             ['PatientID',
              'StudyInstanceUID'])
@@ -858,10 +1076,12 @@ def plotRegression(sql_config, label_names,
     df, _ = getDataFromDatabase(sql_config)
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], sql_config)
+        # clip values
+        df[conf] = np.clip(df[conf], a_min=0, a_max=1)
 
     prediction_names = [label_name+'_predictions' for label_name in label_names]
-    df = select_relevant_data_dominans(df, confidence_names)
-    label_names, prediction_names, confidences = rename_label_names(label_names, prediction_names, confidence_names)
+    df = select_relevant_data_dominans(df, confidence_names, config['artery_type'])
+    label_names, prediction_names, confidences = rename_label_names(label_names, prediction_names, confidence_names, config['artery_type'])
     df =df.dropna(subset=confidence_names, how='all')
     
 
@@ -912,6 +1132,8 @@ def wrap_plotRegression(df, label_names, prediction_names, output_folder, group_
             raise ValueError('label_name_ori must be either sten or ffr or timi')
         df_plot_rep[prediction_name] = np.clip(
             df_plot_rep[prediction_name], a_min=0, a_max=max_v)
+        df_plot_rep[label_name] = np.clip(
+            df_plot_rep[label_name], a_min=0, a_max=max_v)
 
         df_plot_rep = df_plot_rep.astype({prediction_name: float})
         if label_name_ori.startswith('sten'):
@@ -1019,6 +1241,7 @@ def plot_regression_density(x=None, y=None, cmap='jet', ylab=None, xlab=None,
     plt.savefig(os.path.join(output_folder, label_name_ori + '_density.pdf'),
                 dpi=100, bbox_inches='tight')
     plt.close()
+
 
     return None
 
@@ -1196,7 +1419,7 @@ if __name__ == '__main__':
 
     df = simulte_df(labels, predictions, confidences)
 
-    df = select_relevant_data_dominans(df,  confidences)
+    df = select_relevant_data_dominans(df,  confidences, )
     labels, predictions, confidences = rename_label_names(labels, predictions, confidences)
     df = select_relevant_data_dominans(df, labels)
    # df = select_relevant_data_dominans(df, label_names)

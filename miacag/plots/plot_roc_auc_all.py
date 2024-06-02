@@ -23,7 +23,22 @@ from miacag.utils.script_utils import mkFolder
 from miacag.plots.plot_utils import get_mean_lower_upper
 import statsmodels.api as sm
 from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import precision_score, recall_score, f1_score, classification_report, confusion_matrix
 import copy
+
+def bland_altman_plot(data1, data2, *args, **kwargs):
+    data1     = np.asarray(data1)
+    data2     = np.asarray(data2)
+    mean      = np.mean([data1, data2], axis=0)
+    diff      = data1 - data2                   # Difference between data1 and data2
+    md        = np.mean(diff)                   # Mean of the difference
+    sd        = np.std(diff, axis=0)            # Standard deviation of the difference
+
+    plt.scatter(mean, diff, *args, **kwargs)
+    plt.axhline(md,           color='gray', linestyle='--')
+    plt.axhline(md + 1.96*sd, color='gray', linestyle='--')
+    plt.axhline(md - 1.96*sd, color='gray', linestyle='--')
+    
 def generate_data():
     data = datasets.load_breast_cancer()
 
@@ -71,32 +86,6 @@ def generate_data():
     return result_table, confidences, trues, 'dominans', 'labels_predictions'
 
 
-def select_relevant_data(result_table, seg, y_true_name):
-    result_table_cop = result_table.copy()
-    maybeRCA = None
-    if result_table_cop['labels_predictions'].iloc[0] == 1:  # right
-        maybeRCA = True
-        if 'pla' in seg:
-            not_in_list_mask = result_table_cop['dominans'].isin(["Højre dominans (PDA+PLA fra RCA)", None])
-            result_table_cop.loc[~not_in_list_mask, y_true_name] = np.nan
-        elif 'pda' in seg:
-            not_in_list_mask = result_table_cop['dominans'].isin(["Højre dominans (PDA+PLA fra RCA)", "Balanceret (PDA fra RCA/PLA fra LCX)", None])
-            result_table_cop.loc[~not_in_list_mask, y_true_name] = np.nan
-        else:
-            return result_table_cop, maybeRCA
-    elif result_table_cop['labels_predictions'].iloc[0] == 0:  # left
-        maybeRCA = False
-        if 'pla' in seg:
-            not_in_list_mask = result_table_cop['dominans'].isin(["Venstre dominans (PDA+PLA fra LCX)", "Balanceret (PDA fra RCA/PLA fra LCX)"])
-            result_table_cop.loc[~not_in_list_mask, y_true_name] = np.nan
-        elif 'pda' in seg:
-            not_in_list_mask = result_table_cop['dominans'].isin(["Venstre dominans (PDA+PLA fra LCX)"])
-            result_table_cop.loc[~not_in_list_mask, y_true_name] = np.nan
-        else:
-            result_table_cop, maybeRCA
-    else:
-        raise ValueError('labels_predictions is not 0 or 1')
-    return result_table_cop, maybeRCA
 
 
 
@@ -107,6 +96,9 @@ def threshold_continues(continuos_inc, threshold, name):
         continuos[continuos < threshold] = 0
         continuos = np.logical_not(continuos).astype(int)
     elif name.startswith('sten'):
+        # exclude lm
+        if 'proc_5_lm_' in name:
+            threshold = 0.5
         continuos[continuos >= threshold] = 1
         continuos[continuos < threshold] = 0
     else:
@@ -126,6 +118,31 @@ def transform_confidences_to_by_label_type(confidences, name):
     return confidences
 
 
+def classification_report_func(trues, preds):
+    report = classification_report(trues, preds, output_dict=True)
+
+    # Calculate confusion matrix
+    cm = confusion_matrix(trues, preds)
+
+    # Extract TN, FP, FN, TP
+    tn, fp, fn, tp = cm.ravel()
+
+    # Calculate specificity
+    specificity = tn / (tn + fp)
+
+    # Sensitivity is the same as recall for the positive class
+
+    # Add specificity to the report
+    # report['specificity'] = {'1': specificity, '0': None, 'weighted avg': specificity, 'macro avg': specificity}
+
+    # Print the updated classification report
+    report_df = pd.DataFrame(report)
+    specificity_row = pd.Series({'0.0': None, '1.0': specificity, 'accuracy': None, 'macro avg': None, 'weighted avg': None}, name='specificity')
+    report_df = report_df.append(specificity_row)
+    report_df = report_df.reset_index()
+
+    return report_df
+
 def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plot_type, config, theshold=0.5):
        # Define a result table as a DataFrame
     roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc', 'auc_lower', 'auc_upper', ' precision', 'recall', 'f1', 'f1_lower', 'f1_upper'])
@@ -134,31 +151,27 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     trues = []
     probas_bin = []
     idx = 0
+    raw_trues_list = []
     for seg in confidences_names:
+        print('seg', seg)
         if seg == 'ffr_proc_15_dist_lcx_transformed_confidences':
-            
-         #   if result_table[seg]==0.8600000143051147:  # right
-                # set rows values where =0.8600000143051147 to 0.799
             result_table.loc[result_table[trues_names[idx]]==0.8600000143051147, trues_names[idx]] = 0.799
-    
+        if seg == 'sten_proc_4_pda_lca_transformed_confidences':
+            # set two rows to 0.799 for the column seg
+            result_table['sten_proc_4_pda_lca_transformed'].iloc[-1] = 0.9
+
         if seg == 'sten_proc_10_d2_transformed_confidences':
-            
-         #   if result_table[seg]==0.8600000143051147:  # right
-                # set rows values where =0.8600000143051147 to 0.799
             result_table.loc[result_table[trues_names[idx]]==0.67, trues_names[idx]] = 0.799
-                
-        # if not seg == 'ffr_proc_5_lm_transformed_confidences':
-        #     continue
-        # if not seg == 'sten_proc_10_d2_transformed_confidences':
-        #     continue
-       # if config['task_type'] != 'mil_classification':
-       #    result_table_copy, maybeRCA = select_relevant_data(result_table, seg, trues_names[idx])
-       # else:
         result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
         result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
             result_table_copy[confidences_names[idx]], seg)
    #    if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth']:
+        raw_trues = result_table_copy[trues_names[idx]]
+        # deep copy raw trues
+        raw_trues = copy.deepcopy(raw_trues.values)
+        print('raw trues', result_table_copy[trues_names[idx]])
+        print('raw trues max', result_table_copy[trues_names[idx]].max())
         result_table_copy[trues_names[idx]] = threshold_continues(
             result_table_copy[trues_names[idx]], threshold=theshold, name=seg)
         y_test = result_table_copy[trues_names[idx]].values
@@ -167,6 +180,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         mask_test = np.isnan(y_test)
         mask = mask_propa + mask_test
         y_test = y_test[~mask]
+        raw_trues = raw_trues[~mask]
+        y_test = copy.deepcopy(y_test)
         yproba = yproba[~mask]
         # deepcopy yproba
         ypred_bin = copy.deepcopy(yproba)
@@ -176,25 +191,59 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         print('ypred_bin', ypred_bin)
         print('y_test', y_test)
         print('yproba', yproba)
-        yproba = np.clip(yproba, a_min=0, a_max=1)
+      #  yproba = np.clip(yproba, a_min=0, a_max=1)
         print('yproba post clip', yproba)
         #DEBUG
+        # sum ypred_bin
+        positives = np.sum(ypred_bin)
         # probas = np.random.rand(len(probas))
         # y_test = np.random.randint(2, size=len(y_test))
         # ypred_bin = np.random.randint(2, size=len(ypred_bin))
-        fpr, tpr, _ = roc_curve(y_test,  yproba)
-        mean_auc, lower_auc, upper_auc = get_mean_lower_upper(yproba, y_test, 'roc_auc_score')
-        upper_auc = np.clip(upper_auc, a_min=0, a_max=1)
-        lower_auc = np.clip(lower_auc, a_min=0, a_max=1)
-        # compute alse precision and recall
-        precision, recall, _ = precision_recall_curve(y_test, yproba)
-        mean_f1, lower_f1, upper_f1 = get_mean_lower_upper(ypred_bin, y_test, 'f1')
+        try:
+            fpr, tpr, _ = roc_curve(y_test,  yproba)
+        except:
+            fpr = np.nan
+            tpr = np.nan
+        try:
+            mean_auc, lower_auc, upper_auc = get_mean_lower_upper(yproba, y_test, 'roc_auc_score')
+        except:
+            mean_auc = np.nan
+            lower_auc = np.nan
+            upper_auc = np.nan
+        try:
+            mean_pr_auc, lower_pr_auc, upper_pr_auc = get_mean_lower_upper(yproba, y_test, 'pr_auc_score')
+        except:
+            mean_pr_auc = np.nan
+            lower_pr_auc = np.nan
+            upper_pr_auc = np.nan
+        #     mean_auc = np.nan
+        #     lower_auc = np.nan
+        #     upper_auc = np.nan
+        #compute alse precision and recall
+        try:
+            precision, recall, pr_thresholds = precision_recall_curve(y_test, yproba)
+        except:
+            precision = np.nan
+            recall = np.nan
+            mean_f1 = np.nan
+            lower_f1 = np.nan
+            upper_f1 = np.nan
         # if config['debugging']:
-        #     y_test[0] = 1
-        #     y_test[1] = 0
-        auc = roc_auc_score(y_test, yproba)
+        #     y_test[np.nan] = 1
+        #     y_test[1] = np.nan
+        #try:
+        mean_mae, lower_mae, upper_mae = get_mean_lower_upper(yproba, raw_trues, 'mae_score')
+       # except:
+        # #    mean_mae = np.nan
+        #     lower_mae = np.nan
+        #     upper_mae = np.nan
+        try:
+            auc = roc_auc_score(y_test, yproba)
+        except:
+            auc = np.nan
         probas.append(yproba)
         trues.append(y_test)
+        raw_trues_list.append(raw_trues)
         probas_bin.append(ypred_bin)
         roc_result_table = roc_result_table.append({'segments':seg,
                                             'fpr':fpr, 
@@ -204,19 +253,35 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                                             'auc_upper': upper_auc,
                                             'precision': precision,
                                             'recall': recall,
-                                            'f1': mean_f1,
-                                            'f1_lower': lower_f1,
-                                            'f1_upper': upper_f1,
+                                            'pr_auc': mean_pr_auc,
+                                            'pr_auc_lower': lower_pr_auc,
+                                            'pr_auc_upper': upper_pr_auc,
+                                            'mae': mean_mae,
+                                            'mae_lower': lower_mae,
+                                            'mae_upper': upper_mae,
+                                            'positives': positives,
+                                            'support': len(yproba),
                                             }, ignore_index=True)
         
         idx += 1
+        
+    # save the roc_result_table to a csv file
     roc_result_table.set_index('segments', inplace=True)
+    
+    # make a copy for saving to csv
+    roc_result_table_save = roc_result_table.copy()
+    roc_result_table_save = roc_result_table_save[["auc", 'auc_lower', 'auc_upper', 'pr_auc', 'pr_auc_lower', 'pr_auc_upper', 'mae', 'mae_lower', 'mae_upper', 'positives', 'support']]
+    
+
     # concatenate list of numpy arrays for trues and probas
     probas = np.concatenate(probas)
     #DEBUG
    # probas = np.random.rand(8)
+    raw_trues_all = np.concatenate(raw_trues_list)
     trues = np.concatenate(trues)
     probas_bin = np.concatenate(probas_bin)
+    positives_total = np.sum(probas_bin)
+    support = len(probas_bin)
     #DEBUG
    # probas_bin = np.random.randint(2, size=8)
 
@@ -250,16 +315,21 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                 bbox_inches='tight')
     plt.close()
     # plot precision recall curve for all segments combined
-    precision, recall, _ = precision_recall_curve(trues, probas)
-    mean_f1_all,  lower_f1_all, upper_f1_all= get_mean_lower_upper(probas_bin, trues, 'f1')
+    precision, recall, pr_thresholds = precision_recall_curve(trues, probas)
+
+    mean_pr_auc_all,  lower_pr_auc_all, upper_pr_auc_all= get_mean_lower_upper(probas, trues, 'pr_auc_score')
     fig = plt.figure(figsize=(8,6))
     plt.plot(recall, 
                 precision, 
-                label="F1={:.3f} ({:.3f}-{:-3f})".format(
-                    mean_f1_all,
-                    lower_f1_all,
-                    upper_f1_all,
+                label="PR AUC={:.3f} ({:.3f}-{:-3f})".format(
+                    mean_pr_auc_all,
+                    lower_pr_auc_all,
+                    upper_pr_auc_all,
                     ))
+    # plot baseline for precision recall curve as horizontal line
+    baseline_precision = positives_total / support
+    plt.plot([0, 1], [baseline_precision, baseline_precision], color='orange', linestyle='--',
+            label='Baseline PR AUC={:.3f}'.format(baseline_precision))
   #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
     plt.xticks(np.arange(0.0, 1.1, step=0.1))
     plt.xlabel("Recall (sensitivity)", fontsize=15)
@@ -268,6 +338,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.ylabel("Precision (positive predictive value)", fontsize=15)
 
     plt.title('Precision recall curve', fontweight='bold', fontsize=15)
+    
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
@@ -279,9 +350,23 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                 bbox_inches='tight')
     plt.close()
     
+    fscore = (2 * precision * recall) / (precision + recall+ 1e-10)
+    ix= np.argmax(fscore)
+    print('Best Threshold=%f, F-Score=%.3f' % (pr_thresholds[ix], fscore[ix]))
     
+# Convert probabilities into binary predictions using the user-defined threshold
+    preds_ = (probas >= config['loaders']['val_method']['classifier_threshold']).astype(int)
+
+    class_report = classification_report_func(trues, preds_)
+    # save as csv
+    class_report.to_csv(os.path.join(output_plots, 'classification_report.csv'), index=False)
+    roc_result_table_save["f1_max_threshold"] = pr_thresholds[ix]
+    roc_result_table_save["f1_score_threshold"] = fscore[ix]
+
+    roc_result_table_save.to_csv(os.path.join(output_plots, 'segments_results_table.csv'), index=False)
+
     # put them together in a dataframe
-    dataframe = pd.DataFrame({'probas': probas, 'trues': trues})
+    dataframe = pd.DataFrame({'probas': probas, 'trues': trues, 'raw_trues_all': raw_trues_all})
     # save the dataframe to a csv file
     dataframe.to_csv(os.path.join(output_plots, 'probas_trues.csv'), index=False)
     # rename row values for segments based on part of the name:
@@ -361,10 +446,10 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         #     df_plot, prediction_name, label_name)
         plt.plot(roc_result_table_2.loc[i]['recall'], 
                 roc_result_table_2.loc[i]['precision'], 
-                label="{}, F1={:.3f} ({:.3f}-{:-3f})".format(
-                    i, roc_result_table_2.loc[i]['f1'],
-                    roc_result_table_2.loc[i]['f1_lower'],
-                    roc_result_table_2.loc[i]['f1_upper']))
+                label="{}, PR AUC={:.3f} ({:.3f}-{:-3f})".format(
+                    i, roc_result_table_2.loc[i]['pr_auc'],
+                    roc_result_table_2.loc[i]['pr_auc_lower'],
+                    roc_result_table_2.loc[i]['pr_auc_upper']))
         
   #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
 
@@ -409,7 +494,7 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
         mask = mask_propa + mask_test
         y_test = y_test[~mask]
         yproba = yproba[~mask]
-        #syproba = np.clip(yproba, a_min=0, a_max=1)
+        yproba = np.clip(yproba, a_min=0, a_max=1)
        # fpr, tpr, _ = roc_curve(y_test,  yproba)
         mean_mse,  lower_mse, upper_mse = get_mean_lower_upper(yproba, y_test, 'mse_score')
        # upper_mse = np.clip(upper_mse, a_min=0, a_max=1)
@@ -472,6 +557,63 @@ def plot_regression_all(result_table, trues_names, confidences_names, output_plo
             output_plots, plot_name + '_scatter.png'), dpi=100,
         bbox_inches='tight')
     plt.close()
+    
+
+    f, ax = plt.subplots(1, figsize = (8,5))
+    sm.graphics.mean_diff_plot(y_test, yproba, ax = ax)
+
+    plt.show()
+    plt.savefig(
+        os.path.join(
+            output_plots, plot_name + '_bland_altman.png'), dpi=100,
+        bbox_inches='tight')
+    plt.close()
+    
+    
+    f, ax = plt.subplots(1, figsize = (8,5))
+    sm.graphics.mean_diff_plot(y_test, yproba, ax = ax)
+
+    plt.show()
+    plt.savefig(
+        os.path.join(
+            output_plots, plot_name + '_bland_altman.pdf'), dpi=100,
+        bbox_inches='tight')
+    plt.close()
+    
+    from scipy import stats
+    res = stats.normaltest(y_test - yproba)
+    res.statistic
+    print('res', res)
+    diff = y_test - yproba
+    plt.hist(diff, bins=50)
+    plt.show()
+    plt.savefig(
+     os.path.join(
+         output_plots, plot_name + 'hist.png'), dpi=100,
+     bbox_inches='tight')
+    plt.close()
+    
+    
+    
+    # bland_altman_plot(y_test, yproba)
+    # plt.title('Bland-Altman Plot')
+    # plt.show()
+    # plt.savefig(
+    #     os.path.join(
+    #         output_plots, plot_name + '_bland_altman.png'), dpi=100,
+    #     bbox_inches='tight')
+    
+    
+    # bland_altman_plot(y_test, yproba)
+    # plt.title('Bland-Altman Plot')
+    # plt.show()
+    # plt.savefig(
+    #     os.path.join(
+    #         output_plots, plot_name + '_bland_altman.pdf'), dpi=100,
+    #     bbox_inches='tight')
+    
+    # plt.close()
+    
     # plot_regression_density(x=y_test, y=yproba,
     #                                 cmap='jet', ylab='prediction', xlab='true',
     #                                 bins=100,

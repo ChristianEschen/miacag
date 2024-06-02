@@ -426,17 +426,18 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             else:
                 raise ValueError('artery type not supported')
                 
-            if not config_task_i['debugging']:
+        #   if not config_task_i['debugging']:
                 
-                if dist.is_initialized():
-                    plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
-                else:
-                    plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
+            if dist.is_initialized():
+                plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+            else:
+                plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
         
             count+=1
 
 
     else:
+        config_task['artery_type'] = 'both'
         if len(config_task_list)>1:
             config_task_list[0]["labels_names"] = config_task_list[0]["labels_names"] + config_task_list[1]["labels_names"]
             config_task_list[0]['loss']['name'] = config_task_list[0]['loss']['name'] + config_task_list[1]['loss']['name']
@@ -733,11 +734,10 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
         queries = [config_task['train_plot']]
         plots = [output_plots_train]
     else:
-        queries = [config_task['train_plot'],
-                config_task['val_plot'],
-                config_task['test_plot'],
-               # config_task['query_test_large_plot'
-                            ]
+        queries = [config_task['train_plot']]
+           #     config_task['val_plot'],
+            #    config_task['test_plot'],
+              #              ]
         plots = [output_plots_train, output_plots_val,
                  output_plots_test,]
                  #output_plots_test_large]
@@ -745,42 +745,42 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                # config_task['query_test_large_plot']]
     for idx, query in enumerate(queries):
         if conf[0].startswith(('sten', 'ffr')):
-            plot_results({
-                        'database': config_task['database'],
-                        'username': config_task['username'],
-                        'password': config_task['password'],
-                        'host': config_task['host'],
-                        'labels_names': config_task['labels_names'],
-                        'schema_name': config_task['schema_name'],
-                        'table_name': output_table_name,
-                        'query': query},
-                        config_task['labels_names'],
-                        [i + "_predictions" for i in
-                            config_task['labels_names']],
-                        plots[idx],
-                        config_task['model']['num_classes'],
-                        config_task,
-                        [i + "_confidences" for i in
-                            config_task['labels_names']]
-                        )
+            # plot_results({
+            #             'database': config_task['database'],
+            #             'username': config_task['username'],
+            #             'password': config_task['password'],
+            #             'host': config_task['host'],
+            #             'labels_names': config_task['labels_names'],
+            #             'schema_name': config_task['schema_name'],
+            #             'table_name': output_table_name,
+            #             'query': query},
+            #             config_task['labels_names'],
+            #             [i + "_predictions" for i in
+            #                 config_task['labels_names']],
+            #             plots[idx],
+            #             config_task['model']['num_classes'],
+            #             config_task,
+            #             [i + "_confidences" for i in
+            #                 config_task['labels_names']]
+            #             )
 
-            plotRegression({
-                        'database': config_task['database'],
-                        'username': config_task['username'],
-                        'password': config_task['password'],
-                        'host': config_task['host'],
-                        'labels_names': config_task['labels_names'],
-                        'schema_name': config_task['schema_name'],
-                        'table_name': output_table_name,
-                        'query': query,
-                        'loss_name': config_task['loss']['name'],
-                        'task_type': config_task['task_type']
-                        },
-                        config_task['labels_names'],
-                        conf,
-                        plots[idx],
-                        config_task,
-                        group_aggregated=False)
+            # plotRegression({
+            #             'database': config_task['database'],
+            #             'username': config_task['username'],
+            #             'password': config_task['password'],
+            #             'host': config_task['host'],
+            #             'labels_names': config_task['labels_names'],
+            #             'schema_name': config_task['schema_name'],
+            #             'table_name': output_table_name,
+            #             'query': query,
+            #             'loss_name': config_task['loss']['name'],
+            #             'task_type': config_task['task_type']
+            #             },
+            #             config_task['labels_names'],
+            #             conf,
+            #             plots[idx],
+            #             config_task,
+            #             group_aggregated=False)
         
         # also group aggregated
             plot_i = plots[idx] + '_group_aggregated'
@@ -834,7 +834,7 @@ def plot_classification_tasks(config,
     else:
         phases = [output_plots_train] + [output_plots_val] + [output_plots_test] # + output_plots_test_large]
         phases_q = ['train', 'val', 'test'] #, 'test_large']
-    
+     #   phase_q = ['train']
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
         phase_q = phases_q[idx]

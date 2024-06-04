@@ -501,23 +501,23 @@ def get_mae_estimates(x, y, output_plots):
         # clip values
         x = np.clip(x, a_min=0, a_max=1)
         y = np.clip(y, a_min=0, a_max=1)
-        mean_mae, lower_mae, upper_mae = get_mean_lower_upper(x, y, 'mae_score')
-        # stack a
+        # mean_mae, lower_mae, upper_mae = get_mean_lower_upper(x, y, 'mae_score')
+        # # stack a
+        # # save as csv
+        # data_results = pd.DataFrame([upper_mae], columns=['upper_mae'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'upper_mae.csv'), index=False)
+        
+        # data_results = pd.DataFrame([lower_mae], columns=['lower_mae'])
+        
+        
+        
         # save as csv
-        data_results = pd.DataFrame([upper_mae], columns=['upper_mae'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'upper_mae.csv'), index=False)
+        # data_results.to_csv(os.path.join(output_plots, 'lower_mae.csv'), index=False)
         
-        data_results = pd.DataFrame([lower_mae], columns=['lower_mae'])
-        
-        
-        
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'lower_mae.csv'), index=False)
-        
-        data_results = pd.DataFrame([mean_mae], columns=['mean_mae'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'mean_mae.csv'), index=False)
+        # data_results = pd.DataFrame([mean_mae], columns=['mean_mae'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'mean_mae.csv'), index=False)
         
         f, ax = plt.subplots(1, figsize = (8,5))
         sm.graphics.mean_diff_plot(x, y, ax = ax)
@@ -553,9 +553,9 @@ def get_mae_estimates(x, y, output_plots):
         bbox_inches='tight')
         plt.close()
         
-        data_results = pd.DataFrame([res.pvalue], columns=['p_val_norm'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'p_val_norm.csv'), index=False)
+        # data_results = pd.DataFrame([res.pvalue], columns=['p_val_norm'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'p_val_norm.csv'), index=False)
         
         
         # send x and y to dataframe
@@ -620,15 +620,15 @@ def get_mae_estimates(x, y, output_plots):
         
         # create dataframe 
         # with r2
-        data_results = pd.DataFrame([p], columns=['pval_reg'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'pval_reg.csv'), index=False)
+        # data_results = pd.DataFrame([p], columns=['pval_reg'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'pval_reg.csv'), index=False)
             
         
-        # with r2
-        data_results = pd.DataFrame([r], columns=['r_sq'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'r_sq.csv'), index=False)
+        # # with r2
+        # data_results = pd.DataFrame([r], columns=['r_sq'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'r_sq.csv'), index=False)
             
 def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                            group_aggregated, config):

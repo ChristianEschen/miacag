@@ -745,42 +745,42 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                # config_task['query_test_large_plot']]
     for idx, query in enumerate(queries):
         if conf[0].startswith(('sten', 'ffr')):
-            # plot_results({
-            #             'database': config_task['database'],
-            #             'username': config_task['username'],
-            #             'password': config_task['password'],
-            #             'host': config_task['host'],
-            #             'labels_names': config_task['labels_names'],
-            #             'schema_name': config_task['schema_name'],
-            #             'table_name': output_table_name,
-            #             'query': query},
-            #             config_task['labels_names'],
-            #             [i + "_predictions" for i in
-            #                 config_task['labels_names']],
-            #             plots[idx],
-            #             config_task['model']['num_classes'],
-            #             config_task,
-            #             [i + "_confidences" for i in
-            #                 config_task['labels_names']]
-            #             )
+            plot_results({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query},
+                        config_task['labels_names'],
+                        [i + "_predictions" for i in
+                            config_task['labels_names']],
+                        plots[idx],
+                        config_task['model']['num_classes'],
+                        config_task,
+                        [i + "_confidences" for i in
+                            config_task['labels_names']]
+                        )
 
-            # plotRegression({
-            #             'database': config_task['database'],
-            #             'username': config_task['username'],
-            #             'password': config_task['password'],
-            #             'host': config_task['host'],
-            #             'labels_names': config_task['labels_names'],
-            #             'schema_name': config_task['schema_name'],
-            #             'table_name': output_table_name,
-            #             'query': query,
-            #             'loss_name': config_task['loss']['name'],
-            #             'task_type': config_task['task_type']
-            #             },
-            #             config_task['labels_names'],
-            #             conf,
-            #             plots[idx],
-            #             config_task,
-            #             group_aggregated=False)
+            plotRegression({
+                        'database': config_task['database'],
+                        'username': config_task['username'],
+                        'password': config_task['password'],
+                        'host': config_task['host'],
+                        'labels_names': config_task['labels_names'],
+                        'schema_name': config_task['schema_name'],
+                        'table_name': output_table_name,
+                        'query': query,
+                        'loss_name': config_task['loss']['name'],
+                        'task_type': config_task['task_type']
+                        },
+                        config_task['labels_names'],
+                        conf,
+                        plots[idx],
+                        config_task,
+                        group_aggregated=False)
         
         # also group aggregated
             plot_i = plots[idx] + '_group_aggregated'

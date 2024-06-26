@@ -49,20 +49,20 @@ def get_input_shape(config):
     return input_shape
 
 
-def maybe_sliding_window(inputs, model, config):
+def maybe_sliding_window(inputs, model, config, tab_data=None):
     if config['loaders']['val_method']['type'] == 'sliding_window' \
             and config['task_type'] == "segmentation":
         input_shape = get_input_shape(config)
         outputs = sliding_window_inference(inputs, input_shape, 1, model)
     else:
-        outputs = maybe_use_amp(config['loaders']['use_amp'], inputs, model)
+        outputs = maybe_use_amp(config['loaders']['use_amp'], inputs, model, tab_data)
     return outputs
 
 
-def maybe_use_amp(use_amp, inputs, model):
+def maybe_use_amp(use_amp, inputs, model, tabular_data):
     if use_amp is True:
         with torch.cuda.amp.autocast():
-            outputs = model(inputs)
+            outputs = model(inputs, tabular_data)
     else:
         outputs = model(inputs)
     return outputs
@@ -76,7 +76,7 @@ def eval_one_step(model, data, device, criterion,
     with torch.no_grad():
         # forward
         
-        outputs = maybe_sliding_window(data['inputs'], model, config)
+        outputs = maybe_sliding_window(data['inputs'], model, config, data['tabular_data'])
         # max pooling on first dimension
         if config['loaders']['mode'] == 'testing':
             if config['labels_names'][0].startswith('ffr'):

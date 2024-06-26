@@ -150,6 +150,16 @@ def generate_data():
 
 
 
+def simulate_ffr(trues):
+    # Calculate the standard deviation corresponding to the desired MAE
+    std_ffr = 21 / np.sqrt(2 / np.pi)
+    # Make a copy of the trues
+    sim_preds = trues.copy()
+    
+    # Add Gaussian noise to the data
+    sim_preds += np.random.normal(loc=0, scale=std_ffr, size=sim_preds.shape)
+    
+    return sim_preds
 
 
 def threshold_continues(continuos_inc, threshold, name):
@@ -157,7 +167,7 @@ def threshold_continues(continuos_inc, threshold, name):
     if name.startswith('ffr'):
         continuos[continuos >= threshold] = 1
         continuos[continuos < threshold] = 0
-        continuos = np.logical_not(continuos).astype(int)
+        continuos = np.abs(1 - continuos)
     elif name.startswith('sten'):
         # exclude lm
         if 'proc_5_lm_' in name:
@@ -256,17 +266,12 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     raw_trues_list = []
     for seg in confidences_names:
         print('seg', seg)
-        # if seg == 'ffr_proc_15_dist_lcx_transformed_confidences':
-        #     result_table.loc[result_table[trues_names[idx]]==0.8600000143051147, trues_names[idx]] = 0.799
-        # if seg == 'sten_proc_4_pda_lca_transformed_confidences':
-        #     result_table['sten_proc_4_pda_lca_transformed'].iloc[-1] = 0.9
 
-        # if seg == 'sten_proc_10_d2_transformed_confidences':
-        #     result_table.loc[result_table[trues_names[idx]]==0.67, trues_names[idx]] = 0.799
+
         result_table_copy = copy.deepcopy(result_table)
         maybeRCA = ""
-        result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
-            result_table_copy[confidences_names[idx]], seg)
+        # result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
+        #     result_table_copy[confidences_names[idx]], seg)
    #    if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth']:
         raw_trues = result_table_copy[trues_names[idx]]
         # deep copy raw trues
@@ -284,7 +289,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         raw_trues = raw_trues[~mask]
         y_test = copy.deepcopy(y_test)
         yproba = yproba[~mask]
-        # deepcopy yproba
+       # yproba = simulate_ffr(raw_trues)
+        # deepcopy yprobam
         threshold_preds= config['loaders']['val_method']['classifier_threshold']
         ypred_bin = copy.deepcopy(yproba)
         ypred_bin = threshold_continues(
@@ -297,7 +303,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         print('yproba post clip', yproba)
         #DEBUG
         # sum ypred_bin
-        positives = np.sum(ypred_bin)
+        positives = np.sum(y_test)
         # probas = np.random.rand(len(probas))
         # y_test = np.random.randint(2, size=len(y_test))
         # ypred_bin = np.random.randint(2, size=len(ypred_bin))
@@ -390,6 +396,9 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                                             'specificity': class_report_ci['specificity'],
                                             'specificity_lower': class_report_ci['specificity'],
                                             'specificity_upper': class_report_ci['specificity'],
+                                            'precision_mean': class_report_ci['precision']['mean'],
+                                            'precision_lower': class_report_ci['precision']['ci_lower'],
+                                            'precision_upper': class_report_ci['precision']['ci_upper'],
                                             'senstivity': class_report_ci['recall']['mean'],
                                             'senstivity_lower': class_report_ci['recall']['ci_lower'],
                                             'senstivity_upper': class_report_ci['recall']['ci_upper'],
@@ -407,7 +416,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     roc_result_table_save = roc_result_table_save[["segments","auc", 'auc_lower', 'auc_upper', 'pr_auc', 'pr_auc_lower', 'pr_auc_upper',
                                                    'mae', 'mae_lower', 'mae_upper', 'positives', 'support',
                                                    'f1', 'f1_lower', 'f1_upper', 'specificity', 'specificity_lower', 'specificity_upper',
-                                                   'senstivity', 'senstivity_lower', 'senstivity_upper']]
+                                                   'precision_mean', 'precision_lower', 'precision_upper',
+                                                   'senstivity', 'senstivity_lower', 'senstivity_upper', 'pearson', 'pearson_lower', 'pearson_upper']]
     
 
     # concatenate list of numpy arrays for trues and probas

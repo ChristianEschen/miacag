@@ -59,8 +59,6 @@ def get_losses_class(config, outputs, data, criterion, device):
     losses = []
     loss_tot = torch.tensor([0]).float()
     loss_tot = loss_tot.to(device)
-    # if config['loaders']['mode'] != 'testing':
-    #     loss_tot = loss_tot.requires_grad_()
 
     for count_idx, loss_name in enumerate(config['loss']['groups_names']):
         labels = stack_labels(data, config, loss_name)
@@ -71,23 +69,14 @@ def get_losses_class(config, outputs, data, criterion, device):
         event = None
         if loss_name.startswith('NNL'):
             event = data['event']
-      #  print('outputs', outputs)
-        #survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
-        #survival_estimates = survival_estimates.reset_index()
-     #   print('targets', data["duration_transformed"])
-     #   print('event', data["event"])
         loss = get_loss(
             config, outputs[count_idx],
             labels, criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
-        #print('done')
         if torch.isnan(loss) == torch.tensor(True, device=device):
-            #raise ValueError('the loss is nan!')
             print('loss is nan!')
-            # # ugly hack
             if count_idx == 0:
                 t = torch.tensor([1]).float()
                 
-              #  t.requires_grad_()
                 losses.append(t)
             else:
                 losses.append(losses[-1])

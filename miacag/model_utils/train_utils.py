@@ -46,7 +46,7 @@ def train_one_step(model, data, criterion,
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
-            outputs = model(data['inputs'])
+            outputs = model(data['inputs'], data['tabular_data'])
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
@@ -61,7 +61,7 @@ def train_one_step(model, data, criterion,
             optimizer.zero_grad()
 
     else:
-        outputs = model(data['inputs'])
+        outputs = model(data['inputs'], data['tabular_data'])
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,

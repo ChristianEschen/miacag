@@ -249,7 +249,7 @@ def get_encoder(config, device):
      #   model.avgpool = Identity()
         model.head =torch.nn.Identity()
         
-    elif config['model']['backbone'] == 'swin_s_tiny':
+    elif config['model']['backbone'] == 'swin_tiny':
         model = nets.torchvision_fc.models.video.swin3d_s()
         in_features = model.norm.normalized_shape[0]
 

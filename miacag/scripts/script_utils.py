@@ -95,7 +95,7 @@ class ConfigManipulator():
              #   self.config_list[i] = self.change_query_plotting(self.config_list[i])
         else:
             self.config_list = []
-            config_copy = copy.deepcopy(self.config)
+            self.config_list[0] = copy.deepcopy(self.config)
             #self.config_list.append(self.change_query_plotting(config_copy))
         return self.config_list
     

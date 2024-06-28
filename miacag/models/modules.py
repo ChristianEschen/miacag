@@ -245,9 +245,6 @@ class ImageToScalarModel(EncoderModel):
                             # Directly use the normalized numeric data
         device = tabular_data.device
         mask_tensor = torch.tensor(self.num_indicator, dtype=bool, device=device)
-        print('shape tabular data', tabular_data.shape)
-        print('shape mask tensor', mask_tensor.shape)
-        print('layer shape', self.layer_norm_func)
         tabular_data = self.layer_norm_func(tabular_data[:,mask_tensor])
         embedded_features.append(tabular_data)
         return torch.cat(embedded_features, dim=1)
@@ -278,6 +275,8 @@ class ImageToScalarModel(EncoderModel):
             if len(self.config['loaders']['tabular_data_names'])>0:
                 encode_num_and_cat_feat = self.tabular_forward(tabular_data)
                 tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
+                if self.config['loaders']['mode'] == 'testing':
+                    tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
                 p = torch.concat((p, tabular_features), dim=1)  # Combine the features from video and tabular data
 
             for fc in self.fcs:

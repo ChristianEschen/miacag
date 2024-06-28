@@ -409,25 +409,44 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     if train_test_indicator:
         count = 0
         print('train and test')
-        
-        for config_task_i in config_task_list:
-            print('rca or lca', count)
-            train_and_test(config_task_i)
-            conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
-            loss_names_i = config_task_i['loss']['name']
-            if config_task_i['artery_type'] == 'rca':
-                config_task_i['train_plot'] = config_task_i['train_plot_rca']
-                config_task_i['val_plot'] = config_task_i['val_plot_rca']
-                config_task_i['test_plot'] = config_task_i['test_plot_rca']
-            elif config_task_i['artery_type'] == 'lca':
-                config_task_i['train_plot'] = config_task_i['train_plot_lca']
-                config_task_i['val_plot'] = config_task_i['val_plot_lca']
-                config_task_i['test_plot'] = config_task_i['test_plot_lca']
-            else:
-                raise ValueError('artery type not supported')
-                
-        #   if not config_task_i['debugging']:
-                
+        if len(config_task_list)>1:
+            for config_task_i in config_task_list:
+                print('rca or lca', count)
+                train_and_test(config_task_i)
+                conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
+                loss_names_i = config_task_i['loss']['name']
+                if config_task_i['artery_type'] == 'rca':
+                    config_task_i['train_plot'] = config_task_i['train_plot_rca']
+                    config_task_i['val_plot'] = config_task_i['val_plot_rca']
+                    config_task_i['test_plot'] = config_task_i['test_plot_rca']
+                elif config_task_i['artery_type'] == 'lca':
+                    config_task_i['train_plot'] = config_task_i['train_plot_lca']
+                    config_task_i['val_plot'] = config_task_i['val_plot_lca']
+                    config_task_i['test_plot'] = config_task_i['test_plot_lca']
+                else:
+                    raise ValueError('artery type not supported')
+                    
+            #   if not config_task_i['debugging']:
+            for config_task_i in config_task_list:
+                print('plotting now')
+                print('rca or lca', count)
+                conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
+                loss_names_i = config_task_i['loss']['name']
+                if config_task_i['artery_type'] == 'rca':
+                    config_task_i['train_plot'] = config_task_i['train_plot_rca']
+                    config_task_i['val_plot'] = config_task_i['val_plot_rca']
+                    config_task_i['test_plot'] = config_task_i['test_plot_rca']
+                elif config_task_i['artery_type'] == 'lca':
+                    config_task_i['train_plot'] = config_task_i['train_plot_lca']
+                    config_task_i['val_plot'] = config_task_i['val_plot_lca']
+                    config_task_i['test_plot'] = config_task_i['test_plot_lca']
+                else:
+                    raise ValueError('artery type not supported')
+
+        else:
+            config_task_list[0]['artery_type'] = 'both'
+            train_and_test(config_task_list[0])
+
             if dist.is_initialized():
                 plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
             else:
@@ -437,11 +456,12 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
 
 
     else:
-        config_task['artery_type'] = 'both'
+        config_task_list[0]['artery_type'] = 'both'
         if len(config_task_list)>1:
             config_task_list[0]["labels_names"] = config_task_list[0]["labels_names"] + config_task_list[1]["labels_names"]
             config_task_list[0]['loss']['name'] = config_task_list[0]['loss']['name'] + config_task_list[1]['loss']['name']
             config_task_list[0]['model']['num_classes'] = config_task_list[0]['model']['num_classes'] + config_task_list[1]['model']['num_classes']
+        
         if dist.is_initialized():
             plot_task(config_task, output_table_name, conf, loss_names)
         else:

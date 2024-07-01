@@ -414,7 +414,7 @@ class base_monai_loader(DataloaderBase):
                 subtrahend=(0.43216, 0.394666, 0.37645),
                 divisor=(0.22803, 0.22145, 0.216989),
                 channel_wise=True)
-        elif config['model']['backbone'] in ["swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
+        elif config['model']['backbone'] in ["swin_tiny","swin_s",'r50', 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', "vit_large_3d", "vit_tiny_3d"]:
             normalize = NormalizeIntensityd(
                 keys=features,
                 subtrahend=(0.485, 0.456, 0.406),

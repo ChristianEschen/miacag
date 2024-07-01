@@ -73,17 +73,9 @@ class ModelBuilder():
         if self.config['loaders']['mode'] in ['testing', 'prediction']: # or (self.config['model']['pretrain_model'] != 'None'):
             if path_model != 'None':
                 if self.config["use_DDP"] == "False":
-                    #if self.config['use_DDP'] == 'True':
                     model.load_state_dict(
                         torch.load(os.path.join(path_model, 'model.pt')))
                 else:
-                    # if torch.distributed.get_rank() == 0:
-                    #     if self.config['cpu'] == 'True':
-                    #         model.load_state_dict(
-                    #             torch.load(os.path.join(path_model, 'model.pt')))
-                    #     else:
-                    # model.module.load_state_dict(
-                    #     torch.load(os.path.join(path_model, 'model.pt')))
                     print('loading inference model fron', path_model)
                     if self.config['cpu'] == 'True':
                         model.load_state_dict(

@@ -4,6 +4,11 @@ import numpy as np
 import monai
 from miacag.dataloader.dataloader_base_monai import base_monai_loader
 import monai
+import math
+import pandas as pd
+
+
+
 def to_dtype(data,fields, config):
     for c, label_name in enumerate(fields):
         if config['loss']['name'][c].startswith('CE'):
@@ -135,36 +140,35 @@ def get_data_from_loader(data, config, device, val_phase=False):
             data['inputs'] = data['DcmPathFlatten']
             display_input_stats(data)
 
-        # if config['loaders']['mode'] == 'testing':
-        #     trans = monai.transforms.Compose([monai.transforms.ScaleIntensityd(keys="single_clip"), base_monai_loader.maybeNormalize(config, 'single_clip')])
-        #     trans = monai.transforms.Compose([monai.transforms.Identityd(keys="single_clip")])
-        #     transformed_inp = []
-        #     for i in range(0, data['inputs'].shape[1]):
-        #         single_clip = data["inputs"][0, i, :, :, :]
-        #         data['single_clip'] = single_clip
-        #         transformed_inp.append(trans(data)["single_clip"])
-        #     data["inputs"] = torch.stack(transformed_inp, dim=0)
-      #      data['inputs'] = torch.unsqueeze(data['inputs'], 0)
+        if config['loaders']['mode'] == 'testing':
+            trans = monai.transforms.Compose([monai.transforms.ScaleIntensityd(keys="single_clip"), base_monai_loader.maybeNormalize(config, 'single_clip')])
+            transformed_inp = []
+            for i in range(0, data['inputs'].shape[1]):
+                single_clip = data["inputs"][0, i, :, :, :]
+                data['single_clip'] = single_clip
+                transformed_inp.append(trans(data)["single_clip"])
+            data["inputs"] = torch.stack(transformed_inp, dim=0)
         data["inputs"] = torch.tensor(data["inputs"])
         data = to_device(data, device, ['inputs'])
         
-       # data = encode_labels_predictions_in_corner(data, data['labels_predictions'])
-        # display_input_stats(data)
-        # import matplotlib.pyplot as plt
-        # import matplotlib
-        # matplotlib.use('TkAgg')
-        # display_input(data['inputs'])
-      #  print('data mean', data['inputs'].mean())
-      #  print('data std', data['inputs'].std())
-        # display each frame it consit of tensor of shape [bs, pathcies, ch, h, w, depth]
+
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
             data = to_device(data, device, ["weights_" + i for i in config['labels_names']])
         data = to_dtype(data, config['labels_names'], config)
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 
             data = to_dtype(data, ["weights_" + i for i in config['labels_names']], config)
-        data = to_device(data, device, config['labels_names'])
+        
+        keys = config['loaders']['tabular_data_names']
+        
 
-       # if 
+        #  concatenate torch tensor 
+        if len(config['loaders']['tabular_data_names']) > 0:
+            data['tabular_data'] = torch.cat([data[i].float().unsqueeze(1) for i in config['loaders']['tabular_data_names']], dim=1)
+            data = to_device(data, device, ['tabular_data'])
+        data = to_device(data, device, config['labels_names'])
+        
+
+                    # if 
         #print('data shape', data['inputs'].shape)
     elif config['task_type'] == "representation_learning":
         if val_phase is False:

@@ -142,6 +142,11 @@ def handle_reg_loss(df, parent_folder_basename, config, update_column_name):
     total_string = "{0:" + df[col_to_updt].astype(str) +"}" 
     df[update_column_name] = total_string
     return df
+
+def format_confidences(row):
+    formatted_values = [f"{row[col]:.4g}" for col in df.columns if 'duration_transformed_confidence' in col]
+    return "{" + "; ".join(formatted_values) + "}"
+
 def comnbine_csv_files(df_list, config):
     dfs = []
 
@@ -149,6 +154,9 @@ def comnbine_csv_files(df_list, config):
     for df in df_list:
         if config["loss"]["name"][0] == 'CE':
             label_name = config['labels_names'][0] + '_confidence_0'
+        elif config["loss"]["name"][0] == 'NNL':
+            label_name = config['labels_names'][0] + '_confidence_0'
+            #abel_name = [i + for ]
         else:
             mask  =[i.startswith('sten') for i in list(df.columns)]
             label_name = np.array(list(df.columns))[np.array(mask)][0]

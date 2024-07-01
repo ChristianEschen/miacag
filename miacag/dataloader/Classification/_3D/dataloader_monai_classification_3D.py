@@ -60,8 +60,37 @@ import torch
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
 # matplotlib.use( 'tkagg' )
-
-
+def z_score_normalize(data, keys):
+    normalized_data = data.copy()  # Copy the original data to avoid in-place modification
+    for key in keys:
+        if key in data:
+            value = data[key]
+            mean = value.mean()
+            std = value.std()
+            normalized_data[key] = (value - mean) / (std +1e-6)
+    return normalized_data
+def impute_data(df, config):
+    # Extract the configuration details
+    column_names = config['loaders']['tabular_data_names']
+    column_types = config['loaders']['tabular_data_names_one_hot']  # 0: numeric, 1: categorical
+    
+    # Iterate over the columns and their types
+    for col_name, col_type in zip(column_names, column_types):
+        if col_name in df.columns:
+            if col_type == 0:  # Numeric
+                median_value = df[col_name].median()
+                df[col_name].fillna(median_value, inplace=True)
+            elif col_type == 1:  # Categorical
+                df[col_name].fillna('Ukendt', inplace=True)
+        else:
+            print(f"Warning: {col_name} not found in DataFrame")
+    
+    return df
+def check_nan_after_imputation(df):
+    if df.isnull().any().any():
+        print("NaNs remain in the following columns:", df.columns[df.isnull().any()])
+    else:
+        print("No NaNs remain in the DataFrame.")
 
 class RandReplicateSliceTransform(MapTransform):
     """
@@ -235,6 +264,8 @@ class train_monai_classification_loader(base_monai_loader):
         #self.data = self.df[self.features + config['labels_na
         if self.config['loss']['name'][0] == 'NNL':
             # start with censor after followup
+            # drop rows with nans for event and duration_transformed
+            self.df = self.df.dropna(subset=['event', 'duration_transformed'])
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
            # self.df = pd.DataFrame({"duration_transformed": np.random.randint(1, 551, size=100), "event": np.random.randint(0, 2, size=100)})
 
@@ -243,7 +274,7 @@ class train_monai_classification_loader(base_monai_loader):
                 scheme='quantiles')
 
             get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
-
+            print('get_target', get_target(self.df))
             target_trains = self.labtrans.fit_transform(*get_target(self.df))
 
             self.df[self.config['labels_names'][0]] = target_trains[0]
@@ -265,9 +296,34 @@ class train_monai_classification_loader(base_monai_loader):
         self.data = self.df[
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
-             "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed']]
+             "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed'] +["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
         self.data.fillna(value=np.nan, inplace=True)
+        if len(config['loaders']['tabular_data_names']) > 0:
+            print('before impu')
+            check_nan_after_imputation(self.data)
+            for i in config['loaders']['tabular_data_names']:
+                print('unique', self.data[i].unique())
+            self.data[config['loaders']['tabular_data_names']].isna().sum()
+            self.data = impute_data(self.data, config)
+            # use mask in list to select only the numeric columns
+            num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
+            self.data == z_score_normalize(self.data, num_columns)
+
+        if config['labels_names'][0].startswith("sten"):
+            self.data = self.data.dropna(subset=config['labels_names'])
+
+        check_nan_after_imputation(self.data)
+        self.data[config['loaders']['tabular_data_names']].isna().sum()
         self.data = self.data.to_dict('records')
+        
+        # def find_nan_keys(d):
+        #     nan_keys = [key for key, value in d.items() if isinstance(value, float) and math.isnan(value)]
+        #     return nan_keys
+
+        # Find NaN keys
+        my_dict = self.data
+        #nan_keys = find_nan_keys(my_dict)
+     #   print("Keys with NaN:", nan_key)
 
     def transformations(self):
         self.transforms = [
@@ -440,7 +496,7 @@ class val_monai_classification_loader(base_monai_loader):
         self.data = self.df[
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
-             "StudyInstanceUID", "PatientID", 'labels_predictions'] + event+ w_label_names + ['duration_transformed']]
+             "StudyInstanceUID", "PatientID", 'labels_predictions'] + event+ w_label_names + ['duration_transformed']+ ["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
         ###############################################################################################333
         # OLD
      #   self.data = self.df[self.features + config['labels_names'] + ['rowid']]
@@ -458,8 +514,24 @@ class val_monai_classification_loader(base_monai_loader):
         #                     ["duration_transformed"] + ["koronarpatologi_transformed"] + w_label_names ]
         
         self.data.fillna(value=np.nan, inplace=True)
+        if len(config['loaders']['tabular_data_names']) > 0:
+            print('before impu')
+            self.data[config['loaders']['tabular_data_names']].isna().sum()
+            print('cehcl')
+            check_nan_after_imputation(self.data)   
+            self.data = impute_data(self.data, config)
+            num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
+            self.data == z_score_normalize(self.data, num_columns)
+        # if config['labels_names][0] startswith "sten_"
+        if config['labels_names'][0].startswith("sten"):
+            self.data = self.data.dropna(subset=config['labels_names'])
+
+            
         
-        
+        print('after impu')
+        self.data[config['loaders']['tabular_data_names']].isna().sum()
+        print('check')
+        check_nan_after_imputation(self.data)
         
         self.data = self.data.to_dict('records')
 
@@ -505,16 +577,16 @@ class val_monai_classification_loader(base_monai_loader):
         
                 EnsureTyped(keys=self.features, data_type='tensor'),
                 self.maybeToGpu(self.features),
-                self.maybeCenterCrop(self.features),
-                    # if self.config['loaders']['mode'] == 'training'
-                    # else monai.transforms.GridPatchd(keys=self.features,
-                    #                             patch_size=(
-                    #                                 self.config['loaders']['Crop_height'],
-                    #                                 self.config['loaders']['Crop_width'],
-                    #                                 self.config['loaders']['Crop_depth']),
-                    #                             pad_mode="constant",
-                ScaleIntensityd(keys=self.features),
-                self.maybeNormalize(config=self.config, features=self.features),            #                             ),
+                self.maybeCenterCrop(self.features)
+                if self.config['loaders']['mode'] == 'training'
+                else monai.transforms.GridPatchd(keys=self.features,
+                                            patch_size=(
+                                                self.config['loaders']['Crop_height'],
+                                                self.config['loaders']['Crop_width'],
+                                                self.config['loaders']['Crop_depth']),
+                                            pad_mode="constant",),
+                #ScaleIntensityd(keys=self.features),
+               # self.maybeNormalize(config=self.config, features=self.features),            #                             ),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]
@@ -541,17 +613,17 @@ class val_monai_classification_loader(base_monai_loader):
             #         replace_rate=self.config['replace_rate'],
             #         num_replace_workers=int(self.config['num_workers']/2))
             # else:
-            if self.config['cache_test'] == "True":
-                val_ds = monai.data.CacheDataset(
+            # if self.config['cache_test'] == "True":
+            #     val_ds = monai.data.CacheDataset(
+            #         data=self.data_par_val,
+            #         transform=self.tansformations(),
+            #         copy_cache=True,
+            #         num_workers=self.config['num_workers'],
+            #         cache_num=self.config['cache_num_val'])
+            # else:
+            val_ds = monai.data.Dataset(
                     data=self.data_par_val,
-                    transform=self.tansformations(),
-                    copy_cache=True,
-                    num_workers=self.config['num_workers'],
-                    cache_num=self.config['cache_num_val'])
-            else:
-                val_ds = monai.data.Dataset(
-                        data=self.data_par_val,
-                    transform=self.tansformations())
+                transform=self.tansformations())
         else:
             # if self.config['cache_test'] == "True":
             #     val_ds = monai.data.CacheDataset(

@@ -501,23 +501,23 @@ def get_mae_estimates(x, y, output_plots):
         # clip values
         x = np.clip(x, a_min=0, a_max=1)
         y = np.clip(y, a_min=0, a_max=1)
-        mean_mae, lower_mae, upper_mae = get_mean_lower_upper(x, y, 'mae_score')
-        # stack a
+        # mean_mae, lower_mae, upper_mae = get_mean_lower_upper(x, y, 'mae_score')
+        # # stack a
+        # # save as csv
+        # data_results = pd.DataFrame([upper_mae], columns=['upper_mae'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'upper_mae.csv'), index=False)
+        
+        # data_results = pd.DataFrame([lower_mae], columns=['lower_mae'])
+        
+        
+        
         # save as csv
-        data_results = pd.DataFrame([upper_mae], columns=['upper_mae'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'upper_mae.csv'), index=False)
+        # data_results.to_csv(os.path.join(output_plots, 'lower_mae.csv'), index=False)
         
-        data_results = pd.DataFrame([lower_mae], columns=['lower_mae'])
-        
-        
-        
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'lower_mae.csv'), index=False)
-        
-        data_results = pd.DataFrame([mean_mae], columns=['mean_mae'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'mean_mae.csv'), index=False)
+        # data_results = pd.DataFrame([mean_mae], columns=['mean_mae'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'mean_mae.csv'), index=False)
         
         f, ax = plt.subplots(1, figsize = (8,5))
         sm.graphics.mean_diff_plot(x, y, ax = ax)
@@ -553,9 +553,9 @@ def get_mae_estimates(x, y, output_plots):
         bbox_inches='tight')
         plt.close()
         
-        data_results = pd.DataFrame([res.pvalue], columns=['p_val_norm'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'p_val_norm.csv'), index=False)
+        # data_results = pd.DataFrame([res.pvalue], columns=['p_val_norm'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'p_val_norm.csv'), index=False)
         
         
         # send x and y to dataframe
@@ -620,15 +620,15 @@ def get_mae_estimates(x, y, output_plots):
         
         # create dataframe 
         # with r2
-        data_results = pd.DataFrame([p], columns=['pval_reg'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'pval_reg.csv'), index=False)
+        # data_results = pd.DataFrame([p], columns=['pval_reg'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'pval_reg.csv'), index=False)
             
         
-        # with r2
-        data_results = pd.DataFrame([r], columns=['r_sq'])
-        # save as csv
-        data_results.to_csv(os.path.join(output_plots, 'r_sq.csv'), index=False)
+        # # with r2
+        # data_results = pd.DataFrame([r], columns=['r_sq'])
+        # # save as csv
+        # data_results.to_csv(os.path.join(output_plots, 'r_sq.csv'), index=False)
             
 def wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                            group_aggregated, config):
@@ -715,14 +715,17 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                     config=config,
                     theshold=threshold_sten)
     df_ffr = df.copy()
-    ffr_cols_true = select_relevant_columns(label_names, 'ffr')
-    if len(ffr_cols_true) > 0:
-        ffr_cols_conf = select_relevant_columns(confidence_names, 'ffr')
-      
-        plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
-                     plot_type='FFR',
-                     config=config,
-                     theshold=threshold_ffr)
+    ffr_cols_true = ["ffr" + i[4:] for i in sten_cols_true]
+    ffr_cols_conf = sten_cols_conf
+    for i in ffr_cols_true:
+        df_ffr[i] = 1 - df_ffr[i]
+
+    # substract 1- confidences
+    output_plots 
+    plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
+                    plot_type='FFR',
+                    config=config,
+                    theshold=0.2)
     # else:
     #     print('No FFR labels found in database')
     
@@ -917,10 +920,16 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
                  num_classes, config, confidence_names,
                  group_aggregated=False):
     df, _ = getDataFromDatabase(sql_config)
+    print('max 1', df[["sten_proc_4_pda_lca_transformed"]].max())
+
     for conf in confidence_names:
         df[conf] = convertConfFloats(df[conf], config['loss']['name'][0], config)
     
+    print('max 2', df[["sten_proc_4_pda_lca_transformed"]].max())
+
     df = select_relevant_data_dominans(df, confidence_names, config['artery_type'])
+    print('max 21', df[["sten_proc_4_pda_lca_transformed"]].max())
+
     label_names,prediction_names, confidence_names = rename_label_names(label_names, prediction_names, confidence_names, config['artery_type'])
     df =df.dropna(subset=confidence_names, how='all')
 
@@ -931,7 +940,7 @@ def plot_results(sql_config, label_names, prediction_names, output_plots,
     
 def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plots, config, group_aggregated=False):
     # create simulated df with columns: label_names, prediction_names, confidence_names
-    print('max -4', df[["sten_proc_4_pda_lca_transformed"]].max())
+    print('max 22', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     if group_aggregated:
         df = compute_aggregation(df, confidence_names, agg_type="max")
@@ -940,9 +949,7 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
         # insert group_aggregation function here
     # test if a element is a list starts with a string: "sten"
     stens = select_relevant_columns(label_names, 'sten')
-    # copy row values in _transfored if PatientID and StudyInstanceUID are the same
     
-    print('max-3', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     for c, label_name in enumerate(label_names):
         confidence_name = confidence_names[c]
@@ -955,7 +962,7 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
             df_label = df_label.drop_duplicates(
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
-        print('max -2', df[["sten_proc_4_pda_lca_transformed"]].max())
+        print('max 3', df[["sten_proc_4_pda_lca_transformed"]].max())
         if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth', 'wfocall1']:
             df_to_process = df_label.copy()
             try:
@@ -1002,7 +1009,7 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
                                         support,
                                         c,
                                         group_aggregated)
-    print('max -1', df[["sten_proc_4_pda_lca_transformed"]].max())
+    print('max 4', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                         group_aggregated, config)    

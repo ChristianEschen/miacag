@@ -28,4 +28,4 @@ def _load_config_yaml(config_file):
 def save_config(writer, config, outfile='config.yaml'):
     yaml_file = os.path.join(writer.log_dir, outfile)
     with open(yaml_file, 'w') as outfile:
-        yaml.dump(config, outfile, default_flow_style=False)
+        yaml.dump(config, outfile, Dumper=NumpySafeDumper, default_flow_style=False)

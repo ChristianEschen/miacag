@@ -46,7 +46,7 @@ def train_one_step(model, data, criterion,
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
-            outputs = model(data['inputs'])
+            outputs = model(data['inputs'], data['tabular_data'])
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
@@ -55,13 +55,15 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         scaler.scale(loss).backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()
 
     else:
-        outputs = model(data['inputs'])
+        outputs = model(data['inputs'], data['tabular_data'])
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
@@ -70,7 +72,7 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         loss.backward()
-
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -227,6 +229,9 @@ def saver(metric_dict_val, writer, config):
                        for key, val in metric_dict_val.items()}
     # save config
     config_tensorboard.update(metric_dict_val)
+    if config['loss']['name'][0] == 'NNL':
+        config['cuts'] = list(config['cuts'] )
+
     save_config(writer, config, 'config.yaml')
     save_config(writer, metric_dict_val, 'metrics.yaml')
 
@@ -243,3 +248,4 @@ def saver(metric_dict_val, writer, config):
     writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
+ 

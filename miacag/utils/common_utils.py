@@ -69,6 +69,7 @@ def get_losses_class(config, outputs, data, criterion, device):
         event = None
         if loss_name.startswith('NNL'):
             event = data['event']
+        #print('outputs[count_idx]:', torch.outputs[count_idx])
         loss = get_loss(
             config, outputs[count_idx],
             labels, criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
@@ -85,7 +86,6 @@ def get_losses_class(config, outputs, data, criterion, device):
 
         else:
             # scale loss by weights for given task
-           # loss = loss * config['groups_weights'][count_idx]
             losses.append(loss)
             loss_tot = loss_tot + loss
     losses = [loss_indi.item() for loss_indi in losses]

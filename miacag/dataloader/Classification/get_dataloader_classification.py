@@ -363,7 +363,7 @@ class ClassificationLoader():
             if self.config['debugging'] == True:
 
                 self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
-                self.val_df = self.df[self.df['phase'].isin(['val', 'val_train'])]
+                self.val_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
             else:
                 self.train_df = self.df[self.df['phase'].isin(['train', 'arcade_train'])]
                 self.val_df = self.df[self.df['phase'].isin(['val','arcade_val'])]

@@ -264,6 +264,8 @@ class train_monai_classification_loader(base_monai_loader):
         #self.data = self.df[self.features + config['labels_na
         if self.config['loss']['name'][0] == 'NNL':
             # start with censor after followup
+            # drop rows with nans for event and duration_transformed
+            self.df = self.df.dropna(subset=['event', 'duration_transformed'])
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
            # self.df = pd.DataFrame({"duration_transformed": np.random.randint(1, 551, size=100), "event": np.random.randint(0, 2, size=100)})
 
@@ -272,7 +274,7 @@ class train_monai_classification_loader(base_monai_loader):
                 scheme='quantiles')
 
             get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
-
+            print('get_target', get_target(self.df))
             target_trains = self.labtrans.fit_transform(*get_target(self.df))
 
             self.df[self.config['labels_names'][0]] = target_trains[0]
@@ -297,11 +299,21 @@ class train_monai_classification_loader(base_monai_loader):
              "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed'] +["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
+            print('before impu')
+            check_nan_after_imputation(self.data)
+            for i in config['loaders']['tabular_data_names']:
+                print('unique', self.data[i].unique())
+            self.data[config['loaders']['tabular_data_names']].isna().sum()
             self.data = impute_data(self.data, config)
             # use mask in list to select only the numeric columns
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
             self.data == z_score_normalize(self.data, num_columns)
-       # check_nan_after_imputation(self.data)
+
+        if config['labels_names'][0].startswith("sten"):
+            self.data = self.data.dropna(subset=config['labels_names'])
+
+        check_nan_after_imputation(self.data)
+        self.data[config['loaders']['tabular_data_names']].isna().sum()
         self.data = self.data.to_dict('records')
         
         # def find_nan_keys(d):
@@ -503,6 +515,10 @@ class val_monai_classification_loader(base_monai_loader):
         
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
+            print('before impu')
+            self.data[config['loaders']['tabular_data_names']].isna().sum()
+            print('cehcl')
+            check_nan_after_imputation(self.data)   
             self.data = impute_data(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
             self.data == z_score_normalize(self.data, num_columns)
@@ -512,7 +528,10 @@ class val_monai_classification_loader(base_monai_loader):
 
             
         
-        
+        print('after impu')
+        self.data[config['loaders']['tabular_data_names']].isna().sum()
+        print('check')
+        check_nan_after_imputation(self.data)
         
         self.data = self.data.to_dict('records')
 

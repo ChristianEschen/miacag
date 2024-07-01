@@ -52,7 +52,7 @@ class ConfigManipulator():
         # make output directories for rca and lca if not exist
         mkFolder(self.config_copy_rca["output_directory"])
         mkFolder(self.config_copy_lca["output_directory"])
-        return [self.config_copy_rca, self.config_copy_lca]
+        return [self.config_copy_lca, self.config_copy_rca]
     
     def change_query_lca_rca_train_test(self, config, idx):
         # this is train
@@ -95,7 +95,7 @@ class ConfigManipulator():
              #   self.config_list[i] = self.change_query_plotting(self.config_list[i])
         else:
             self.config_list = []
-            self.config_list[0] = copy.deepcopy(self.config)
+            self.config_list.append(copy.deepcopy(self.config))
             #self.config_list.append(self.change_query_plotting(config_copy))
         return self.config_list
     

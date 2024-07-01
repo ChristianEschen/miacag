@@ -55,6 +55,8 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         scaler.scale(loss).backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
             scaler.step(optimizer)
             scaler.update()
@@ -70,7 +72,7 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         loss.backward()
-
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -227,6 +229,9 @@ def saver(metric_dict_val, writer, config):
                        for key, val in metric_dict_val.items()}
     # save config
     config_tensorboard.update(metric_dict_val)
+    if config['loss']['name'][0] == 'NNL':
+        config['cuts'] = list(config['cuts'] )
+
     save_config(writer, config, 'config.yaml')
     save_config(writer, metric_dict_val, 'metrics.yaml')
 
@@ -243,3 +248,4 @@ def saver(metric_dict_val, writer, config):
     writer.add_hparams(config_tensorboard, metric_dict=metric_dict_val)
     writer.flush()
     writer.close()
+ 

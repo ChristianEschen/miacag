@@ -75,7 +75,9 @@ def eval_one_step(model, data, device, criterion,
     model.eval()
     with torch.no_grad():
         # forward
-        
+    
+        if config['loaders']['tabular_data_names'] == []:
+                data['tabular_data'] = None
         outputs = maybe_sliding_window(data['inputs'], model, config, data['tabular_data'])
         # max pooling on first dimension
         if config['loaders']['mode'] == 'testing':
@@ -240,6 +242,7 @@ def maybe_softmax_transform(df, config):
             logits_return.append(torch.nn.Sigmoid()(logit.float()))
         elif config['loss']['name'][c].startswith('NNL'):
             df[logit_conf] = df[logit]
+            #df[logit_conf] = torch.nn.Sigmoid()(df[logit].float())
         else:
             raise(ValueError('this loss type is not implemented'))
     return df

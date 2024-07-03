@@ -46,6 +46,8 @@ def train_one_step(model, data, criterion,
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
+            if config['loaders']['tabular_data_names'] == []:
+                data['tabular_data'] = None
             outputs = model(data['inputs'], data['tabular_data'])
             losses, loss = get_losses_class(config,
                                             outputs,
@@ -55,7 +57,7 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         scaler.scale(loss).backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+       # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
             scaler.step(optimizer)
@@ -72,7 +74,7 @@ def train_one_step(model, data, criterion,
         loss = loss / config['accum_iter']
 
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+       # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -130,12 +132,8 @@ def train_one_epoch(model, criterion,
         #                                          metrics)
        # running_loss_train = increment_metrics(running_loss_train, loss)
     
-    if lr_scheduler is not False:
-        lr_scheduler.step()
-
-  #  if metrics is not None:  # Add check her
     running_metric_train, metric_tb = normalize_metrics(
-        metrics, device)
+    metrics, device)
     running_loss_train, loss_tb = normalize_metrics(
         loss_metric, device)
 
@@ -144,6 +142,11 @@ def train_one_epoch(model, criterion,
                                             writer,
                                             epoch,
                                             'train')
+    if lr_scheduler is not False:
+        lr_scheduler.step()
+
+  #  if metrics is not None:  # Add check her
+
     if torch.distributed.get_rank() == 0:
         if config['lr_scheduler']['type'] == 'coswarm':
             cur_lr = lr_scheduler.optimizer.param_groups[0]['lr']

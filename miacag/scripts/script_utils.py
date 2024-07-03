@@ -52,7 +52,7 @@ class ConfigManipulator():
         # make output directories for rca and lca if not exist
         mkFolder(self.config_copy_rca["output_directory"])
         mkFolder(self.config_copy_lca["output_directory"])
-        return [self.config_copy_lca, self.config_copy_rca]
+        return [ self.config_copy_rca, self.config_copy_lca]
     
     def change_query_lca_rca_train_test(self, config, idx):
         # this is train

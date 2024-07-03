@@ -56,6 +56,7 @@ from miacag.utils.survival_utils import LabTransDiscreteTime
 import random
 import pandas as pd
 import torch
+import yaml
 # import matplotlib
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
@@ -334,6 +335,7 @@ class train_monai_classification_loader(base_monai_loader):
             #     keys=self.features[0]+"_meta_dict.[0-9]\\|[0-9]", use_re=True), #FIXME
             self.getMaybePad(),
             self.getCopy1to3Channels(),
+
             ScaleIntensityd(keys=self.features),
             self.maybeNormalize(config=self.config, features=self.features),
             EnsureTyped(keys=self.features, data_type='tensor'),
@@ -369,6 +371,7 @@ class train_monai_classification_loader(base_monai_loader):
                 shuffle=True,
                 even_divisible=True,
             )[dist.get_rank()]
+            self.data_par_train = self.data
 
         # create a training data loader
         if type(self.config['cache_num']) == int:
@@ -464,10 +467,13 @@ class val_monai_classification_loader(base_monai_loader):
         if self.config['loss']['name'][0] == 'NNL':
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
 
-            if self.config["loaders"]["mode"] != 'training':
-                cuts=self.config['cuts']
+            if config["is_already_trained"]:
+                with open(os.path.join(self.config['base_model'], 'config.yaml'), 'r') as stream:
+                    data_loaded = yaml.safe_load(stream)
+                cuts=data_loaded['cuts']
             else:
                 cuts=self.config['cuts']
+
             self.labtrans = LabTransDiscreteTime(
                 cuts=cuts,
                 #cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
@@ -585,8 +591,8 @@ class val_monai_classification_loader(base_monai_loader):
                                                 self.config['loaders']['Crop_width'],
                                                 self.config['loaders']['Crop_depth']),
                                             pad_mode="constant",),
-                #ScaleIntensityd(keys=self.features),
-               # self.maybeNormalize(config=self.config, features=self.features),            #                             ),
+                ScaleIntensityd(keys=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
+                self.maybeNormalize(config=self.config, features=self.features) if self.config['loaders']['mode'] == 'training' else Identityd(keys=self.features),
                 ConcatItemsd(keys=self.features, name='inputs'),
                 self.maybeDeleteFeatures(),
                 ]
@@ -602,6 +608,7 @@ class val_monai_classification_loader(base_monai_loader):
             shuffle=False,
             even_divisible=True if self.config['loaders']['mode'] not in ['testing', 'prediction'] else False,
         )[dist.get_rank()]
+        self.data_par_val = self.data ## ???
         if self.config['loaders']['mode'] not in ['prediction', 'testing']:
             # if self.config['cache_num'] != 'None':
             #     val_ds = monai.data.SmartCacheDataset(

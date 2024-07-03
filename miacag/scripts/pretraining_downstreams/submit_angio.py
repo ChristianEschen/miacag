@@ -54,6 +54,7 @@ from sklearn.metrics import f1_score, matthews_corrcoef, \
      accuracy_score, confusion_matrix#, plot_confusion_matrix
 import json
 from miacag.metrics.survival_metrics import EvalSurv
+from miacag.plots.plotter import compute_aggregation
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -285,7 +286,11 @@ def train_and_test(config_task):
         config_task['model']['pretrained'] = "None"
     else:
         # crawl one level up in the direcotry fir config_task['output_directory]
-        config_task['model']['pretrain_model'] = os.path.join(config_task['base_model'], config_task['artery_type'])
+        if config_task['labels_names'][0].startswith('sten' or 'ffr'):
+            config_task['model']['pretrain_model'] = os.path.join(config_task['base_model'], config_task['artery_type'])
+        else:
+            config_task['model']['pretrain_model'] = config_task['base_model']
+
         print('model already trained')
     
  #   config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
@@ -426,42 +431,44 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
                 else:
                     raise ValueError('artery type not supported')
                     
-            #   if not config_task_i['debugging']:
-            for config_task_i in config_task_list:
-                print('plotting now')
-                print('rca or lca', count)
-                conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
-                loss_names_i = config_task_i['loss']['name']
-                if config_task_i['artery_type'] == 'rca':
-                    config_task_i['train_plot'] = config_task_i['train_plot_rca']
-                    config_task_i['val_plot'] = config_task_i['val_plot_rca']
-                    config_task_i['test_plot'] = config_task_i['test_plot_rca']
-                elif config_task_i['artery_type'] == 'lca':
-                    config_task_i['train_plot'] = config_task_i['train_plot_lca']
-                    config_task_i['val_plot'] = config_task_i['val_plot_lca']
-                    config_task_i['test_plot'] = config_task_i['test_plot_lca']
-                else:
-                    raise ValueError('artery type not supported')
+            # for config_task_i in config_task_list:
+            #     print('plotting now')
+            #     print('rca or lca', count)
+            #     conf_i = [i + '_confidences' for i in config_task_i['labels_names']]
+            #     loss_names_i = config_task_i['loss']['name']
+            #     if config_task_i['artery_type'] == 'rca':
+            #         config_task_i['train_plot'] = config_task_i['train_plot_rca']
+            #         config_task_i['val_plot'] = config_task_i['val_plot_rca']
+            #         config_task_i['test_plot'] = config_task_i['test_plot_rca']
+            #     elif config_task_i['artery_type'] == 'lca':
+            #         config_task_i['train_plot'] = config_task_i['train_plot_lca']
+            #         config_task_i['val_plot'] = config_task_i['val_plot_lca']
+            #         config_task_i['test_plot'] = config_task_i['test_plot_lca']
+            #     else:
+            #         raise ValueError('artery type not supported')
 
+                if dist.is_initialized():
+                    plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+                else:
+                    plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
         else:
             config_task_list[0]['artery_type'] = 'both'
+            config_task['artery_type'] = 'both'
             train_and_test(config_task_list[0])
+            conf_i = [i + '_confidences' for i in config_task_list[0]['labels_names']]
+            loss_names_i = config_task_list[0]['loss']['name']
 
             if dist.is_initialized():
-                plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+                plot_task(config_task_list[0], output_table_name, conf_i, loss_names_i)
             else:
-                plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
+                plot_task_not_ddp(config_task_list[0], output_table_name, conf, loss_names_i)
         
             count+=1
 
 
     else:
-        config_task_list[0]['artery_type'] = 'both'
-        if len(config_task_list)>1:
-            config_task_list[0]["labels_names"] = config_task_list[0]["labels_names"] + config_task_list[1]["labels_names"]
-            config_task_list[0]['loss']['name'] = config_task_list[0]['loss']['name'] + config_task_list[1]['loss']['name']
-            config_task_list[0]['model']['num_classes'] = config_task_list[0]['model']['num_classes'] + config_task_list[1]['model']['num_classes']
-        
+        config_task['artery_type'] = 'both'
+
         if dist.is_initialized():
             plot_task(config_task, output_table_name, conf, loss_names)
         else:
@@ -595,8 +602,7 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
                 'query': config_task['query_transform']})
     conn.close()
     from miacag.plots.plotter import add_misssing_rows
-    for label_name in config_task['labels_names']:
-        df = add_misssing_rows(df, label_name)
+    
     df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
     base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
     if config_task['debugging']:
@@ -622,39 +628,53 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
         from miacag.plots.plotter import convertConfFloats
         preds = convertConfFloats(df_target[config_task['labels_names'][0]+'_confidences'], config_task['loss']['name'][0], config_task)
+
         # interpolate preds
-        text_file_name = os.path.join(config_task['output_directory'], config_task['table_name']+'_log.txt')
-        cuts = convert_cuts_np(json.load(open(text_file_name))["cuts"])
+        if not config_task['is_already_trained']:
+            text_file_name = os.path.join(config_task['output_directory'], config_task['table_name']+'_log.txt')
+            cuts = convert_cuts_np(json.load(open(text_file_name))["cuts"])
+        else:
+            with open(os.path.join(config_task['base_model'], 'config.yaml'), 'r') as stream:
+                data_loaded = yaml.safe_load(stream)
+            cuts = data_loaded['cuts']
         
-      #  surv =  pd.DataFrame(preds.transpose(), cuts)
-
-        surv = predict_surv(preds, cuts)
+        surv_plot(config_task, cuts, df_target, preds, phase_plot)
         
-        ev = EvalSurv(surv,
-                      np.array(df_target[config_task['labels_names'][0]]),
-                      np.array(df_target['event']),
-                      censor_surv='km')
-
-
-        plot_x_individuals(surv, phase_plot,x_individuals=5)
-      #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
-        out_dict = confidences_upper_lower_survival_discrete(surv,
-                                                             np.array(df_target[config_task['labels_names'][0]]),
-                                                             np.array(df_target['event']),
-                                                             config_task)
-
-        plot_scores(out_dict, phase_plot)
-        # if config_task['debugging']:
-        #     thresholds = [6000, 7000]
-        # else:
-        #     thresholds = [365, 365*5]
-        # auc_1_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[0])
-        # auc_5_year_dict = get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=thresholds[1])
-        # from miacag.metrics.survival_metrics import plot_auc_surv
-        # plot_auc_surv(auc_1_year_dict, auc_5_year_dict, phase_plot)
         
-        print('done')
+        
+        
+        phase_plot_agg = os.path.join(phase_plot, 'group_agg')
+        mkFolder(phase_plot_agg)
+        for i in range(0, preds.shape[1]):
+            df_target['preds_'+str(i)]= preds[:,i]
+        
+        aggregated_cols_list = ["preds_"+str(i) for i in range(0, preds.shape[1])]
+        df_agg = compute_aggregation(df_target, aggregated_cols_list, agg_type="max")
+        df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
+        surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg)
 
+
+def surv_plot(config_task, cuts, df_target, preds, phase_plot):
+
+    
+    #  surv =  pd.DataFrame(preds.transpose(), cuts)
+
+    surv = predict_surv(preds, cuts)
+    
+    ev = EvalSurv(surv,
+                    np.array(df_target[config_task['labels_names'][0]]),
+                    np.array(df_target['event']),
+                    censor_surv='km')
+
+
+    plot_x_individuals(surv, phase_plot,x_individuals=5)
+    #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
+    out_dict = confidences_upper_lower_survival_discrete(surv,
+                                                            np.array(df_target[config_task['labels_names'][0]]),
+                                                            np.array(df_target['event']),
+                                                            config_task)
+
+    plot_scores(out_dict, phase_plot)
 def predict_surv(logits, duration_index):
     logits = torch.tensor(logits)
     hazard = torch.nn.Sigmoid()(logits)
@@ -673,7 +693,7 @@ def convert_cuts_np(cuts):
     string_list = cuts.strip('[]').split()
 
     # Konverterer listen af strings til floats og derefter til et numpy array
-    numpy_array = np.array([float(i) for i in string_list])
+    numpy_array = np.array([float(i[:-1]) for i in string_list])
     return numpy_array
 
 
@@ -754,14 +774,14 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
         queries = [config_task['train_plot']]
         plots = [output_plots_train]
     else:
-        queries = [config_task['train_plot']]
-           #     config_task['val_plot'],
-            #    config_task['test_plot'],
+        queries = [config_task['test_plot']]
+                # config_task['val_plot'],
+                # config_task['test_plot']
               #              ]
         plots = [output_plots_train, output_plots_val,
                  output_plots_test,]
                  #output_plots_test_large]
-
+        plots = [output_plots_train]
                # config_task['query_test_large_plot']]
     for idx, query in enumerate(queries):
         if conf[0].startswith(('sten', 'ffr')):
@@ -784,23 +804,23 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                             config_task['labels_names']]
                         )
 
-            plotRegression({
-                        'database': config_task['database'],
-                        'username': config_task['username'],
-                        'password': config_task['password'],
-                        'host': config_task['host'],
-                        'labels_names': config_task['labels_names'],
-                        'schema_name': config_task['schema_name'],
-                        'table_name': output_table_name,
-                        'query': query,
-                        'loss_name': config_task['loss']['name'],
-                        'task_type': config_task['task_type']
-                        },
-                        config_task['labels_names'],
-                        conf,
-                        plots[idx],
-                        config_task,
-                        group_aggregated=False)
+            # plotRegression({
+            #             'database': config_task['database'],
+            #             'username': config_task['username'],
+            #             'password': config_task['password'],
+            #             'host': config_task['host'],
+            #             'labels_names': config_task['labels_names'],
+            #             'schema_name': config_task['schema_name'],
+            #             'table_name': output_table_name,
+            #             'query': query,
+            #             'loss_name': config_task['loss']['name'],
+            #             'task_type': config_task['task_type']
+            #             },
+            #             config_task['labels_names'],
+            #             conf,
+            #             plots[idx],
+            #             config_task,
+            #             group_aggregated=False)
         
         # also group aggregated
             plot_i = plots[idx] + '_group_aggregated'
@@ -825,23 +845,23 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                         group_aggregated=True
                         )
 
-            plotRegression({
-                        'database': config_task['database'],
-                        'username': config_task['username'],
-                        'password': config_task['password'],
-                        'host': config_task['host'],
-                        'labels_names': config_task['labels_names'],
-                        'schema_name': config_task['schema_name'],
-                        'table_name': output_table_name,
-                        'query': query,
-                        'loss_name': config_task['loss']['name'],
-                        'task_type': config_task['task_type']
-                        },
-                        config_task['labels_names'],
-                        conf,
-                        plot_i,
-                        config_task,
-                        group_aggregated=True)
+            # plotRegression({
+            #             'database': config_task['database'],
+            #             'username': config_task['username'],
+            #             'password': config_task['password'],
+            #             'host': config_task['host'],
+            #             'labels_names': config_task['labels_names'],
+            #             'schema_name': config_task['schema_name'],
+            #             'table_name': output_table_name,
+            #             'query': query,
+            #             'loss_name': config_task['loss']['name'],
+            #             'task_type': config_task['task_type']
+            #             },
+            #             config_task['labels_names'],
+            #             conf,
+            #             plot_i,
+            #             config_task,
+            #             group_aggregated=True)
         
 
 

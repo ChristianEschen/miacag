@@ -87,6 +87,18 @@ def train(config):
         # print only every 100 epochs
         #if epoch % 100 == 0:
         print('epoch nr', epoch)
+        print('training..')
+        # train one epoch
+        iter_minibatch = train_one_epoch(model, criterion_train,
+                        train_loader, device, epoch,
+                        optimizer, lr_scheduler,
+                        running_metric_train, running_loss_train,
+                        writer, config, scaler, iter_minibatch)
+
+        if config['cache_num'] not in  ['standard', 'None']:
+            train_ds.update_cache()
+           # train_ds.set_data()
+
 
         # Check elapsed time since last validation
         if dist.get_rank() == 0:
@@ -101,43 +113,40 @@ def train(config):
         dist.broadcast(validate_now, src=0)
         validate_now = validate_now.item()  # Convert back to Python bool
 
-        # validate every 10 epochs if epoch % 10 == 0:
-        print('NOT validating')
-        # if epoch == 0 or validate_now:
-        #     metric_dict_val = val_one_epoch(model, criterion_val, config,
-        #                                     val_loader, device,
-        #                                     running_metric_val,
-        #                                     running_loss_val, writer, epoch)
-        #     # early stopping
-        #     early_stop, best_val_loss, best_val_epoch = early_stopping(
-        #         best_val_loss, best_val_epoch,
-        #         metric_dict_val['total'],
-        #         epoch, config['trainer']['max_stagnation'])
-        #     config['best_val_epoch'] = best_val_epoch
-        #     # save model
-        #     if best_val_epoch == epoch:
-        #         if torch.distributed.get_rank() == 0:
-        #             save_model(model, writer, config)
-        #     last_validation_time = time.time()  # Reset last validation time
-        #     if early_stop is True:
-        #         break
-        # train one epoch
-        iter_minibatch = train_one_epoch(model, criterion_train,
-                        train_loader, device, epoch,
-                        optimizer, lr_scheduler,
-                        running_metric_train, running_loss_train,
-                        writer, config, scaler, iter_minibatch)
+        # validate every 10 epochs
+        if not config['debugging'] == True:
+            if (epoch+1) % config['trainer']['validate_frequency']== 0:
+           # if epoch+1 % 10 == 0:
 
-        if config['cache_num'] not in  ['standard', 'None']:
-            train_ds.update_cache()
-           # train_ds.set_data()
+                print('validate')
+            #if epoch == 0 or validate_now:
+                metric_dict_val = val_one_epoch(model, criterion_val, config,
+                                                val_loader, device,
+                                                running_metric_val,
+                                                running_loss_val, writer, epoch)
+                # early stopping
+                early_stop, best_val_loss, best_val_epoch = early_stopping(
+                    best_val_loss, best_val_epoch,
+                    metric_dict_val['total'],
+                    epoch, config['trainer']['max_stagnation'])
+                config['best_val_epoch'] = best_val_epoch
+                # save model
+                if best_val_epoch == epoch:
+                    if torch.distributed.get_rank() == 0:
+                        save_model(model, writer, config)
+                last_validation_time = time.time()  # Reset last validation time
+                if early_stop is True:
+                    break
 
 
     print('Finished Training')
     if torch.distributed.get_rank() == 0:
-        
-       # saver(metric_dict_val, writer, config)
-        save_model(model, writer, config)
+        if config['debugging']:
+            save_model(model, writer, config)
+        else:
+            saver(metric_dict_val, writer, config)
+
+
 
     print('training loop (s)', time.time()-starter)
     del model

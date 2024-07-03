@@ -135,6 +135,9 @@ def compute_aggregation(df, aggregated_cols_list, agg_type="max"):
                 elif field.startswith('sten'):
                     df_new = df_new.groupby(
                         ['PatientID', 'StudyInstanceUID'])[agg_field].max()
+                elif field.startswith('preds_'):
+                    df_new = df_new.groupby(
+                        ['PatientID', 'StudyInstanceUID'])[agg_field].max()
                 else:
                     raise ValueError('not implemented')
             else:

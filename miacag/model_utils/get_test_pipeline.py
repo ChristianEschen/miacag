@@ -14,7 +14,7 @@ from miacag.utils.sql_utils import update_cols
 import torch
 import shutil
 import time
-
+import yaml
 
 class TestPipeline():
     def get_test_pipeline(self, model, criterion, config, test_loader,
@@ -70,7 +70,10 @@ class TestPipeline():
                 #     config)
             #     self.insert_data_to_db(test_loader, label, config)
             if config['loss']['name'][0] == 'NNL':
-                config['cuts'] = str(config['cuts'])
+                if config['is_already_trained']:
+                    pass
+                else:
+                    config['cuts'] = str(config['cuts'])
                 
             log_name = config["table_name"] +  '_log.txt'
             with open(

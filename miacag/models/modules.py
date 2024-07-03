@@ -135,8 +135,10 @@ class ImageToScalarModel(EncoderModel):
         
         
         self.config = config
-        
-        self.tab_feature = 64
+        if len(self.config['loaders']['tabular_data_names'])>0:
+            self.tab_feature = 64
+        else:
+            self.tab_feature = 0
         self.embeddings = nn.ModuleDict()
         for i in range(0, len(config['loaders']['tabular_data_names'])):
             if config['loaders']['tabular_data_names_one_hot'][i] == 1:  # Embedding
@@ -174,11 +176,24 @@ class ImageToScalarModel(EncoderModel):
                         config['model']['num_classes'][loss_count_idx]).to(device))
                 
             elif loss_type.startswith(tuple(['NNL'])):
-                self.fcs.append(nn.Linear(
-                        self.in_features,
-                        config['model']['num_classes'][loss_count_idx]).to(device))
-                # if loss_type.startswith(tuple(['NNL'])):
-                #     self.fcs.append(nn.Sigmoid())
+               # self.fcs.append(nn.Linear(
+               #         self.in_features,
+               #         config['model']['num_classes'][loss_count_idx]).to(device))
+                self.fcs.append(
+                        nn.Sequential(
+                            nn.LayerNorm(self.in_features + self.tab_feature),
+                            nn.Linear(
+                                self.in_features + self.tab_feature, self.in_features).to(device),
+                            nn.ReLU(),
+                            nn.Linear(
+                                self.in_features, self.in_features).to(device),
+                            nn.ReLU(),
+                            nn.Linear(
+                                self.in_features,
+                                config['model']['num_classes'][loss_count_idx]).to(device),
+                           # nn.ReLU(),
+
+                            ))
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(
@@ -188,7 +203,8 @@ class ImageToScalarModel(EncoderModel):
                         nn.Linear(
                             self.in_features, count_loss)
                         ).to(device),
-                        nn.ReLU())
+                      #  nn.ReLU()
+                        )
             # test if loss_type startswith three conditions
             
             elif loss_type.startswith(tuple(['MSE', '_L1', 'L1smooth', 'wfocall1'])):
@@ -205,7 +221,7 @@ class ImageToScalarModel(EncoderModel):
                             nn.Linear(
                                 self.in_features,
                                 count_loss).to(device),
-                            nn.ReLU(),
+                            #nn.ReLU(),
 
                             ))
                 elif config['model']['aggregation'] == 'cross_attention':
@@ -258,7 +274,7 @@ class ImageToScalarModel(EncoderModel):
                     "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
                     "vit_small_patch16_224", "vit_large_patch16_224",
                     "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
-                    "vit_huge_patch14", "swin_s"]:
+                    "vit_huge_patch14", "swin_s", "swin_tiny"]:
                     
                     if self.config['model']['backbone'] in [
                     "vit_tiny_3d", "vit_small_3d", "vit_base_3d", "vit_large_3d"]:

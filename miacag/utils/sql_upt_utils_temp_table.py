@@ -215,13 +215,16 @@ def get_dataframes_pr_label_names(parent_dir):
     return df_list    
     
 
-def update_cols_based_on_temp_table(parent_dir, config):
-    temp_csv_filename = os.path.join(os.path.dirname(parent_dir), 'temp_csv_file.csv')
+def combine_dfs(parent_dir, config):
    # csv_files = [os.path.join(parent_dir, folder, "0.csv") for folder in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, folder))]
     df_list  =get_dataframes_pr_label_names(parent_dir)
     # merge files with same upper folder name
     
     final_df = comnbine_csv_files(df_list, config)
+    return final_df
+def update_cols_based_on_temp_table(parent_dir, config):
+    final_df = combine_dfs(parent_dir, config)
+    temp_csv_filename = os.path.join(os.path.dirname(parent_dir), 'temp_csv_file.csv')
     update_using_temp_table(temp_csv_filename, final_df, config)
     return None
 if __name__ == "__main__":

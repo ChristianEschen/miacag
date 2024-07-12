@@ -432,50 +432,43 @@ class ClassificationLoader():
                 self.val_df,
                 config)
         val_ds = val_ds()
-        # if config['cache_num'] == 'standard':
-        #     train_loader = DataLoader(
-        #         train_ds,
-        #         sampler=sampler,
-        #         batch_size=config['loaders']['batchSize'],
-        #         shuffle=False,
-        #         num_workers=config['num_workers'],
-        #         persistent_workers=True,
-        #         collate_fn=list_data_collate, #patches_pad_list_data_collate_read_patches_individual, #pad_list_data_collate,
-        #         pin_memory=True,
-        #         drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
-        #     with torch.no_grad():
-        #         val_loader = DataLoader(
-        #             val_ds,
-        #             batch_size=config['loaders']['batchSize'],
-        #             shuffle=False,
-        #             num_workers=config['num_workers'],
-        #             persistent_workers=False,
-        #             collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-        #             pin_memory=False,
-        #             drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) 
-        # else:
-        train_loader = ThreadDataLoader(
-            train_ds,
-            repeats=1, #repeats=10 gives improve utilization of the gpu
-            buffer_size=1,
-            sampler=sampler,
-            batch_size=config['loaders']['batchSize'],
-            shuffle=False,
-            #  persistent_workers=True,
-            num_workers=0, #config['num_workers'],
-            collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
-            pin_memory=False,
-            drop_last=True if self.config['loss']['name'][0] == 'NNL' else False) #True if config['cpu'] == "False" else False,)
-        with torch.no_grad():
-            val_loader = ThreadDataLoader(
-                val_ds,
+
+        if isinstance(config['cache_num'], int):
+
+            train_loader = ThreadDataLoader(
+                train_ds,
+                sampler=sampler,
                 batch_size=config['loaders']['batchSize'],
                 shuffle=False,
-                num_workers=0,
-                collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
-                pin_memory=False,
-                drop_last=True if self.config['loss']['name'][0] == 'NNL' else False)
-    
+                #  persistent_workers=True,
+                num_workers=0, #config['num_workers'],
+                collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
+                pin_memory=False) #True if config['cpu'] == "False" else False,)
+            with torch.no_grad():
+                val_loader = ThreadDataLoader(
+                    val_ds,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=False,
+                    num_workers=0,
+                    collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    pin_memory=False)
+        else:
+            train_loader = DataLoader(
+                train_ds,
+                sampler=sampler,
+                batch_size=config['loaders']['batchSize'],
+                shuffle=False,
+                num_workers=config['num_workers'],
+                collate_fn=list_data_collate, #patches_pad_list_data_collate_read_patches_individual, #pad_list_data_collate,
+                pin_memory=True) #True if config['cpu'] == "False" else False,)
+            with torch.no_grad():
+                val_loader = DataLoader(
+                    val_ds,
+                    batch_size=config['loaders']['batchSize'],
+                    shuffle=False,
+                    num_workers=config['num_workers'],
+                    collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
+                    pin_memory=False) 
         return train_loader, val_loader, train_ds, val_ds
 
     def get_classificationloader_patch_lvl_test(self, config):

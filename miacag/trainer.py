@@ -74,7 +74,7 @@ def train(config):
         if config['loaders']['use_amp'] else None
     best_val_loss, best_val_epoch = None, None
     early_stop = False
-    if config['cache_num'] not in ['standard', 'None']:
+    if isinstance(config['cache_num'], int):
         train_ds.start()
 
     starter = time.time()
@@ -89,13 +89,15 @@ def train(config):
         print('epoch nr', epoch)
         print('training..')
         # train one epoch
+        if not isinstance(config['cache_num'], int):
+            train_loader.sampler.set_epoch(epoch)
         iter_minibatch = train_one_epoch(model, criterion_train,
                         train_loader, device, epoch,
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler, iter_minibatch)
 
-        if config['cache_num'] not in  ['standard', 'None']:
+        if isinstance(config['cache_num'], int):
             train_ds.update_cache()
            # train_ds.set_data()
 

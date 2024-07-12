@@ -7,7 +7,15 @@ import monai
 import math
 import pandas as pd
 
-
+def convert_numpy_to_torch(input_dict):
+    for key, value in input_dict.items():
+        if isinstance(value, np.ndarray):
+            input_dict[key] = torch.tensor(value)
+        if isinstance(value, int):
+            input_dict[key] = torch.tensor(value)
+        if isinstance(value, float):
+            input_dict[key] = torch.tensor(value)
+    return input_dict
 
 def to_dtype(data,fields, config):
     for c, label_name in enumerate(fields):

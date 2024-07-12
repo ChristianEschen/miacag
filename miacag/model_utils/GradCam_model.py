@@ -66,10 +66,10 @@ class ActivationsAndGradients:
 
         output.register_hook(_store_grad)
 
-    def __call__(self, x):
+    def __call__(self, x, tabular_data=None):
         self.gradients = []
         self.activations = []
-        return self.model(x)
+        return self.model(x, tabular_data)
 
     def release(self):
         for handle in self.handles:
@@ -109,6 +109,7 @@ class BaseCAM:
 
     def get_cam_image(self,
                       input_tensor: torch.Tensor,
+                      tabular_data: torch.Tensor,
                       target_layer: torch.nn.Module,
                       targets: List[torch.nn.Module],
                       activations: torch.Tensor,
@@ -116,6 +117,7 @@ class BaseCAM:
                       eigen_smooth: bool = False) -> np.ndarray:
 
         weights = self.get_cam_weights(input_tensor,
+                                       tabular_data,
                                        target_layer,
                                        targets,
                                        activations,
@@ -126,14 +128,18 @@ class BaseCAM:
 
     def forward(self,
                 input_tensor: torch.Tensor,
+                tabular_data: torch.Tensor,
                 targets: List[torch.nn.Module],
                 eigen_smooth: bool = False) -> np.ndarray:
 
         if self.cuda:
             input_tensor = input_tensor.cuda()
+            tabular_data = tabular_data.cuda()
 
         if self.compute_input_gradient:
             input_tensor = torch.autograd.Variable(input_tensor,
+                                                   requires_grad=True)
+            tabular_data = torch.autograd.Variable(tabular_data,
                                                    requires_grad=True)
 
         outputs = self.activations_and_grads(input_tensor)
@@ -211,6 +217,7 @@ class BaseCAM:
 
     def __call__(self,
                  input_tensor: torch.Tensor,
+                 tabular_data: torch.Tensor,
                  targets: List[torch.nn.Module] = None,
                  aug_smooth: bool = False,
                  eigen_smooth: bool = False) -> np.ndarray:
@@ -247,6 +254,7 @@ class GradCAM(BaseCAM):
 
     def get_cam_weights(self,
                         input_tensor,
+                        tabular_data,
                         target_layer,
                         target_category,
                         activations,

@@ -265,7 +265,7 @@ class ImageToScalarModel(EncoderModel):
         embedded_features.append(tabular_data)
         return torch.cat(embedded_features, dim=1)
         
-    def forward(self, x, tabular_data):
+    def forward(self, x = None, tabular_data = None):
         x = maybePermuteInput(x, self.config)
         p = self.encoder(x)
         if self.config['model']['aggregation'] in ['max','mean']:
@@ -302,7 +302,10 @@ class ImageToScalarModel(EncoderModel):
         #    print('aggregation is cross attention')
             ps = [self.att_pool(p)]
           #  p = p.mean(dim=(1))
-
+          
+        if self.config['loaders']['val_method']['saliency'] == True:
+            ps = torch.cat(ps, dim=1)
+            return ps
         return ps
 
 

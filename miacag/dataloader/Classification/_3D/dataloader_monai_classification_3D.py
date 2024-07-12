@@ -68,6 +68,8 @@ def z_score_normalize(data, keys):
             value = data[key]
             mean = value.mean()
             std = value.std()
+            #normalized_data[key] = (value - value.min()) / (value.max() - value.min() + std +1e-6)
+
             normalized_data[key] = (value - mean) / (std +1e-6)
     return normalized_data
 def impute_data(df, config):
@@ -233,6 +235,8 @@ class train_monai_classification_loader(base_monai_loader):
         #     self.getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
+        # shuffle the data
+        self.df = self.df.sample(frac=1).reset_index(drop=True)
         #######################################################################
         # # old
         # w_label_names = []
@@ -339,7 +343,7 @@ class train_monai_classification_loader(base_monai_loader):
             ScaleIntensityd(keys=self.features),
             self.maybeNormalize(config=self.config, features=self.features),
             EnsureTyped(keys=self.features, data_type='tensor'),
-            self.maybeToGpu(self.features),
+            self.maybeToGpu(self.features) if isinstance(self.config['cache_num'], int) else Identityd(keys=self.features),
           #  RandReplicateSliceTransform(keys=self.features, num_slices=self.config['loaders']['Crop_depth'], prob=0.5),
             self.maybeTranslate(),
             self.maybeSpatialScaling(),
@@ -371,7 +375,7 @@ class train_monai_classification_loader(base_monai_loader):
                 shuffle=True,
                 even_divisible=True,
             )[dist.get_rank()]
-            self.data_par_train = self.data
+       #     self.data_par_train = self.data
 
         # create a training data loader
         if type(self.config['cache_num']) == int:
@@ -471,8 +475,15 @@ class val_monai_classification_loader(base_monai_loader):
                 with open(os.path.join(self.config['base_model'], 'config.yaml'), 'r') as stream:
                     data_loaded = yaml.safe_load(stream)
                 cuts=data_loaded['cuts']
+                self.config['cuts'] = cuts
             else:
-                cuts=self.config['cuts']
+                if self.config['loaders']['val_method']['saliency'] == True:
+                    with open(os.path.join(self.config['output_directory'], 'config.yaml'), 'r') as stream:
+                        data_loaded = yaml.safe_load(stream)
+                    cuts=data_loaded['cuts']
+                    self.config['cuts'] = cuts
+                else:
+                    cuts=self.config['cuts']
 
             self.labtrans = LabTransDiscreteTime(
                 cuts=cuts,
@@ -481,7 +492,7 @@ class val_monai_classification_loader(base_monai_loader):
             
             get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
             
-            target_trains = self.labtrans.fit_transform(*get_target(self.df))
+            target_trains = self.labtrans.transform(*get_target(self.df))
             
             self.df[self.config['labels_names'][0]] = target_trains[0]
             
@@ -582,7 +593,7 @@ class val_monai_classification_loader(base_monai_loader):
                 self.getCopy1to3Channels(),
         
                 EnsureTyped(keys=self.features, data_type='tensor'),
-                self.maybeToGpu(self.features),
+             #   self.maybeToGpu(self.features),
                 self.maybeCenterCrop(self.features)
                 if self.config['loaders']['mode'] == 'training'
                 else monai.transforms.GridPatchd(keys=self.features,
@@ -608,7 +619,7 @@ class val_monai_classification_loader(base_monai_loader):
             shuffle=False,
             even_divisible=True if self.config['loaders']['mode'] not in ['testing', 'prediction'] else False,
         )[dist.get_rank()]
-        self.data_par_val = self.data ## ???
+       # self.data_par_val = self.data ## ???
         if self.config['loaders']['mode'] not in ['prediction', 'testing']:
             # if self.config['cache_num'] != 'None':
             #     val_ds = monai.data.SmartCacheDataset(

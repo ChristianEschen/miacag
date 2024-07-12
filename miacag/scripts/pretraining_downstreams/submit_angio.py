@@ -2,6 +2,7 @@ import uuid
 import os
 import socket
 from datetime import datetime, timedelta
+import torch.distributed
 import yaml
 from miacag.preprocessing.split_train_val import splitter
 from miacag.plots.plotter import getNormConfMat
@@ -32,9 +33,7 @@ from miacag.postprocessing.count_stenosis_pr_group \
     import CountSignificantStenoses
 from miacag.utils.sql_utils import getDataFromDatabase
 from miacag.plots.plot_predict_coronary_pathology import run_plotter_ruc_multi_class
-from miacag.utils.survival_utils import create_cols_survival
 from miacag.model_utils.predict_utils import compute_baseline_hazards#, predict_surv_df
-from miacag.metrics.survival_metrics import confidences_upper_lower_survival, confidences_upper_lower_survival_discrete
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.ticker import MaxNLocator
@@ -53,8 +52,11 @@ from miacag.scripts.script_utils import ConfigManipulator
 from sklearn.metrics import f1_score, matthews_corrcoef, \
      accuracy_score, confusion_matrix#, plot_confusion_matrix
 import json
-from miacag.metrics.survival_metrics import EvalSurv
 from miacag.plots.plotter import compute_aggregation
+from miacag.trainer import get_device
+from miacag.models.BuildModel import ModelBuilder
+
+
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -269,7 +271,7 @@ def plot_task_not_ddp(config_task, output_table_name, conf, loss_names):
                                 output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
         
     elif loss_names[0] in ['NNL']:
-        plot_time_to_event_tasks(config_task, output_table_name,
+        df_low_risk, df_high_risk = plot_time_to_event_tasks(config_task, output_table_name,
                                 output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
         
     else:
@@ -300,7 +302,49 @@ def train_and_test(config_task):
     torch.cuda.empty_cache()
     # 5 eval model
     if not config_task['is_already_tested']:
+        config_task['feature_importance'] = False
+        print('init testing')
         test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
+        torch.distributed.barrier()
+
+        config_task['feature_importance'] = True
+        if config_task["feature_importance"]:
+
+            if config_task['labels_names'][0].startswith('duration'):
+                # global
+                print('init feature importance global')
+                ori_path = copy.deepcopy(config_task['output_directory'])
+                config_task['output_directory'] = os.path.join(ori_path, 'global_fi')
+                if dist.get_rank() == 0:
+                    mkFolder(config_task['output_directory'])
+                test({**config_task, 'query': config_task["query_test"], 'TestSize': 1, config_task['feature_importance']: True})
+                torch.distributed.barrier()
+                # high risk
+                print('init feature importance high risk')
+                config_task['output_directory'] = os.path.join(ori_path, 'high_risk_fi')
+                if dist.get_rank() == 0:
+                    mkFolder(config_task['output_directory'])
+                test({**config_task, 'query': config_task["query_high_risk"], 'TestSize': 1, config_task['feature_importance']: True})
+                torch.distributed.barrier()
+                config_task['output_directory'] = os.path.join(ori_path, 'low_risk_fi')
+                if dist.get_rank() == 0:
+                    mkFolder(config_task['output_directory'])
+                # low risk
+                print('init feature importance low risk')
+                test({**config_task, 'query': config_task["query_low_risk"], 'TestSize': 1, config_task['feature_importance']: True})
+                config_task['output_directory'] = ori_path
+                torch.distributed.barrier()
+
+
+                
+            else:
+                raise ValueError('feature importance not supported for this task')
+            torch.distributed.barrier()
+
+
+
+
+
   #  config_task['loaders']['nr_patches'] = config_task['loaders']['val_method']['nr_patches'] #100
   #  config_task['loaders']['batchSize'] = config_task['loaders']['val_method']['batchSize'] #100
 
@@ -325,6 +369,7 @@ def plot_task(config_task, output_table_name, conf, loss_names):
     mkFolder(output_plots_test_large)
     mkFolder(output_plots_val)
     torch.distributed.barrier()
+    config_task['loaders']['mode'] = 'testing'
     if torch.distributed.get_rank() == 0:
         # plot results
         if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
@@ -335,12 +380,22 @@ def plot_task(config_task, output_table_name, conf, loss_names):
                                     output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
             
         elif loss_names[0] in ['NNL']:
-            plot_time_to_event_tasks(config_task, output_table_name,
+            df_low_risk, df_high_risk = plot_time_to_event_tasks(config_task, output_table_name,
                                     output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
             
         else:
             raise ValueError("Loss not supported")
     torch.distributed.barrier()
+    
+    # if config_task['feature_importance']:
+    #     if config_task['labels_names'][0].startswith('duration'):
+    #         from miacag.metrics.survival_metrics import compute_feature_importance
+    #         if not config_task['is_already_trained']:
+    #             config_task['model']['pretrain_model'] = config_task['output_directory']
+    #         compute_feature_importance(config_task, df_low_risk, df_high_risk)
+            
+    #     else:
+    #         raise ValueError('feature importance not supported for this task')
     return
 
 
@@ -457,6 +512,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             train_and_test(config_task_list[0])
             conf_i = [i + '_confidences' for i in config_task_list[0]['labels_names']]
             loss_names_i = config_task_list[0]['loss']['name']
+            torch.cuda.empty_cache() # here empty
 
             if dist.is_initialized():
                 plot_task(config_task_list[0], output_table_name, conf_i, loss_names_i)
@@ -468,6 +524,7 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
 
     else:
         config_task['artery_type'] = 'both'
+        torch.cuda.empty_cache() # here empty
 
         if dist.is_initialized():
             plot_task(config_task, output_table_name, conf, loss_names)
@@ -601,7 +658,6 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
                 'table_name': output_table_name,
                 'query': config_task['query_transform']})
     conn.close()
-    from miacag.plots.plotter import add_misssing_rows
     
     df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
     base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
@@ -610,8 +666,8 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         phases_q = ['train']
 
     else:
-        phases = [output_plots_train] + [output_plots_val] + [output_plots_test] # + output_plots_test_large]
-        phases_q = ['train', 'val', 'test']#, 'test_large']
+        phases = [output_plots_test] # + output_plots_test_large]
+        phases_q = ['test']#, 'test_large']
     for idx in range(0, len(phases)):
         phase_plot = phases[idx]
         phase_q = phases_q[idx]
@@ -628,6 +684,8 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
         from miacag.plots.plotter import convertConfFloats
         preds = convertConfFloats(df_target[config_task['labels_names'][0]+'_confidences'], config_task['loss']['name'][0], config_task)
+        from miacag.metrics.survival_metrics import convert_cuts_np
+
 
         # interpolate preds
         if not config_task['is_already_trained']:
@@ -637,11 +695,13 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
             with open(os.path.join(config_task['base_model'], 'config.yaml'), 'r') as stream:
                 data_loaded = yaml.safe_load(stream)
             cuts = data_loaded['cuts']
+        from miacag.metrics.survival_metrics import surv_plot, get_high_low_risk_from_df
+        if config_task['feature_importance']:
+            low_risk_df, high_risk_df = get_high_low_risk_from_df(cuts, df_target, preds)
+           # return low_risk_df, high_risk_df
+        surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False)
         
-        surv_plot(config_task, cuts, df_target, preds, phase_plot)
-        
-        
-        
+
         
         phase_plot_agg = os.path.join(phase_plot, 'group_agg')
         mkFolder(phase_plot_agg)
@@ -651,120 +711,12 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
         aggregated_cols_list = ["preds_"+str(i) for i in range(0, preds.shape[1])]
         df_agg = compute_aggregation(df_target, aggregated_cols_list, agg_type="max")
         df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
-        surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg)
+        surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg, agg=True)
 
-
-def surv_plot(config_task, cuts, df_target, preds, phase_plot):
-
-    
-    #  surv =  pd.DataFrame(preds.transpose(), cuts)
-
-    surv = predict_surv(preds, cuts)
-    
-    ev = EvalSurv(surv,
-                    np.array(df_target[config_task['labels_names'][0]]),
-                    np.array(df_target['event']),
-                    censor_surv='km')
-
-
-    plot_x_individuals(surv, phase_plot,x_individuals=5)
-    #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
-    out_dict = confidences_upper_lower_survival_discrete(surv,
-                                                            np.array(df_target[config_task['labels_names'][0]]),
-                                                            np.array(df_target['event']),
-                                                            config_task)
-
-    plot_scores(out_dict, phase_plot)
-def predict_surv(logits, duration_index):
-    logits = torch.tensor(logits)
-    hazard = torch.nn.Sigmoid()(logits)
-    surv = (1 - hazard).add(1e-7).log().cumsum(1).exp()
-    surv_np = surv.numpy()
-    surv = pd.DataFrame(surv_np.transpose(), duration_index)
-    new_index = np.linspace(surv.index.min(), surv.index.max(), len(duration_index)*10)
-
-    # Interpolate DataFrame to new index
-    surv = surv.reindex(surv.index.union(new_index)).interpolate('index').loc[new_index]
-
-    return surv
-
-
-def convert_cuts_np(cuts):
-    string_list = cuts.strip('[]').split()
-
-    # Konverterer listen af strings til floats og derefter til et numpy array
-    numpy_array = np.array([float(i[:-1]) for i in string_list])
-    return numpy_array
-
-
-def plot_x_individuals(surv, phase_plot,x_individuals=5):
-    surv.iloc[:, :x_individuals].plot(drawstyle='steps-post')
-    plt.ylabel('S(t | x)')
-    _ = plt.xlabel('Time')
-    plt.show()
-    plt.savefig(os.path.join(phase_plot, "survival_curves.png"))
-    plt.close()
-
-
-def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=365):
-    from miacag.model_utils.predict_utils import predict_surv_df
-    survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
-    survival_estimates = survival_estimates.reset_index()
-    # merge two pandas dataframes
-    survival_estimates = pd.merge(survival_estimates, df_target, on=config_task['labels_names'][0], how='inner')
-    surv_preds_observed = pd.DataFrame({i: survival_estimates.loc[i, i] for i in survival_estimates.index}, index=[0])
-    survival_ests = survival_estimates.set_index(config_task['labels_names'][0])
-    
-
-    # Get the first index less than the threshold
-    selected_index = survival_ests.index[survival_ests.index < threshold][-1]
-    # probability at threshold 6000
-    yprobs = survival_ests.loc[selected_index][0:len(surv_preds_observed.columns)]
-    ytest = (survival_estimates[config_task['labels_names'][0]] >threshold).astype(int)
-    from miacag.plots.plot_utils import compute_bootstrapped_scores, compute_mean_lower_upper
-    bootstrapped_auc = compute_bootstrapped_scores(yprobs, ytest, 'roc_auc_score')
-    mean_auc, upper_auc, lower_auc = compute_mean_lower_upper(bootstrapped_auc)
-    variable_dict = {
-        k: v for k, v in locals().items() if k in [
-            "mean_auc", "upper_auc", "lower_auc",
-            "yprobs", "ytest"]}
-    return variable_dict
-
-def plot_scores(out_dict, ouput_path):
-
-    mean_brier = out_dict["mean_brier"]
-    uper_brier = out_dict["upper_brier"]
-    ower_brier = out_dict["lower_brier"]
-    mean_conc = out_dict["mean_conc"]
-    uper_conc = out_dict["upper_conc"]
-    ower_conc = out_dict["lower_conc"]
-    plt.figure()
-    plt.plot(out_dict['brier_scores'].index, 
-                out_dict['brier_scores'].values, 
-            label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})\nC-index={mean_conc:.3f} ({ower_conc:.3f}-{uper_conc:.3f})")
-    # add x label
-    plt.xlabel('Time (days)')
-    # add y label
-    plt.ylabel('Brier score')
-    # add legend
-    plt.legend(loc='lower right')
-    plt.show()
-    plt.savefig(os.path.join(ouput_path, "brier_conc_scores.png"))
-    plt.close()
-    
-    plt.figure()
-    plt.plot(out_dict['brier_scores'].index, 
-                out_dict['brier_scores'].values, 
-            label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})")
-    # add x label
-    plt.xlabel('Time (days)')
-    # add y label
-    plt.ylabel('Brier score')
-    # add legend
-    plt.legend(loc='lower right')
-    plt.show()
-    plt.savefig(os.path.join(ouput_path, "brier_scores.png"))
-    plt.close()
+        if config_task['feature_importance']:
+            return low_risk_df, high_risk_df
+        else:
+            return None, None
 
 def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                           output_plots_val, output_plots_test, output_plots_test_large, conf):
@@ -781,7 +733,7 @@ def plot_regression_tasks(config_task, output_table_name, output_plots_train,
         plots = [output_plots_train, output_plots_val,
                  output_plots_test,]
                  #output_plots_test_large]
-        plots = [output_plots_train]
+        plots = [output_plots_test]
                # config_task['query_test_large_plot']]
     for idx, query in enumerate(queries):
         if conf[0].startswith(('sten', 'ffr')):

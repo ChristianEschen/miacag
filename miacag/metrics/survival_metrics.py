@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import numba
 import scipy
+import torch.distributed
+import torch.distributed
 from miacag.model_utils.predict_utils import predict_surv_df
 from miacag.plots.plot_utils import compute_mean_lower_upper
 from sksurv.metrics import concordance_index_censored
@@ -15,9 +17,300 @@ from matplotlib.ticker import MaxNLocator
 matplotlib.use('Agg')
 import os
 import torch
+from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import impute_data, z_score_normalize, val_monai_classification_loader
+from miacag.model_utils.grad_cam_utils import calc_saliency_maps, prepare_cv2_img
+from miacag.dataloader.get_dataloader import get_data_from_loader, convert_numpy_to_torch
+from miacag.trainer import get_device
+from miacag.models.BuildModel import ModelBuilder
+from miacag.models.modules import get_loss_names_groups
+def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, cuts, path_name='high_risk'):
+    for i in range(0, len(df_group)):
+        torch.cuda.empty_cache()
+        df_i = df_group.iloc[i].to_frame().transpose()
+        df_i = df_i.to_dict('records')
+        data = transforms(df_i)
+        data = data[0]
+        # fisrt convert to tennsor in dict
+        data = convert_numpy_to_torch(data)
+        data["event"] = torch.tensor(data["event"]).unsqueeze(0)
+        data['inputs'] = torch.tensor(data['inputs']).unsqueeze(0)
+        data["duration_transformed"] = torch.tensor(data["duration_transformed"]).unsqueeze(0)
+        for field in config_task['loaders']['tabular_data_names']:
+            data[field] = torch.tensor(data[field]).unsqueeze(0)
+          #  data['tabular_data'] = torch.cat([data[i].float().unsqueeze(1) for i in config['loaders']['tabular_data_names']], dim=1)
+        data = get_data_from_loader(data, config_task, device)
+
+      #  data = to_device(data, device, ['tabular_data'])
+        cam = calc_saliency_maps(
+                model, data['inputs'], data['tabular_data'], config_task, device, 1)
+        data_path = df_i[0]["DcmPathFlatten"]
+        patientID = df_i[0]['PatientID']
+        studyInstanceUID = df_i[0]["StudyInstanceUID"]
+        seriesInstanceUID = df_i[0]['SeriesInstanceUID']
+        SOPInstanceUID = df_i[0]['SOPInstanceUID']
+
+ 
+
+        prepare_cv2_img(
+            data['inputs'].cpu().numpy(),
+            'duration', # label_name,
+            cam,
+            data_path,
+            path_name,
+            patientID,
+            studyInstanceUID,
+            seriesInstanceUID,
+            SOPInstanceUID,
+            config_task,
+            phase_plot)
+      #  scores = feature_importance(model, data['inputs'], data['tabular_data'], data["duration_transformed"], data['event'], cuts, config_task)
+
+def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
+    surv_np = surv.to_numpy()
+    df_target = impute_data(df_target, config_task)
+    df_target = z_score_normalize(df_target, config_task)
+    
+    df_target = df_target.reset_index(drop=True)
+    event_1_indices = df_target[df_target["event"] == 1].index
+    event_0_indices = df_target[df_target["event"] == 0].index
+
+    # Separate the target dataframes
+    df_event_1 = df_target.loc[event_1_indices]
+    df_event_0 = df_target.loc[event_0_indices]
+
+    # Get the survival data for each event group
+    surv_event_1 = surv_np[:, event_1_indices]
+    surv_event_0 = surv_np[:, event_0_indices]
+
+    # Compute sum_of_death for each group
+    sum_of_death_event_1 = np.sum(surv_event_1, axis=0)
+    sum_of_death_event_0 = np.sum(surv_event_0, axis=0)
+
+    # Find top 5 high-risk and low-risk indices for event = 1
+    top_5_indices_event_1 = np.argsort(sum_of_death_event_1)[:2]
+    top_5_low_risk_indices_event_1 = np.argsort(sum_of_death_event_1)[-2:]
+
+    df_high_risk_event_1 = df_event_1.iloc[top_5_indices_event_1]
+    df_low_risk_event_1 = df_event_1.iloc[top_5_low_risk_indices_event_1]
+
+    # Find top 5 high-risk and low-risk indices for event = 0
+    top_5_indices_event_0 = np.argsort(sum_of_death_event_0)[:2]
+    top_5_low_risk_indices_event_0 = np.argsort(sum_of_death_event_0)[-2:]
+
+    df_high_risk_event_0 = df_event_0.iloc[top_5_indices_event_0]
+    df_low_risk_event_0 = df_event_0.iloc[top_5_low_risk_indices_event_0]
+
+    # Combine the results
+    df_high_risk = pd.concat([df_high_risk_event_1, df_high_risk_event_0])
+    df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
+
+
+    config=config_task
+    config_task['loaders']['mode'] = 'training'
+    config=config_task
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+            config['loss']['group_idx'], config['groups_weights'] \
+            = get_loss_names_groups(config)
+
+    config_task['loaders']['val_method']['saliency'] = True
+
+    # get top 5 patients with highest risk
+   # os.environ['LOCAL_RANK'] = "1"
+    device = get_device(config_task)
+    BuildModel = ModelBuilder(config_task, device)
+    model = BuildModel()
+    # model = torch.nn.parallel.DistributedDataParallel(
+    #         model,
+    #         device_ids=[device] if config["cpu"] == "False" else None)
+    df_test = val_monai_classification_loader(df_high_risk, config_task)
+    transforms = df_test.tansformations()
+  #  with torch.no_grad():
+    model.eval()
+    get_grad_cams(df_high_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
+   # del df_test
+    df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
+
+    df_test = val_monai_classification_loader(df_low_risk, config_task)
+    transforms = df_test.tansformations()
+    get_grad_cams(df_low_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
+    config_task['loaders']['mode'] = 'testing'
+
+
+    return None
+
+def get_high_low_risk_from_df(cuts, df_target, preds):
+    surv = predict_surv(preds, cuts)
+    low_risk_idx, high_risk_idx = get_high_risk_low_risk(np.array(surv))
+    df_high_risk = df_target.iloc[high_risk_idx]
+    df_low_risk = df_target.iloc[low_risk_idx]
+    return df_high_risk, df_low_risk
+    
+def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
+
+    
+    #  surv =  pd.DataFrame(preds.transpose(), cuts)
+
+    surv = predict_surv(preds, cuts)
+    
+    # get saliency maps:
+    
+    if not agg:
+        get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
+        
+    plot_x_individuals(surv, phase_plot,x_individuals=5)
+    #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
+    out_dict = confidences_upper_lower_survival_discrete(surv,
+                                                            np.array(df_target[config_task['labels_names'][0]]),
+                                                            np.array(df_target['event']),
+                                                            config_task)
+
+    plot_scores(out_dict, phase_plot)
+def predict_surv(logits, duration_index):
+    logits = torch.tensor(logits)
+    hazard = torch.nn.Sigmoid()(logits)
+    surv = (1 - hazard).add(1e-7).log().cumsum(1).exp()
+    surv_np = surv.numpy()
+    surv = pd.DataFrame(surv_np.transpose(), duration_index)
+    new_index = np.linspace(surv.index.min(), surv.index.max(), len(duration_index)*10)
+
+    # Interpolate DataFrame to new index
+    surv = surv.reindex(surv.index.union(new_index)).interpolate('index').loc[new_index]
+
+    return surv
+
+
+def convert_cuts_np(cuts):
+    string_list = cuts.strip('[]').split()
+
+    # Konverterer listen af strings til floats og derefter til et numpy array
+    numpy_array = np.array([float(i[:-1]) for i in string_list])
+    return numpy_array
+
+
+def get_high_risk_low_risk(surv_np):
+
+    # Determine the number of patients
+    num_patients = surv_np.shape[1]
+
+    # Split into low risk (first 50%) and high risk (second 50%)
+    sum_of_death = np.sum(surv_np, axis=0)
+    # select index based on > 50% quantile
+    midpoint = np.quantile(sum_of_death, 0.5)
+    # select all indices less than midpoint
+
+    low_risk_indices =  np.where(sum_of_death >= midpoint)[0]
+    high_risk_indices =  np.where(sum_of_death < midpoint)[0]
+    return low_risk_indices, high_risk_indices
+
+def plot_low_risk_high_risk(surv, phase_plot):
+    surv_np = surv.to_numpy()
+    low_risk_indices, high_risk_indices = get_high_risk_low_risk(surv)
+    # Extract survival probabilities for high risk and low risk groups
+    low_risk_surv = surv_np[:, low_risk_indices]
+    high_risk_surv = surv_np[:, high_risk_indices]
+
+    # Calculate mean survival probabilities for plotting
+    low_risk_mean_surv = np.mean(low_risk_surv, axis=1)
+    high_risk_mean_surv = np.mean(high_risk_surv, axis=1)
+
+    # Calculate standard error and confidence intervals
+    low_risk_std_err = np.std(low_risk_surv, axis=1, ddof=1) / np.sqrt(low_risk_surv.shape[1])
+    high_risk_std_err = np.std(high_risk_surv, axis=1, ddof=1) / np.sqrt(high_risk_surv.shape[1])
+
+    low_risk_ci_upper = low_risk_mean_surv + 1.96 * low_risk_std_err
+    low_risk_ci_lower = low_risk_mean_surv - 1.96 * low_risk_std_err
+    high_risk_ci_upper = high_risk_mean_surv + 1.96 * high_risk_std_err
+    high_risk_ci_lower = high_risk_mean_surv - 1.96 * high_risk_std_err
+
+    # Plot the survival curves with confidence intervals
+    plt.figure(figsize=(10, 6))
+    plt.plot(surv.index, low_risk_mean_surv, label='Low Risk', color='b')
+    plt.fill_between(surv.index, low_risk_ci_lower, low_risk_ci_upper, color='b', alpha=0.3)
+    plt.plot(surv.index, high_risk_mean_surv, label='High Risk', color='r')
+    plt.fill_between(surv.index, high_risk_ci_lower, high_risk_ci_upper, color='r', alpha=0.3)
+    plt.xlabel('Time')
+    plt.ylabel('Survival Probability')
+    plt.title('Survival Curves for High Risk vs Low Risk Patients')
+    plt.legend()
+    plt.show()
+    plt.savefig(os.path.join(phase_plot, "survival_curves_strat.png"))
+    plt.close()
 
 
 
+
+def plot_x_individuals(surv, phase_plot,x_individuals=5):
+    low_risk = range(0, int(np.round(surv.shape[1]/2)))
+    
+    surv.iloc[:, :x_individuals].plot(drawstyle='steps-post')
+    plt.ylabel('S(t | x)')
+    _ = plt.xlabel('Time')
+    plt.show()
+    plt.savefig(os.path.join(phase_plot, "survival_curves.png"))
+    plt.close()
+
+
+def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, threshold=365):
+    from miacag.model_utils.predict_utils import predict_surv_df
+    survival_estimates = predict_surv_df(df_target, base_haz, bch, config_task)
+    survival_estimates = survival_estimates.reset_index()
+    # merge two pandas dataframes
+    survival_estimates = pd.merge(survival_estimates, df_target, on=config_task['labels_names'][0], how='inner')
+    surv_preds_observed = pd.DataFrame({i: survival_estimates.loc[i, i] for i in survival_estimates.index}, index=[0])
+    survival_ests = survival_estimates.set_index(config_task['labels_names'][0])
+    
+
+    # Get the first index less than the threshold
+    selected_index = survival_ests.index[survival_ests.index < threshold][-1]
+    # probability at threshold 6000
+    yprobs = survival_ests.loc[selected_index][0:len(surv_preds_observed.columns)]
+    ytest = (survival_estimates[config_task['labels_names'][0]] >threshold).astype(int)
+    from miacag.plots.plot_utils import compute_bootstrapped_scores, compute_mean_lower_upper
+    bootstrapped_auc = compute_bootstrapped_scores(yprobs, ytest, 'roc_auc_score')
+    mean_auc, upper_auc, lower_auc = compute_mean_lower_upper(bootstrapped_auc)
+    variable_dict = {
+        k: v for k, v in locals().items() if k in [
+            "mean_auc", "upper_auc", "lower_auc",
+            "yprobs", "ytest"]}
+    return variable_dict
+
+def plot_scores(out_dict, ouput_path):
+
+    mean_brier = out_dict["mean_brier"]
+    uper_brier = out_dict["upper_brier"]
+    ower_brier = out_dict["lower_brier"]
+    mean_conc = out_dict["mean_conc"]
+    uper_conc = out_dict["upper_conc"]
+    ower_conc = out_dict["lower_conc"]
+    plt.figure()
+    plt.plot(out_dict['brier_scores'].index, 
+                out_dict['brier_scores'].values, 
+            label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})\nC-index={mean_conc:.3f} ({ower_conc:.3f}-{uper_conc:.3f})")
+    # add x label
+    plt.xlabel('Time (days)')
+    # add y label
+    plt.ylabel('Brier score')
+    # add legend
+    plt.legend(loc='lower right')
+    plt.show()
+    plt.savefig(os.path.join(ouput_path, "brier_conc_scores.png"))
+    plt.close()
+    
+    plt.figure()
+    plt.plot(out_dict['brier_scores'].index, 
+                out_dict['brier_scores'].values, 
+            label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})")
+    # add x label
+    plt.xlabel('Time (days)')
+    # add y label
+    plt.ylabel('Brier score')
+    # add legend
+    plt.legend(loc='lower right')
+    plt.show()
+    plt.savefig(os.path.join(ouput_path, "brier_scores.png"))
+    plt.close()
+    
+    
 def idx_at_times(index_surv, times, steps='pre', assert_sorted=True):
     """Gives index of `index_surv` corresponding to `time`, i.e. 
     `index_surv[idx_at_times(index_surv, times)]` give the values of `index_surv`
@@ -564,7 +857,7 @@ def compute_brier_discrete(surv, duration, event, config_task):
 
     ev = EvalSurv(surv, duration, event, censor_surv='km')
     
-    #concordance = ev.concordance_td()
+    #concordance = ev.concordance_td()s
 
 
     brier_scores = ev.brier_score(time_grid)
@@ -707,3 +1000,208 @@ def plot_auc_surv(variable_dict_1_year, variable_dict_5_year, output_plots):
     plt.savefig(os.path.join(
         output_plots, 'survival_1_5_year'  + '.pdf'), dpi=100,
                 bbox_inches='tight')
+
+
+
+
+def permute_feature(tabular_data, feature_index):
+    permuted_data = tabular_data.clone()
+    permuted_data = tabular_data.flatten()[torch.randperm(permuted_data.numel(), device='cuda:0')].view(permuted_data.size())
+    return permuted_data
+
+
+def compute_feature_importance(config, df_low_risk, df_high_risk):
+
+    import torch
+    from miacag.dataloader.get_dataloader import get_dataloader_test
+    from miacag.configs.options import TestOptions
+    from miacag.metrics.metrics_utils import init_metrics, normalize_metrics
+    from miacag.model_utils.get_loss_func import get_loss_func
+    from miacag.model_utils.get_test_pipeline import TestPipeline
+    from miacag.configs.config import load_config
+    from miacag.trainer import get_device
+    from miacag.models.BuildModel import ModelBuilder
+    import gc
+    import os
+    from miacag.model_utils.train_utils import set_random_seeds
+    from miacag.models.modules import get_loss_names_groups
+
+    torch.cuda.empty_cache()
+    config['loaders']['val_method']['saliency'] = False
+    config['feature_importance'] = True
+    config['loaders']['mode'] = 'training'
+    config['loaders']['val_method']["samples"] = 1
+    config['loaders']['batchSize'] = 1
+    if config["task_type"] == "mil_classification":
+        config['loaders']['val_method']["samples"] = 1
+
+    set_random_seeds(random_seed=config['manual_seed'])
+    device = get_device(config)
+    def initialize_model(config, device):
+        BuildModel = ModelBuilder(config, device)
+        model = BuildModel()
+        if config['use_DDP'] == 'True':
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[device] if config["cpu"] == "False" else None)
+        return model
+    if config["cpu"] == "False":
+        torch.cuda.set_device(device)
+        torch.backends.cudnn.benchmark = True
+    model = initialize_model(config, device)
+
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+        config['loss']['group_idx'], config['groups_weights'] \
+        = get_loss_names_groups(config)
+
+
+
+    def execute_pipeline(model, df_risk, output_label):
+        test_loader = get_dataloader_test(config)
+        criterion = get_loss_func(config)
+        config['loss']['name'] = config['loss']['name'] + ['total']
+        running_loss_test = init_metrics(config['loss']['name'], config, device, ptype='loss')
+        running_metric_test = init_metrics(config['eval_metric_val']['name'], config, device)
+        pipeline = TestPipeline()
+        pipeline.get_feature_importance_pipeline(model, criterion, config, test_loader,
+                                                 device, init_metrics, normalize_metrics,
+                                                 running_metric_test, running_loss_test, df_risk,
+                                                 output=output_label)
+        del model, test_loader, criterion, running_loss_test, running_metric_test, pipeline
+        gc.collect()
+        with torch.no_grad():
+            torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
+
+    execute_pipeline(model, df_low_risk, 'low_risk')
+    torch.distributed.barrier()
+
+    set_random_seeds(random_seed=config['manual_seed'])
+    device = get_device(config)
+
+
+    config['loss']['groups_names'], config['loss']['groups_counts'], \
+        config['loss']['group_idx'], config['groups_weights'] \
+        = get_loss_names_groups(config)
+
+    execute_pipeline(model, df_high_risk, 'high_risk')
+    config['loaders']['val_method']['saliency'] = True
+
+# def compute_feature_importance(config, df_low_risk, df_high_risk):
+
+#     import torch
+#     from miacag.dataloader.get_dataloader import get_dataloader_test
+#     from miacag.configs.options import TestOptions
+#     from miacag.metrics.metrics_utils import init_metrics, normalize_metrics
+#     from miacag.model_utils.get_loss_func import get_loss_func
+#     from miacag.model_utils.get_test_pipeline import TestPipeline
+#     from miacag.configs.config import load_config
+#     from miacag.trainer import get_device
+#     from miacag.models.BuildModel import ModelBuilder
+#     import os
+#     from miacag.model_utils.train_utils import set_random_seeds
+#     from miacag.models.modules import get_loss_names_groups
+#     torch.cuda.empty_cache()
+#     config['loaders']['val_method']['saliency'] = False
+
+#     config['loaders']['mode'] = 'testing'
+#     # if config['loaders']['val_method']['saliency'] == 'False':
+#     config['loaders']['val_method']["samples"] = 1
+#     config['loaders']['batchSize'] = 1
+#     if config["task_type"] == "mil_classification":
+#         config['loaders']['val_method']["samples"] = 1
+
+#     set_random_seeds(random_seed=config['manual_seed'])
+
+#     device = get_device(config)
+
+#     if config["cpu"] == "False":
+#         torch.cuda.set_device(device)
+#         torch.backends.cudnn.benchmark = True
+
+#     config['loss']['groups_names'], config['loss']['groups_counts'], \
+#         config['loss']['group_idx'], config['groups_weights'] \
+#         = get_loss_names_groups(config)
+#     BuildModel = ModelBuilder(config, device)
+#     model = BuildModel()
+#     if config['use_DDP'] == 'True':
+#         model = torch.nn.parallel.DistributedDataParallel(
+#             model,
+#             device_ids=[device] if config["cpu"] == "False" else None)
+#     # Get data loader
+#     test_loader = get_dataloader_test(config)
+#     # self.val_ds = val_monai_classification_loader(
+#     #                 self.val_df,
+#     #                 config)
+
+#     # Get loss func
+#     criterion = get_loss_func(config)
+#     config['loss']['name'] = config['loss']['name'] + ['total']
+#     running_loss_test = init_metrics(config['loss']['name'],
+#                                      config,
+#                                      device,
+#                                      ptype='loss')
+#     running_metric_test = init_metrics(
+#                 config['eval_metric_val']['name'],
+#                 config,
+#                 device)
+
+#     pipeline = TestPipeline()
+#     import time
+#     start = time.time()
+#     # low risk
+       
+#     pipeline.get_feature_importance_pipeline(model, criterion, config, test_loader,
+#                             device, init_metrics,
+#                             normalize_metrics,
+#                             running_metric_test, running_loss_test, df_low_risk,
+#                             output='low_risk')
+#     torch.cuda.empty_cache()
+#     torch.distributed.barrier()
+
+#     set_random_seeds(random_seed=config['manual_seed'])
+
+#     device = get_device(config)
+
+#     if config["cpu"] == "False":
+#         torch.cuda.set_device(device)
+#         torch.backends.cudnn.benchmark = True
+
+#     config['loss']['groups_names'], config['loss']['groups_counts'], \
+#         config['loss']['group_idx'], config['groups_weights'] \
+#         = get_loss_names_groups(config)
+#     BuildModel = ModelBuilder(config, device)
+#     model = BuildModel()
+#     if config['use_DDP'] == 'True':
+#         model = torch.nn.parallel.DistributedDataParallel(
+#             model,
+#             device_ids=[device] if config["cpu"] == "False" else None)
+#     # Get data loader
+#     test_loader = get_dataloader_test(config)
+#     # self.val_ds = val_monai_classification_loader(
+#     #                 self.val_df,
+#     #                 config)
+
+#     # Get loss func
+#     criterion = get_loss_func(config)
+#     config['loss']['name'] = config['loss']['name'] + ['total']
+#     running_loss_test = init_metrics(config['loss']['name'],
+#                                      config,
+#                                      device,
+#                                      ptype='loss')
+#     running_metric_test = init_metrics(
+#                 config['eval_metric_val']['name'],
+#                 config,
+#                 device)
+
+#     pipeline = TestPipeline()
+#     import time
+#     start = time.time()
+
+#     pipeline.get_feature_importance_pipeline(model, criterion, config, test_loader,
+#                             device, init_metrics,
+#                             normalize_metrics,
+#                             running_metric_test, running_loss_test, df_high_risk,
+#                             output='high_risk')
+#     config['loaders']['val_method']['saliency'] =True
+    

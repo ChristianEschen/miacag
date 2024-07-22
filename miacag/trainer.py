@@ -15,7 +15,9 @@ import time
 import torch.distributed as dist
 from monai.utils import set_determinism
 from miacag.models.modules import get_loss_names_groups
-import gc   
+import gc
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def should_validate(last_validation_time, val_frequency=30):
     current_time = time.time()
@@ -91,36 +93,41 @@ def train(config):
         # train one epoch
         if not isinstance(config['cache_num'], int):
             train_loader.sampler.set_epoch(epoch)
+        print('pre train one epoch')
         iter_minibatch = train_one_epoch(model, criterion_train,
                         train_loader, device, epoch,
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler, iter_minibatch)
-
+        print('post train one epoch')
         if isinstance(config['cache_num'], int):
             train_ds.update_cache()
            # train_ds.set_data()
+        print('post update cache')
 
+        # # Check elapsed time since last validation
+        # if dist.get_rank() == 0:
+        #     validate_now = should_validate(last_validation_time,
+        #                                    config['trainer']['validate_frequency'])
+        # else:
+        #     validate_now = 0
 
-        # Check elapsed time since last validation
-        if dist.get_rank() == 0:
-            validate_now = should_validate(last_validation_time,
-                                           config['trainer']['validate_frequency'])
-        else:
-            validate_now = 0
+        # # Broadcast decision to all nodes
+        # validate_now = torch.tensor(validate_now).to(device)
 
-        # Broadcast decision to all nodes
-        validate_now = torch.tensor(validate_now).to(device)
-
-        dist.broadcast(validate_now, src=0)
-        validate_now = validate_now.item()  # Convert back to Python bool
+        # dist.broadcast(validate_now, src=0)
+        # validate_now = validate_now.item()  # Convert back to Python bool
 
         # validate every 10 epochs
         if not config['debugging'] == True:
+            metric_dict_val = val_one_epoch(model, criterion_val, config,
+                                                val_loader, device,
+                                                running_metric_val,
+                                                running_loss_val, writer, epoch)
             if (epoch+1) % config['trainer']['validate_frequency']== 0:
            # if epoch+1 % 10 == 0:
 
-                print('validate')
+                print('validate now')
             #if epoch == 0 or validate_now:
                 metric_dict_val = val_one_epoch(model, criterion_val, config,
                                                 val_loader, device,
@@ -139,12 +146,18 @@ def train(config):
                 last_validation_time = time.time()  # Reset last validation time
                 if early_stop is True:
                     break
+        else:
+            metric_dict_val = val_one_epoch(model, criterion_val, config,
+                                        val_loader, device,
+                                        running_metric_val,
+                                        running_loss_val, writer, epoch)
 
 
     print('Finished Training')
     if torch.distributed.get_rank() == 0:
         if config['debugging']:
             save_model(model, writer, config)
+            saver(metric_dict_val, writer, config)
         else:
             saver(metric_dict_val, writer, config)
 

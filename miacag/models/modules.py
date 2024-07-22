@@ -136,7 +136,7 @@ class ImageToScalarModel(EncoderModel):
         
         self.config = config
         if len(self.config['loaders']['tabular_data_names'])>0:
-            self.tab_feature = 64
+            self.tab_feature = self.config['model']['tabular_features']
         else:
             self.tab_feature = 0
         self.embeddings = nn.ModuleDict()
@@ -262,6 +262,9 @@ class ImageToScalarModel(EncoderModel):
         device = tabular_data.device
         mask_tensor = torch.tensor(self.num_indicator, dtype=bool, device=device)
         tabular_data = self.layer_norm_func(tabular_data[:,mask_tensor])
+        if len(embedded_features) > 0:
+            if len(embedded_features[0].shape) ==1:
+                embedded_features[0] = embedded_features[0].unsqueeze(0)
         embedded_features.append(tabular_data)
         return torch.cat(embedded_features, dim=1)
         

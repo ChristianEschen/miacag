@@ -78,13 +78,11 @@ def train_one_step(model, data, criterion,
         if (iter_minibatch + 1) % config['accum_iter'] == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-    
     outputs = wrap_outputs_to_dict(outputs, config)
     losses = create_loss_dict(config, losses, loss)
     metrics, losses_metric = get_loss_metric_class(
         config, outputs, data, losses, running_metric_train,
         running_loss_train, criterion)
-
     return outputs, losses, metrics, losses_metric
 
 
@@ -97,7 +95,6 @@ def train_one_epoch(model, criterion,
    # train_loader.dataset.data = train_loader.dataset.data*400
     for i, data in enumerate(train_loader, 0):
         iter_minibatch += 1
-
         data = get_data_from_loader(data, config, device)
       #  if epoch >= 2:
       

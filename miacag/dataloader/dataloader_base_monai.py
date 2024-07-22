@@ -419,6 +419,7 @@ class base_monai_loader(DataloaderBase):
                 keys=features,
                 subtrahend=(0.485, 0.456, 0.406),
                 divisor=(0.229, 0.224, 0.225),
+                
                 channel_wise=True)
         else:
             raise ValueError('not implemented')

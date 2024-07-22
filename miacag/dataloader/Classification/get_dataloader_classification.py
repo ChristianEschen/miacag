@@ -228,6 +228,7 @@ class DistributedWeightedRandomSampler(DistributedSampler):
         num_replicas: Optional[int] = None,
         rank: Optional[int] = None,
         shuffle: bool = True,
+        config: dict = None,
         **kwargs,
     ):
         super().__init__(
@@ -241,11 +242,18 @@ class DistributedWeightedRandomSampler(DistributedSampler):
         self.weights = weights
         self.num_samples_per_rank = num_samples_per_rank if num_samples_per_rank is not None else self.num_samples
         self.generator = generator
+        self.config = config
 
     def __iter__(self):
         indices = list(super().__iter__())
-        weights = torch.as_tensor([self.weights[i] for i in indices], dtype=torch.double)
-        # sample based on the provided weights
+        weights = torch.as_tensor([self.weights[i] for i in indices], dtype=torch.float32)
+        if self.config["cpu"] == "False":
+            device = "cuda:{}".format(os.environ['LOCAL_RANK'])
+        else:
+            device = 'cpu'
+        device = torch.device(device)
+        weights = weights.to(device)
+            # sample based on the provided weights
         rand_tensor = torch.multinomial(weights, self.num_samples_per_rank, True, generator=self.generator)
 
         for i in rand_tensor:
@@ -412,13 +420,25 @@ class ClassificationLoader():
                     even_divisible=True,
                     shuffle=True)
             elif self.config['loss']['name'][0] == 'NNL':
-#                sampler = DistributedBalancedRandomSampler(
+                # weights = [train_ds.data[i]['weights_duration_transformed'] for i in range(0, len(train_ds.data))]
+                # sampler = DistributedBalancedRandomSampler(
+                #     weights=weights,
+                #     dataset=train_ds,
+                #     even_divisible=True,
+                #     shuffle=True)
+                
+                
+                # sampler = DistributedSampler(
+                #     dataset=train_ds,
+                #     even_divisible=True,
+                #     shuffle=True)
+                weights = [train_ds.data[i]['weights'] for i in range(0, len(train_ds.data))]
                 sampler = DistributedWeightedRandomSampler(
-
                     dataset=train_ds,
                     weights=weights,
                     even_divisible=True,
-                    shuffle=True)
+                    shuffle=True,
+                    config=config)
             else:
                 raise ValueError('sampler not implemented')
         else:

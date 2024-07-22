@@ -42,7 +42,7 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
 
       #  data = to_device(data, device, ['tabular_data'])
         cam = calc_saliency_maps(
-                model, data['inputs'], data['tabular_data'], config_task, device, 1)
+                model, data['inputs'], data['tabular_data'], config_task, device, 0)
         data_path = df_i[0]["DcmPathFlatten"]
         patientID = df_i[0]['PatientID']
         studyInstanceUID = df_i[0]["StudyInstanceUID"]
@@ -50,19 +50,19 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
         SOPInstanceUID = df_i[0]['SOPInstanceUID']
 
  
-
-        prepare_cv2_img(
-            data['inputs'].cpu().numpy(),
-            'duration', # label_name,
-            cam,
-            data_path,
-            path_name,
-            patientID,
-            studyInstanceUID,
-            seriesInstanceUID,
-            SOPInstanceUID,
-            config_task,
-            phase_plot)
+        if torch.distributed.get_rank() == 0:
+            prepare_cv2_img(
+                data['inputs'].cpu().numpy(),
+                'duration', # label_name,
+                cam,
+                data_path,
+                path_name,
+                patientID,
+                studyInstanceUID,
+                seriesInstanceUID,
+                SOPInstanceUID,
+                config_task,
+                phase_plot)
       #  scores = feature_importance(model, data['inputs'], data['tabular_data'], data["duration_transformed"], data['event'], cuts, config_task)
 
 def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
@@ -117,6 +117,7 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     # get top 5 patients with highest risk
    # os.environ['LOCAL_RANK'] = "1"
     device = get_device(config_task)
+   # config_task['use_DDP'] = "False"
     BuildModel = ModelBuilder(config_task, device)
     model = BuildModel()
     # model = torch.nn.parallel.DistributedDataParallel(
@@ -157,14 +158,14 @@ def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
     if not agg:
         get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
         
-    plot_x_individuals(surv, phase_plot,x_individuals=5)
+    plot_x_individuals(surv, phase_plot,x_individuals=5, config_task=config_task)
     #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
     out_dict = confidences_upper_lower_survival_discrete(surv,
                                                             np.array(df_target[config_task['labels_names'][0]]),
                                                             np.array(df_target['event']),
                                                             config_task)
 
-    plot_scores(out_dict, phase_plot)
+    plot_scores(out_dict, phase_plot, config_task)
 def predict_surv(logits, duration_index):
     logits = torch.tensor(logits)
     hazard = torch.nn.Sigmoid()(logits)
@@ -239,12 +240,13 @@ def plot_low_risk_high_risk(surv, phase_plot):
 
 
 
-def plot_x_individuals(surv, phase_plot,x_individuals=5):
+def plot_x_individuals(surv, phase_plot,x_individuals=5, config_task=None):
     low_risk = range(0, int(np.round(surv.shape[1]/2)))
     
     surv.iloc[:, :x_individuals].plot(drawstyle='steps-post')
     plt.ylabel('S(t | x)')
     _ = plt.xlabel('Time')
+    plt.xlim(0, config_task['loss']['censur_date'])
     plt.show()
     plt.savefig(os.path.join(phase_plot, "survival_curves.png"))
     plt.close()
@@ -274,7 +276,7 @@ def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, thresho
             "yprobs", "ytest"]}
     return variable_dict
 
-def plot_scores(out_dict, ouput_path):
+def plot_scores(out_dict, ouput_path, config_task):
 
     mean_brier = out_dict["mean_brier"]
     uper_brier = out_dict["upper_brier"]
@@ -290,8 +292,11 @@ def plot_scores(out_dict, ouput_path):
     plt.xlabel('Time (days)')
     # add y label
     plt.ylabel('Brier score')
+    plt.xlim(0, config_task['loss']['censur_date'])
+
     # add legend
     plt.legend(loc='lower right')
+    
     plt.show()
     plt.savefig(os.path.join(ouput_path, "brier_conc_scores.png"))
     plt.close()
@@ -302,10 +307,13 @@ def plot_scores(out_dict, ouput_path):
             label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})")
     # add x label
     plt.xlabel('Time (days)')
+    plt.xlim(0, config_task['loss']['censur_date'])
+
     # add y label
     plt.ylabel('Brier score')
     # add legend
     plt.legend(loc='lower right')
+    
     plt.show()
     plt.savefig(os.path.join(ouput_path, "brier_scores.png"))
     plt.close()

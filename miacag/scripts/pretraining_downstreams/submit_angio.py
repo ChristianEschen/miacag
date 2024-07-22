@@ -302,13 +302,17 @@ def train_and_test(config_task):
     torch.cuda.empty_cache()
     # 5 eval model
     if not config_task['is_already_tested']:
+        # test if feature_importance key is in config_task
+        if 'feature_importance' not in config_task.keys():
+            config_task['feature_importance'] = False
+        feature_importance_copy = copy.deepcopy(config_task['feature_importance'])
         config_task['feature_importance'] = False
         print('init testing')
         test({**config_task, 'query': config_task["query_test"], 'TestSize': 1})
         torch.distributed.barrier()
 
         config_task['feature_importance'] = True
-        if config_task["feature_importance"]:
+        if feature_importance_copy:
 
             if config_task['labels_names'][0].startswith('duration'):
                 # global
@@ -333,12 +337,10 @@ def train_and_test(config_task):
                 print('init feature importance low risk')
                 test({**config_task, 'query': config_task["query_low_risk"], 'TestSize': 1, config_task['feature_importance']: True})
                 config_task['output_directory'] = ori_path
-                torch.distributed.barrier()
 
 
                 
-            else:
-                raise ValueError('feature importance not supported for this task')
+    
             torch.distributed.barrier()
 
 
@@ -370,22 +372,32 @@ def plot_task(config_task, output_table_name, conf, loss_names):
     mkFolder(output_plots_val)
     torch.distributed.barrier()
     config_task['loaders']['mode'] = 'testing'
-    if torch.distributed.get_rank() == 0:
         # plot results
-        if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+    if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+        if torch.distributed.get_rank() == 0:
+
             plot_regression_tasks(config_task, output_table_name, output_plots_train,
                                 output_plots_val, output_plots_test, output_plots_test_large, conf)
-        elif loss_names[0] in ['CE']:
+        torch.distributed.barrier()
+
+    elif loss_names[0] in ['CE']:
+        if torch.distributed.get_rank() == 0:
+
             plot_classification_tasks(config_task, output_table_name,
                                     output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
+        torch.distributed.barrier()
+
             
-        elif loss_names[0] in ['NNL']:
-            df_low_risk, df_high_risk = plot_time_to_event_tasks(config_task, output_table_name,
+    elif loss_names[0] in ['NNL']:
+        #if torch.distributed.get_rank() == 0:
+
+        df_low_risk, df_high_risk = plot_time_to_event_tasks(config_task, output_table_name,
                                     output_plots_train, output_plots_val, output_plots_test, output_plots_test_large)
-            
-        else:
-            raise ValueError("Loss not supported")
-    torch.distributed.barrier()
+        torch.distributed.barrier()
+
+        
+    else:
+        raise ValueError("Loss not supported")
     
     # if config_task['feature_importance']:
     #     if config_task['labels_names'][0].startswith('duration'):
@@ -704,14 +716,15 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
 
         
         phase_plot_agg = os.path.join(phase_plot, 'group_agg')
-        mkFolder(phase_plot_agg)
+        if torch.distributed.get_rank() == 0:
+            mkFolder(phase_plot_agg)
         for i in range(0, preds.shape[1]):
             df_target['preds_'+str(i)]= preds[:,i]
-        
-        aggregated_cols_list = ["preds_"+str(i) for i in range(0, preds.shape[1])]
-        df_agg = compute_aggregation(df_target, aggregated_cols_list, agg_type="max")
-        df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
-        surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg, agg=True)
+        if torch.distributed.get_rank() == 0:
+            aggregated_cols_list = ["preds_"+str(i) for i in range(0, preds.shape[1])]
+            df_agg = compute_aggregation(df_target, aggregated_cols_list, agg_type="max")
+            df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
+            surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg, agg=True)
 
         if config_task['feature_importance']:
             return low_risk_df, high_risk_df

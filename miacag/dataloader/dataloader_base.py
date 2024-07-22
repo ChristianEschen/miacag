@@ -68,6 +68,7 @@ class DataloaderBase(data.Dataset):
                         self.df[config['labels_names']].astype(int)
                     self.class_counts = \
                         self.df[config['labels_names']].value_counts(ascending=True).to_list()
+                 #   self.getSampler()
 
     def __len__(self):
         return self.num_samples

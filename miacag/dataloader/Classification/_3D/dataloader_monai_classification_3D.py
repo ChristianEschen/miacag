@@ -57,6 +57,8 @@ import random
 import pandas as pd
 import torch
 import yaml
+from sklearn.impute import SimpleImputer
+import pickle
 # import matplotlib
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
@@ -296,23 +298,33 @@ class train_monai_classification_loader(base_monai_loader):
 
             self.weights = _get_weights_classification(self.df, labels_to_weight , config)
           #  self.weights_cat = self._compute_weights(self.df, config)
-
+            #self.df[w_label_names]= self.weights
+            self.df['weights'] = self.weights
+        else:
+            self.df['weights'] = 1
 
         self.data = self.df[
-            self.features + config['labels_names'] +
+            self.features + config['labels_names'] + ["weights"] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
              "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed'] +["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
-            print('before impu')
-            check_nan_after_imputation(self.data)
-            for i in config['loaders']['tabular_data_names']:
-                print('unique', self.data[i].unique())
-            self.data[config['loaders']['tabular_data_names']].isna().sum()
-            self.data = impute_data(self.data, config)
-            # use mask in list to select only the numeric columns
+            # print('before impu')
+            # check_nan_after_imputation(self.data)
+            # for i in config['loaders']['tabular_data_names']:
+            #     print('unique', self.data[i].unique())
+            # self.data[config['loaders']['tabular_data_names']].isna().sum()
+            # self.data = impute_data(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
-            self.data == z_score_normalize(self.data, num_columns)
+
+
+            self.imputer =SimpleImputer(add_indicator=True)
+            self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
+            self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+            with open(os.path.join(self.config['output'], 'imputer.pkl'),'wb') as f:
+                pickle.dump(self.imputer,f)
+            
+            self.data = z_score_normalize(self.data, num_columns)
 
         if config['labels_names'][0].startswith("sten"):
             self.data = self.data.dropna(subset=config['labels_names'])
@@ -508,6 +520,9 @@ class val_monai_classification_loader(base_monai_loader):
 
             self.weights = _get_weights_classification(self.df, labels_to_weight , config)
           #  self.weights_cat = self._compute_weights(self.df, config)
+         #   w_label_names = ["event_weights"]
+           # self.df[w_label_names[0]]= self.weights
+
 
 
         self.data = self.df[
@@ -532,22 +547,27 @@ class val_monai_classification_loader(base_monai_loader):
         
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
-            print('before impu')
-            self.data[config['loaders']['tabular_data_names']].isna().sum()
-            print('cehcl')
-            check_nan_after_imputation(self.data)   
-            self.data = impute_data(self.data, config)
+            if self.config['is_already_trained']:
+               # if self.config['is_already_tested']:
+                with open(os.path.join(os.path.dirname(self.config['base_model']), 'imputer.pkl'), 'rb') as f:
+                    self.imputer = pickle.load(f)
+            else:
+                with open(os.path.join(self.config['output'], 'imputer.pkl'), 'rb') as f:
+                    self.imputer = pickle.load(f)
+
+            self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+
+            
+          #  self.data = impute_data(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
-            self.data == z_score_normalize(self.data, num_columns)
+            self.data = z_score_normalize(self.data, num_columns)
         # if config['labels_names][0] startswith "sten_"
         if config['labels_names'][0].startswith("sten"):
             self.data = self.data.dropna(subset=config['labels_names'])
 
             
         
-        print('after impu')
         self.data[config['loaders']['tabular_data_names']].isna().sum()
-        print('check')
         check_nan_after_imputation(self.data)
         
         self.data = self.data.to_dict('records')

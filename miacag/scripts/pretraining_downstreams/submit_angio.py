@@ -707,9 +707,10 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
             with open(os.path.join(config_task['base_model'], 'config.yaml'), 'r') as stream:
                 data_loaded = yaml.safe_load(stream)
             cuts = data_loaded['cuts']
-        from miacag.metrics.survival_metrics import surv_plot, get_high_low_risk_from_df
-        if config_task['feature_importance']:
-            low_risk_df, high_risk_df = get_high_low_risk_from_df(cuts, df_target, preds)
+        from miacag.metrics.survival_metrics import surv_plot, get_high_low_risk_from_df, plot_low_risk_high_risk, get_high_low_risk_from_df_plots
+        #if config_task['feature_importance']:
+      ##  low_risk_df, high_risk_df = get_high_low_risk_from_df(cuts, df_target, preds)
+        get_high_low_risk_from_df_plots(cuts, df_target, preds, phase_plot, config_task)
            # return low_risk_df, high_risk_df
         surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False)
         
@@ -726,10 +727,10 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
             df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
             surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg, agg=True)
 
-        if config_task['feature_importance']:
-            return low_risk_df, high_risk_df
-        else:
-            return None, None
+        # if config_task['feature_importance']:
+        #     return low_risk_df, high_risk_df
+        # else:
+        return None, None
 
 def plot_regression_tasks(config_task, output_table_name, output_plots_train,
                           output_plots_val, output_plots_test, output_plots_test_large, conf):

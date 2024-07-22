@@ -38,16 +38,25 @@ class ModelBuilder():
         return model
 
     def get_mayby_DDP(self, model):
+     #   if self.config['loaders']['val_method']['saliency'] == True:
+            
         model.to(self.device)
         if self.config["cpu"] == "False":
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     #if config['cpu'] == "False":
         if self.config['use_DDP'] == 'True':
-            model = torch.nn.parallel.DistributedDataParallel(
-                    model,
-                    device_ids=[self.device] if self.config["cpu"] == "False" else None,
-                    output_device=int(os.environ['LOCAL_RANK']) if self.config["cpu"] == "False" else None,
-                    find_unused_parameters=True)
+            if self.config['loaders']['val_method']['saliency'] == True:
+                model = torch.nn.parallel.DistributedDataParallel(
+                        model,
+                        device_ids=[self.device] if self.config["cpu"] == "False" else None,
+                        output_device=0 if self.config["cpu"] == "False" else None,
+                        find_unused_parameters=True)
+            else:
+                model = torch.nn.parallel.DistributedDataParallel(
+                        model,
+                        device_ids=[self.device] if self.config["cpu"] == "False" else None,
+                        output_device=int(os.environ['LOCAL_RANK']) if self.config["cpu"] == "False" else None,
+                        find_unused_parameters=True)
                     #find_unused_parameters=True if self.config['loaders']['val_method']['saliency'] == "True" else False)
         return model
 

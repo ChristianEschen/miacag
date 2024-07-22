@@ -187,7 +187,7 @@ def show_cam_on_image(img, mask):
 
 def calc_saliency_maps(model, inputs, tabular_data, config, device, c):
     if config['model']['backbone'] == 'r2plus1_18':
-        layer_name = 'module.encoder.4.1.relu'
+        layer_name = 'model.module.encoder.4.1.relu'
     elif config['model']['backbone'] == 'x3d_s':
         layer_name = 'module.encoder.5.post_conv'
         layer_name = 'module.encoder.4.res_blocks.6.activation'

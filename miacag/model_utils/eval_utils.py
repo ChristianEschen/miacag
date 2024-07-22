@@ -144,7 +144,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
 
             if config['loaders']['mode'] == 'testing':
                 # list comprehension on the dict outputs
-                print('outputs testing', outputs)
+               # print('outputs testing', outputs)
                 outputs_i_i = []
                 for o_idx in range(0, len(data['rowid'])):
                     outputs_i = {key: value.cpu().numpy().tolist()[o_idx]

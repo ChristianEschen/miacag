@@ -99,11 +99,9 @@ def train(config):
                         optimizer, lr_scheduler,
                         running_metric_train, running_loss_train,
                         writer, config, scaler, iter_minibatch)
-        print('post train one epoch')
         if isinstance(config['cache_num'], int):
             train_ds.update_cache()
            # train_ds.set_data()
-        print('post update cache')
 
         # # Check elapsed time since last validation
         # if dist.get_rank() == 0:
@@ -120,10 +118,6 @@ def train(config):
 
         # validate every 10 epochs
         if not config['debugging'] == True:
-            metric_dict_val = val_one_epoch(model, criterion_val, config,
-                                                val_loader, device,
-                                                running_metric_val,
-                                                running_loss_val, writer, epoch)
             if (epoch+1) % config['trainer']['validate_frequency']== 0:
            # if epoch+1 % 10 == 0:
 
@@ -147,10 +141,11 @@ def train(config):
                 if early_stop is True:
                     break
         else:
-            metric_dict_val = val_one_epoch(model, criterion_val, config,
-                                        val_loader, device,
-                                        running_metric_val,
-                                        running_loss_val, writer, epoch)
+            if epoch == config['trainer']['epochs']-1:
+                metric_dict_val = val_one_epoch(model, criterion_val, config,
+                                            val_loader, device,
+                                            running_metric_val,
+                                            running_loss_val, writer, epoch)
 
 
     print('Finished Training')

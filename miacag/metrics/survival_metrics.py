@@ -104,6 +104,9 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     df_high_risk = pd.concat([df_high_risk_event_1, df_high_risk_event_0])
     df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
 
+    print('df high risk init', df_high_risk[['event', 'duration_transformed']])
+
+    print('df low risk init', df_low_risk[['event', 'duration_transformed']])
 
     config=config_task
     config_task['loaders']['mode'] = 'training'
@@ -125,13 +128,25 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     #         device_ids=[device] if config["cpu"] == "False" else None)
     df_test = val_monai_classification_loader(df_high_risk, config_task)
     transforms = df_test.tansformations()
+
+    print('df test event', df_test.df[['event', 'duration_transformed']])
+    print('df high risk', df_high_risk[['event', 'duration_transformed']])
+
   #  with torch.no_grad():
     model.eval()
     get_grad_cams(df_high_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
    # del df_test
+   
+   
     df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
-
+    print('df high risk', df_high_risk[['event', 'duration_transformed']])
+    print('df test', df_test.df[['event', 'duration_transformed']])
+    
     df_test = val_monai_classification_loader(df_low_risk, config_task)
+    print('df high risk post', df_high_risk[['event', 'duration_transformed']])
+    print('df test post', df_test.df[['event', 'duration_transformed']])
+    
+
     transforms = df_test.tansformations()
     get_grad_cams(df_low_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
     config_task['loaders']['mode'] = 'testing'
@@ -145,6 +160,17 @@ def get_high_low_risk_from_df(cuts, df_target, preds):
     df_high_risk = df_target.iloc[high_risk_idx]
     df_low_risk = df_target.iloc[low_risk_idx]
     return df_high_risk, df_low_risk
+
+def get_high_low_risk_from_df_plots(cuts, df_target, preds, phase_plot, config_task):
+    surv = predict_surv(preds, cuts)
+    plot_low_risk_high_risk(surv, phase_plot)
+    # low_risk_idx, high_risk_idx = get_high_risk_low_risk(np.array(surv))
+    # df_high_risk = df_target.iloc[high_risk_idx]
+    # df_low_risk = df_target.iloc[low_risk_idx]
+    # low_risk_path = 
+    # plot_low_risk_high_risk(surv[low_risk_idx], phase_plot,"low_risk"))
+    # plot_low_risk_high_risk(surv[high_risk_idx], os.path.join(phase_plot, "high_risk"))
+    return None # df_high_risk, df_low_risk
     
 def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
 
@@ -154,16 +180,17 @@ def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
     surv = predict_surv(preds, cuts)
     
     # get saliency maps:
-    
-    if not agg:
-        get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
-        
+
+
     plot_x_individuals(surv, phase_plot,x_individuals=5, config_task=config_task)
     #  out_dict = confidences_upper_lower_survival(df_target, base_haz, bch, config_task)
     out_dict = confidences_upper_lower_survival_discrete(surv,
                                                             np.array(df_target[config_task['labels_names'][0]]),
                                                             np.array(df_target['event']),
                                                             config_task)
+    if not agg:
+        get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
+        
 
     plot_scores(out_dict, phase_plot, config_task)
 def predict_surv(logits, duration_index):

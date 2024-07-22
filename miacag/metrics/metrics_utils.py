@@ -133,7 +133,7 @@ def init_metrics(metrics, config, device, ptype=None):
             dicts[metrics[i]] = CumulativeAverage()
         elif metrics[i].startswith('acc_top_1'):
             dicts[metrics[i]] = ConfusionMatrixMetric(
-                metric_name='accuracy', reduction="mean",
+                metric_name='f1 score', reduction="mean",
                 include_background=False)
         elif metrics[i].startswith('NNL'):
             dicts[metrics[i]] = CumulativeAverage()
@@ -198,10 +198,15 @@ def get_metrics(outputs,
                         metrics_dicts[metric] = metrics[metric]
                     else:
                         post_trans = Compose(
+
                             [EnsureType(),
                              Activations(softmax=True),
-                             AsDiscrete(treshold=0.5)] #argmax=True)]
-                            )
+                            AsDiscrete(
+                            argmax=True, to_onehot=config['model']['num_classes'][0]),
+                        ])
+                            
+                        
+
                         outputs = [post_trans(i) for i in decollate_batch(outputs)]
                         metrics[metric](y_pred=outputs, y=labels)
                         metrics_dicts[metric] = metrics[metric]

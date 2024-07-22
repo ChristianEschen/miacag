@@ -250,7 +250,7 @@ def get_encoder(config, device):
         model.head =torch.nn.Identity()
         
     elif config['model']['backbone'] == 'swin_tiny':
-        model = nets.torchvision_fc.models.video.swin3d_s()
+        model = nets.torchvision_fc.models.video.swin3d_t()
         in_features = model.norm.normalized_shape[0]
 
      #   model.avgpool = Identity()

@@ -48,6 +48,8 @@ def train_one_step(model, data, criterion,
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
             if config['loaders']['tabular_data_names'] == []:
                 data['tabular_data'] = None
+            if config['loaders']['only_tabular']:
+                data['inputs'] = None
             outputs = model(data['inputs'], data['tabular_data'])
             losses, loss = get_losses_class(config,
                                             outputs,

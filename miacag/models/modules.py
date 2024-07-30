@@ -156,10 +156,15 @@ class ImageToScalarModel(EncoderModel):
                 nn.LayerNorm(self.total_tab_features),
                 
                 nn.Linear(self.total_tab_features, self.tab_feature),
+                nn.Dropout(0.2),
                 nn.ReLU(),
+                nn.LayerNorm(self.tab_feature),
                 nn.Linear(self.tab_feature, self.tab_feature),
+                nn.Dropout(0.2),
                 nn.ReLU(),
+                nn.LayerNorm(self.tab_feature),
                 nn.Linear(self.tab_feature, self.tab_feature),
+                nn.Dropout(0.2),
                 nn.LayerNorm(self.tab_feature)
               #  nn.LayerNorm((self.config['loaders']['batchSize'],self.tab_feature)),
 
@@ -317,7 +322,7 @@ class ImageToScalarModel(EncoderModel):
             encode_num_and_cat_feat = self.tabular_forward(tabular_data)
             tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
             if self.config['loaders']['mode'] == 'testing':
-                tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
+                tabular_features = torch.cat([tabular_features] * 1, dim=0)
             p = tabular_features
             ps = []
             for fc in self.fcs:

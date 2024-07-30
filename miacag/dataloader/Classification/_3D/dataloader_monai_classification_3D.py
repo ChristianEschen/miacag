@@ -91,6 +91,25 @@ def impute_data(df, config):
             print(f"Warning: {col_name} not found in DataFrame")
     
     return df
+
+
+def impute_missing(df, config):
+    # Extract the configuration details
+    column_names = config['loaders']['tabular_data_names']
+    column_types = config['loaders']['tabular_data_names_one_hot']  # 0: numeric, 1: categorical
+    
+    # Iterate over the columns and their types
+    for col_name, col_type in zip(column_names, column_types):
+        if col_name in df.columns:
+            # if col_type == 0:  # Numeric
+            #     median_value = df[col_name].median()
+            #     df[col_name].fillna(median_value, inplace=True)
+            if col_type == 1:  # Categorical
+                df[col_name].fillna('Ukendt', inplace=True)
+        else:
+            print(f"Warning: {col_name} not found in DataFrame")
+    
+    return df
 def check_nan_after_imputation(df):
     if df.isnull().any().any():
         print("NaNs remain in the following columns:", df.columns[df.isnull().any()])
@@ -208,7 +227,6 @@ def generate_weights_for_single_label(df, config):
     if config['labels_names'][0].startswith('koronar') or config['labels_names'][0].startswith('treatment') or config['labels_names'][0].startswith('labels_'):
         # generate random values for labels with number of classes specificed by:
         num_classes = len(config['labels_dict']) - 1
-        #generate values covering every labels with number of classes (num_classes)
       #  labels_debug = generate_debug_label(len(df), num_classes)
         # insert to df with labels_names
      #   df[config['labels_names'][0]] = labels_debug
@@ -227,7 +245,54 @@ def generate_weights_for_single_label(df, config):
         ValueError('labels_names not recognized')
     return df, labels_to_weight
     
+
+def add_misisng_indicator_column_names(df, imputer, config, phase='train'):
+    tabular_feature_missing_indicator = imputer.indicator_.features_
+    missing_names = []
+    is_categorical = []
+    uniques_if_categorical = []
+    for i in range(0, len(config['loaders']['tabular_data_names'])):
+        for tab_indic in tabular_feature_missing_indicator:
+            if i == tab_indic:
+                if config['loaders']['tabular_data_names_one_hot'][i] == 1:
+                    is_categorical.append(1)
+                else:
+                    is_categorical.append(0)
+                missing_names.append(config['loaders']['tabular_data_names'][i] +'_missing')
+        if config['loaders']['tabular_data_names_one_hot'][i] == 1:
+            uniques_if_categorical.append(len(df[config['loaders']['tabular_data_names'][i]].unique()))
+        else:
+            uniques_if_categorical.append(0)
+    if phase == 'train':
+        new_columns_nr = len(missing_names)
+        config['loaders']['new_columns_nr'] = len(config['loaders']['tabular_data_names'])
+        config['loaders']['new_data_names'] = [0]*len(config['loaders']['tabular_data_names']) + [1]*new_columns_nr
+    else:
+        config['loaders']['tabular_data_names'] = config['loaders']['tabular_data_names'][0:config['loaders']['new_columns_nr']]
+    #if 
+
+    imputed_missing_cols = imputer.transform(df[config['loaders']['tabular_data_names']])
     
+    imputed_missing_cols_names = config['loaders']['tabular_data_names'] + missing_names
+
+    for count, miss_name in enumerate(imputed_missing_cols_names):
+        df[miss_name] = imputed_missing_cols[:, count]
+    
+    # update config
+    if phase == 'train':
+        
+        config['loaders']['tabular_data_names'] = imputed_missing_cols_names
+        config['loaders']['tabular_data_names_one_hot'] = config['loaders']['tabular_data_names_one_hot'] + is_categorical
+        config['loaders']['tabular_data_names_embed_dim'] = uniques_if_categorical + is_categorical
+    else:
+        config['loaders']['tabular_data_names'] = imputed_missing_cols_names
+    if config['loaders']['mode'] in ['prediction', 'testing']:
+        config['loaders']['tabular_data_names'] = imputed_missing_cols_names
+      #  config['loaders']['tabular_data_names_one_hot'] = config['loaders']['tabular_data_names_one_hot'] + is_categorical
+       # config['loaders']['tabular_data_names_embed_dim'] = uniques_if_categorical + is_categorical
+    return df, config
+
+
 class train_monai_classification_loader(base_monai_loader):
     def __init__(self, df, config):
         super(base_monai_loader, self).__init__(
@@ -306,7 +371,7 @@ class train_monai_classification_loader(base_monai_loader):
         self.data = self.df[
             self.features + config['labels_names'] + ["weights"] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
-             "StudyInstanceUID", "PatientID", 'labels_predictions', "treatment_transformed"] + ["koronarpatologi_transformed"] + event+ w_label_names + ['duration_transformed'] +["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
+             "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed'] + config['loaders']['tabular_data_names']]
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
             # print('before impu')
@@ -314,13 +379,39 @@ class train_monai_classification_loader(base_monai_loader):
             # for i in config['loaders']['tabular_data_names']:
             #     print('unique', self.data[i].unique())
             # self.data[config['loaders']['tabular_data_names']].isna().sum()
-            # self.data = impute_data(self.data, config)
+           # self.data = impute_data(self.data, config)
+            ## TODO: add indicator for missing values  
+            # self.imputer.indicator_.features_
+
+            # old
+          #  self.data = impute_missing(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
-
-
             self.imputer =SimpleImputer(add_indicator=True)
             self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
-            self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+            
+            self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='train')
+           # self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+            ####
+            
+            # new
+            num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
+
+            # # Imputer with add_indicator=True
+            # self.imputer = SimpleImputer(add_indicator=True)
+
+            # # Fit the imputer on the specified columns
+            # self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
+
+            # # Transform the data
+            # imputed_data = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+
+            # # Create a DataFrame for the imputed data
+            # imputed_columns = config['loaders']['tabular_data_names'] + [f'{col}_indicator' for col in range(0, imputed_data.shape[1]- len(config['loaders']['tabular_data_names']))]
+            # imputed_df = pd.DataFrame(imputed_data, columns=imputed_columns)
+            # self.config['n_features'] = len(imputed_columns)
+            # # Update the original DataFrame with the imputed data
+            # self.data[imputed_columns] = imputed_df
+            ####
             with open(os.path.join(self.config['output'], 'imputer.pkl'),'wb') as f:
                 pickle.dump(self.imputer,f)
             
@@ -400,9 +491,14 @@ class train_monai_classification_loader(base_monai_loader):
                 replace_rate=self.config['replace_rate'],
                 num_replace_workers=int(self.config['num_workers']/2))
         elif self.config['cache_num'] in [None, 'None', False, 'False']:
-            train_ds = monai.data.Dataset(
-                data=self.data_par_train,
-                transform=self.transformations())
+            if self.config['loaders']['only_tabular']:
+                train_ds = monai.data.Dataset(
+                    data=self.data_par_train)
+            else:
+                train_ds = monai.data.Dataset(
+                    data=self.data_par_train,
+                    transform=self.transformations())
+
         else:
             raise ValueError('Not implemented')
             # train_ds = monai.data.CacheDataset(
@@ -499,6 +595,7 @@ class val_monai_classification_loader(base_monai_loader):
 
             self.labtrans = LabTransDiscreteTime(
                 cuts=cuts,
+                scheme='quantiles',
                 #cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
                 )
             
@@ -528,7 +625,7 @@ class val_monai_classification_loader(base_monai_loader):
         self.data = self.df[
             self.features + config['labels_names'] +
             ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
-             "StudyInstanceUID", "PatientID", 'labels_predictions'] + event+ w_label_names + ['duration_transformed']+ ["PositionerPrimaryAngle", "PositionerSecondaryAngle"]]
+             "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed']+ config['loaders']['tabular_data_names']]
         ###############################################################################################333
         # OLD
      #   self.data = self.df[self.features + config['labels_names'] + ['rowid']]
@@ -547,15 +644,24 @@ class val_monai_classification_loader(base_monai_loader):
         
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
+        #    self.data = impute_missing(self.data, config)
+
             if self.config['is_already_trained']:
                # if self.config['is_already_tested']:
                 with open(os.path.join(os.path.dirname(self.config['base_model']), 'imputer.pkl'), 'rb') as f:
                     self.imputer = pickle.load(f)
             else:
+                print('imputing')
+                print('imp path', os.path.join(self.config['output'], 'imputer.pkl'))
                 with open(os.path.join(self.config['output'], 'imputer.pkl'), 'rb') as f:
+                    
                     self.imputer = pickle.load(f)
-
-            self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+                print('self impu', self.imputer)
+                
+          #  print('transforming', self.data[config['loaders']['tabular_data_names']])
+            self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='val')
+        #    self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
+            print('transformed', self.data[config['loaders']['tabular_data_names']])
 
             
           #  self.data = impute_data(self.data, config)

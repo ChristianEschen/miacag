@@ -156,8 +156,11 @@ def get_data_from_loader(data, config, device, val_phase=False):
                 data['single_clip'] = single_clip
                 transformed_inp.append(trans(data)["single_clip"])
             data["inputs"] = torch.stack(transformed_inp, dim=0)
-        data["inputs"] = torch.tensor(data["inputs"])
-        data = to_device(data, device, ['inputs'])
+        if config['loaders']['only_tabular'] is False:
+            data["inputs"] = torch.tensor(data["inputs"])
+            data = to_device(data, device, ['inputs'])
+        else:
+            data["inputs"] = None
         
 
         if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth','wfocall1']: 

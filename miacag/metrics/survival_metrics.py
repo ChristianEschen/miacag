@@ -41,8 +41,14 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
         data = get_data_from_loader(data, config_task, device)
 
       #  data = to_device(data, device, ['tabular_data'])
+        #if path_name == 'high_risk':
+        class_idx = config_task['model']['num_classes'][0]-1
+        #else:
+        #    class_idx = 0
+        if len(config_task['loaders']['tabular_data_names'])==0:
+            data['tabular_data'] = None
         cam = calc_saliency_maps(
-                model, data['inputs'], data['tabular_data'], config_task, device, 0)
+                model, data['inputs'], data['tabular_data'], config_task, device, class_idx)
         data_path = df_i[0]["DcmPathFlatten"]
         patientID = df_i[0]['PatientID']
         studyInstanceUID = df_i[0]["StudyInstanceUID"]
@@ -67,10 +73,17 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
 
 def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     surv_np = surv.to_numpy()
-    df_target = impute_data(df_target, config_task)
-    df_target = z_score_normalize(df_target, config_task)
-    
+    from miacag.dataloader.Classification._3D.dataloader_monai_classification_3D import add_misisng_indicator_column_names
+    import pickle
+
+    df_target = df_target[df_target['duration_transformed']<config_task['loss']['censur_date']]
     df_target = df_target.reset_index(drop=True)
+    if len(config_task['loaders']['tabular_data_names']) > 0:
+        with open(os.path.join(config_task['output'], 'imputer.pkl'), 'rb') as f:            
+            imputer = pickle.load(f)
+        df_target, config_task = add_misisng_indicator_column_names(df_target, imputer, config_task, phase='val')
+        df_target = z_score_normalize(df_target, config_task)
+    config_task['loss']['censur_date']
     event_1_indices = df_target[df_target["event"] == 1].index
     event_0_indices = df_target[df_target["event"] == 0].index
 
@@ -87,15 +100,15 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     sum_of_death_event_0 = np.sum(surv_event_0, axis=0)
 
     # Find top 5 high-risk and low-risk indices for event = 1
-    top_5_indices_event_1 = np.argsort(sum_of_death_event_1)[:2]
-    top_5_low_risk_indices_event_1 = np.argsort(sum_of_death_event_1)[-2:]
+    top_5_indices_event_1 = np.argsort(sum_of_death_event_1)[:6]
+    top_5_low_risk_indices_event_1 = np.argsort(sum_of_death_event_1)[-6:]
 
     df_high_risk_event_1 = df_event_1.iloc[top_5_indices_event_1]
     df_low_risk_event_1 = df_event_1.iloc[top_5_low_risk_indices_event_1]
 
     # Find top 5 high-risk and low-risk indices for event = 0
-    top_5_indices_event_0 = np.argsort(sum_of_death_event_0)[:2]
-    top_5_low_risk_indices_event_0 = np.argsort(sum_of_death_event_0)[-2:]
+    top_5_indices_event_0 = np.argsort(sum_of_death_event_0)[:6]
+    top_5_low_risk_indices_event_0 = np.argsort(sum_of_death_event_0)[-6:]
 
     df_high_risk_event_0 = df_event_0.iloc[top_5_indices_event_0]
     df_low_risk_event_0 = df_event_0.iloc[top_5_low_risk_indices_event_0]
@@ -118,9 +131,9 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     config_task['loaders']['val_method']['saliency'] = True
 
     # get top 5 patients with highest risk
-   # os.environ['LOCAL_RANK'] = "1"
+    # os.environ['LOCAL_RANK'] = "1"
     device = get_device(config_task)
-   # config_task['use_DDP'] = "False"
+    # config_task['use_DDP'] = "False"
     BuildModel = ModelBuilder(config_task, device)
     model = BuildModel()
     # model = torch.nn.parallel.DistributedDataParallel(
@@ -132,26 +145,24 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     print('df test event', df_test.df[['event', 'duration_transformed']])
     print('df high risk', df_high_risk[['event', 'duration_transformed']])
 
-  #  with torch.no_grad():
+    #  with torch.no_grad():
     model.eval()
     get_grad_cams(df_high_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
-   # del df_test
-   
-   
+    # del df_test
+
+
     df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
     print('df high risk', df_high_risk[['event', 'duration_transformed']])
     print('df test', df_test.df[['event', 'duration_transformed']])
-    
+
     df_test = val_monai_classification_loader(df_low_risk, config_task)
     print('df high risk post', df_high_risk[['event', 'duration_transformed']])
     print('df test post', df_test.df[['event', 'duration_transformed']])
-    
+
 
     transforms = df_test.tansformations()
     get_grad_cams(df_low_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
     config_task['loaders']['mode'] = 'testing'
-
-
     return None
 
 def get_high_low_risk_from_df(cuts, df_target, preds):
@@ -163,7 +174,7 @@ def get_high_low_risk_from_df(cuts, df_target, preds):
 
 def get_high_low_risk_from_df_plots(cuts, df_target, preds, phase_plot, config_task):
     surv = predict_surv(preds, cuts)
-    plot_low_risk_high_risk(surv, phase_plot)
+    plot_low_risk_high_risk(surv, phase_plot, config_task)
     # low_risk_idx, high_risk_idx = get_high_risk_low_risk(np.array(surv))
     # df_high_risk = df_target.iloc[high_risk_idx]
     # df_low_risk = df_target.iloc[low_risk_idx]
@@ -189,7 +200,8 @@ def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
                                                             np.array(df_target['event']),
                                                             config_task)
     if not agg:
-        get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
+        if not config_task['loaders']['only_tabular']:
+            get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
         
 
     plot_scores(out_dict, phase_plot, config_task)
@@ -230,7 +242,7 @@ def get_high_risk_low_risk(surv_np):
     high_risk_indices =  np.where(sum_of_death < midpoint)[0]
     return low_risk_indices, high_risk_indices
 
-def plot_low_risk_high_risk(surv, phase_plot):
+def plot_low_risk_high_risk(surv, phase_plot, config):
     surv_np = surv.to_numpy()
     low_risk_indices, high_risk_indices = get_high_risk_low_risk(surv)
     # Extract survival probabilities for high risk and low risk groups
@@ -256,6 +268,7 @@ def plot_low_risk_high_risk(surv, phase_plot):
     plt.fill_between(surv.index, low_risk_ci_lower, low_risk_ci_upper, color='b', alpha=0.3)
     plt.plot(surv.index, high_risk_mean_surv, label='High Risk', color='r')
     plt.fill_between(surv.index, high_risk_ci_lower, high_risk_ci_upper, color='r', alpha=0.3)
+    plt.xlim(0, config['loss']['censur_date'] )
     plt.xlabel('Time')
     plt.ylabel('Survival Probability')
     plt.title('Survival Curves for High Risk vs Low Risk Patients')

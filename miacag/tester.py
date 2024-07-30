@@ -50,14 +50,16 @@ def test(config):
     config['loss']['groups_names'], config['loss']['groups_counts'], \
         config['loss']['group_idx'], config['groups_weights'] \
         = get_loss_names_groups(config)
+        
+    # Get data loader
+    test_loader, config = get_dataloader_test(config)
+
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
     if config['use_DDP'] == 'True':
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[device] if config["cpu"] == "False" else None)
-    # Get data loader
-    test_loader = get_dataloader_test(config)
 
     # Get loss func
     criterion = get_loss_func(config)

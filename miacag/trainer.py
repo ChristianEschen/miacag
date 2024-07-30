@@ -56,12 +56,13 @@ def train(config):
     running_metric_val = init_metrics(
                 config['eval_metric_val']['name'], config, device)
 
+    train_loader, val_loader, train_ds, _, config = get_dataloader_train(config)
+
     # Get model
     BuildModel = ModelBuilder(config, device)
     model = BuildModel()
 
     # Get data loaders
-    train_loader, val_loader, train_ds, _ = get_dataloader_train(config)
 
     # Get loss func
     criterion_train = get_loss_func(config, train=True)

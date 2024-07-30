@@ -148,6 +148,7 @@ class ModelBuilder():
             raise ValueError('model not implemented')
         # maybe freeze backbone
         if self.config['loaders']['mode'] not in ['testing', 'prediction']:
+#            print('freezing backbone', self.config['model']['freeze_backbone'])
             if self.config['model']['freeze_backbone']:
                 for param in model.module.encoder.parameters():
                     param.requires_grad = False
@@ -158,10 +159,11 @@ class ModelBuilder():
             #else:
             #   if self.config['model']['model_name'] in "dinov2_vits14":
                 else:
-                    for param in model.module.fcs.parameters():
-                        param.requires_grad = True
-                    for param in model.module.attention.parameters():
-                        param.requires_grad = True
+                    if self.config['task_type'] != 'regression':
+                        for param in model.module.fcs.parameters():
+                            param.requires_grad = True
+                        for param in model.module.attention.parameters():
+                            param.requires_grad = True
         return model
 
     def __call__(self):

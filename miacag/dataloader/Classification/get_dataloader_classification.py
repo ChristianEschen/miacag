@@ -14,7 +14,7 @@ from miacag.utils.sql_utils import getDataFromDatabase
 import numpy as np
 from torch.utils.data.dataloader import default_collate
 import collections.abc
-
+import copy
 from torch.utils.data import DistributedSampler as _TorchDistributedSampler
 
 __all__ = ["DistributedSampler", "DistributedWeightedRandomSampler"]
@@ -412,6 +412,7 @@ class ClassificationLoader():
 
         if config['weighted_sampler'] == 'True':
             weights = train_ds.weights
+            config_data = copy.deepcopy(train_ds.config)
             train_ds = train_ds()
             if self.config['loss']['name'][0] == 'CE':
                 sampler = DistributedWeightedRandomSampler(
@@ -489,7 +490,7 @@ class ClassificationLoader():
                     num_workers=config['num_workers'],
                     collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False) 
-        return train_loader, val_loader, train_ds, val_ds
+        return train_loader, val_loader, train_ds, val_ds, config_data
 
     def get_classificationloader_patch_lvl_test(self, config):
         if config['loaders']['format'] == 'dicom':

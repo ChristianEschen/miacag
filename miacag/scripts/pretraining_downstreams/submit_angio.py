@@ -313,30 +313,30 @@ def train_and_test(config_task):
 
         config_task['feature_importance'] = True
         if feature_importance_copy:
-
-            if config_task['labels_names'][0].startswith('duration'):
-                # global
-                print('init feature importance global')
-                ori_path = copy.deepcopy(config_task['output_directory'])
-                config_task['output_directory'] = os.path.join(ori_path, 'global_fi')
-                if dist.get_rank() == 0:
-                    mkFolder(config_task['output_directory'])
-                test({**config_task, 'query': config_task["query_test"], 'TestSize': 1, config_task['feature_importance']: True})
-                torch.distributed.barrier()
-                # high risk
-                print('init feature importance high risk')
-                config_task['output_directory'] = os.path.join(ori_path, 'high_risk_fi')
-                if dist.get_rank() == 0:
-                    mkFolder(config_task['output_directory'])
-                test({**config_task, 'query': config_task["query_high_risk"], 'TestSize': 1, config_task['feature_importance']: True})
-                torch.distributed.barrier()
-                config_task['output_directory'] = os.path.join(ori_path, 'low_risk_fi')
-                if dist.get_rank() == 0:
-                    mkFolder(config_task['output_directory'])
-                # low risk
-                print('init feature importance low risk')
-                test({**config_task, 'query': config_task["query_low_risk"], 'TestSize': 1, config_task['feature_importance']: True})
-                config_task['output_directory'] = ori_path
+            if len(config_task['loaders']['tabular_data_names'])>0:
+                if config_task['labels_names'][0].startswith('duration'):
+                    # global
+                    print('init feature importance global')
+                    ori_path = copy.deepcopy(config_task['output_directory'])
+                    config_task['output_directory'] = os.path.join(ori_path, 'global_fi')
+                    if dist.get_rank() == 0:
+                        mkFolder(config_task['output_directory'])
+                    test({**config_task, 'query': config_task["query_test"], 'TestSize': 1, config_task['feature_importance']: True})
+                    torch.distributed.barrier()
+                    # high risk
+                    print('init feature importance high risk')
+                    config_task['output_directory'] = os.path.join(ori_path, 'high_risk_fi')
+                    if dist.get_rank() == 0:
+                        mkFolder(config_task['output_directory'])
+                    test({**config_task, 'query': config_task["query_high_risk"], 'TestSize': 1, config_task['feature_importance']: True})
+                    torch.distributed.barrier()
+                    config_task['output_directory'] = os.path.join(ori_path, 'low_risk_fi')
+                    if dist.get_rank() == 0:
+                        mkFolder(config_task['output_directory'])
+                    # low risk
+                    print('init feature importance low risk')
+                    test({**config_task, 'query': config_task["query_low_risk"], 'TestSize': 1, config_task['feature_importance']: True})
+                    config_task['output_directory'] = ori_path
 
 
                 
@@ -672,7 +672,8 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
     conn.close()
     
     df_target = df.dropna(subset=[config_task['labels_names'][0]+'_predictions'], how='any')
-    base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
+    df_target['event'] = df_target.apply(lambda row: 0 if row['duration_transformed'] > config_task['loss']['censur_date'] else row['event'], axis=1)
+#    base_haz, bch = compute_baseline_hazards(df_target, max_duration=None, config=config_task)
     if config_task['debugging']:
         phases = [output_plots_train]
         phases_q = ['train']
@@ -725,6 +726,7 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
             aggregated_cols_list = ["preds_"+str(i) for i in range(0, preds.shape[1])]
             df_agg = compute_aggregation(df_target, aggregated_cols_list, agg_type="max")
             df_agg =df_agg.sort_values('TimeStamp').drop_duplicates(['PatientID','StudyInstanceUID'], keep='first')
+            get_high_low_risk_from_df_plots(cuts, df_agg, df_agg[aggregated_cols_list].to_numpy(), phase_plot_agg, config_task)
             surv_plot(config_task, cuts, df_agg, np.array(df_agg[aggregated_cols_list]), phase_plot_agg, agg=True)
 
         # if config_task['feature_importance']:

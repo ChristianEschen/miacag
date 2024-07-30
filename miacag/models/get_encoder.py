@@ -18,7 +18,7 @@ def getPretrainedWeights(config, model, device):
     if config['model']['pretrained'] in [True, "True"]:
         if config['model']['backbone'] not in [
             'debug_3d', "vit_base_patch16_224", "vit_large_patch16_224",
-            "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base']:
+            "vit_small_patch16_224", 'dinov2_vits14', 'vit_small', 'vit_large', 'vit_huge', 'vit_giant', 'vit_base', 'vit_large_3d']:
           #  if torch.distributed.get_rank() == 0:
             dirname = os.path.dirname(__file__)
             model_path = os.path.join(
@@ -416,6 +416,7 @@ def modelsRequiredPermute():
         "vit_tiny_3d",
         "vit_large_3d",
         "swin_s",
+        "swin_tiny",
         ]
     return model_list
 

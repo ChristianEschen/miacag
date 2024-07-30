@@ -176,16 +176,49 @@ def convertConfFloats(confidences, loss_name, config):
                 confidences_conv.append(float_converted)
             
             else:
+                # does it work?  -> nope
+                # strings = ""
+                # float_converted = []
+                # confidences = re.findall(r'(\d+):([-\d.]+)', conf)
+
+                # # Convert the key-value pairs to a dictionary
+                # confidence_dict = {int(key): float(value) for key, value in confidences}
+
+                # # Config placeholder
+                # config = {
+                #     'model': {
+                #         'num_classes': [20]  # Example num_classes, adjust as needed
+                #     }
+                # }
+
+                # # Prepare the float_converted list
+                # float_converted = []
+                # num_classes = config['model']['num_classes'][0]
+
+                # for i in range(num_classes):
+                #     float_converted.append(confidence_dict.get(i, np.nan))
+
+
                 strings = ""
                 float_converted = []
+                
                 for i, c in enumerate(range(0,config['model']['num_classes'][0])):
                     if i <config['model']['num_classes'][0]-1:
 
-                        match =  re.search('{}:(.*){}:'.format(c, c+1), conf)
-                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-3]
+                        match =  re.search('{}:(.*){}:'.format(c, c+1), conf) 
+                        #strings = conf[match.regs[0][0]+2: match.regs[0][1]-3] old way
+                        distance = 2
+                        if c >= 10:
+                            distance = 3
+                            
+                        strings = conf[match.regs[0][0]+distance:]
+                        match2 = re.search(';', strings)
+                        if match2 is not None:
+                            strings = strings[:match2.regs[0][0]]
+                                            
                     else:
                         match =  re.search('{}:(.*)'.format(c), conf)
-                        strings = conf[match.regs[0][0]+2: match.regs[0][1]-1]
+                        strings = conf[match.regs[0][0]+3: match.regs[0][1]-1]
                     #   strings = conf[idx[0]+2:idx[1]]
                     float_converted.append(float(strings))
                 confidences_conv.append(float_converted)

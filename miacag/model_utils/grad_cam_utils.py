@@ -52,6 +52,31 @@ def prepare_img_and_mask(data_path, img, mask, config):
         loaded_img, mask = prepare_img_and_mask_2d(img, mask)
     else:
         raise ValueError('not implemented')
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+    # # use Agg
+    # matplotlib.use('Agg')
+    # import cv2
+
+    # # Assuming img and loaded_img are your pre-loaded images
+    # # img = cv2.imread('path_to_image1') # Example loading
+    # # loaded_img = cv2.imread('path_to_image2') # Example loading
+
+    # fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    # # Display the first image
+    # axes[0].imshow(img[0, 0, :, :, 8], cmap="gray", interpolation="None")
+    # axes[0].axis('off')  # Hide the axes
+    # axes[0].set_title('Image 1')
+
+    # # Display the second image
+    # axes[1].imshow(loaded_img[:, :, 0, 8], cmap="gray", alpha=0.5, interpolation="None")
+    # axes[1].axis('off')  # Hide the axes
+    # axes[1].set_title('Image 2')
+
+    # plt.tight_layout()
+    # plt.savefig('test.png')
+    # plt.show()
     return loaded_img, mask
 
 
@@ -214,24 +239,33 @@ def calc_saliency_maps(model, inputs, tabular_data, config, device, c):
 
     else:
         raise ValueError('not implemented')
-        #layer_name = 'module.encoder.5.post_conv'
-    # if config['model']['backbone'] in [
-    #         "mvit_base_16x4", "mvit_base_32x3"]:
-    # target_layers = [[model.module.encoder.features[-1][-1].norm1]]
-    # cam_f = GradCAM(model=model,
-    #                 target_layers=target_layers,
+    # if config['model']['backbone'] not in ['r2plus1_18', 'x3d_s', 'debug_3d']:
+
+    #     target_layers = [model.module.encoder.features[-1][-1].norm1]
+    #     class ModelWithTabularData(torch.nn.Module):
+    #         def __init__(self, model, tabular_data):
+    #             super(ModelWithTabularData, self).__init__()
+    #             self.model = model
+    #             self.tabular_data = tabular_data
+
+    #         def forward(self, x):
+    #             return self.model(x, tabular_data=self.tabular_data)
+    #     cam_f = GradCAM(
+    #         model=model,
+    #         target_layers=target_layers,
     #                 reshape_transform=reshape_transform)
-    # # targets = [ClassifierOutputTarget(0)]
-    # cam = cam_f(input_tensor=inputs, tabular_data=tabular_data)
-    # cam = resize3dVolume(
-    #     cam[0, :, :, :],
-    #     (config['loaders']['Crop_height'],
-    #         config['loaders']['Crop_width'],
-    #         config['loaders']['Crop_depth']))
-    # cam = np.expand_dims(np.expand_dims(cam, 0), 0)
-    #else:
-        # model.module.module.encoder[-1][-1].conv2[0][-1]
-        #layer_name = "module.encoder.7.2.conv3"
+
+    #     # targets = [ClassifierOutputTarget(0)]
+        
+    #     cam = cam_f(input_tensor=inputs, tabular_data=tabular_data)
+    #     cam = resize3dVolume(
+    #         cam[0, :, :, :],
+    #         (config['loaders']['Crop_height'],
+    #             config['loaders']['Crop_width'],
+    #             config['loaders']['Crop_depth']))
+    #     cam = np.expand_dims(np.expand_dims(cam, 0), 0)
+
+    # else:
     from monai.visualize import GradCAMpp, OcclusionSensitivity
 
     saliency = SaliencyInferer(
@@ -247,7 +281,7 @@ def calc_saliency_maps(model, inputs, tabular_data, config, device, c):
 
         def forward(self, x):
             return self.model(x, tabular_data=self.tabular_data)
-  #  cam = saliency(network=model, inputs=inputs)
+#  cam = saliency(network=model, inputs=inputs)
     model_with_tabular = ModelWithTabularData(model, tabular_data)
     cam = saliency(inputs=inputs, network=model_with_tabular)
 
@@ -260,19 +294,26 @@ def calc_saliency_maps(model, inputs, tabular_data, config, device, c):
         raise ValueError('not implemented')
 
 
-def reshape_transform(tensor, height=14, width=14):
-    tensor = tensor[:, 1:, :]
-    tensor = tensor.unsqueeze(dim=0)
-    result = torch.nn.functional.interpolate(
-        tensor,
-        scale_factor=(392/tensor.size(2), 1))
-    result = result.reshape(result.size(0), 8, 7, 7, result.size(-1))
+# def reshape_transform(tensor, height=14, width=14):
+#     tensor = tensor[:, 1:, :]
+#     tensor = tensor.unsqueeze(dim=0)
+#     result = torch.nn.functional.interpolate(
+#         tensor,
+#         scale_factor=(392/tensor.size(2), 1))
+#     result = result.reshape(result.size(0), 8, 7, 7, result.size(-1))
+#     # Bring the channels to the first dimension,
+#     # like in CNNs.
+#     result = result.permute(0, 4, 1, 2, 3)
+#     return result
+
+def reshape_transform(tensor, height=4, width=4, depth=2):
+    result = tensor.reshape(tensor.size(0),
+         8, 4, 4, tensor.size(4))
+
     # Bring the channels to the first dimension,
     # like in CNNs.
-    result = result.permute(0, 4, 1, 2, 3)
+    result =result.permute(0, 4, 1, 2, 3)
     return result
-
-
 def prepare_model_for_sm(model, config, c):
     if config['task_type'] in ['regression', 'classification']:
        # copy_model = copy.deepcopy(model)

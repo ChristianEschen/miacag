@@ -132,9 +132,12 @@ class ImageToScalarModel(EncoderModel):
     def __init__(self, config, device):
         super(ImageToScalarModel, self).__init__(config, device)
         
-        
+    
         
         self.config = config
+        if self.config['loaders']['only_tabular']:
+            self.in_features = 0
+
         if len(self.config['loaders']['tabular_data_names'])>0:
             self.tab_feature = self.config['model']['tabular_features']
         else:
@@ -183,13 +186,13 @@ class ImageToScalarModel(EncoderModel):
                         nn.Sequential(
                             nn.LayerNorm(self.in_features + self.tab_feature),
                             nn.Linear(
-                                self.in_features + self.tab_feature, self.in_features).to(device),
+                                self.in_features + self.tab_feature, self.in_features+ self.tab_feature).to(device),
                             nn.ReLU(),
                             nn.Linear(
-                                self.in_features, self.in_features).to(device),
+                                self.in_features+ self.tab_feature, self.in_features+ self.tab_feature).to(device),
                             nn.ReLU(),
                             nn.Linear(
-                                self.in_features,
+                                self.in_features+ self.tab_feature,
                                 config['model']['num_classes'][loss_count_idx]).to(device),
                            # nn.ReLU(),
 
@@ -269,46 +272,57 @@ class ImageToScalarModel(EncoderModel):
         return torch.cat(embedded_features, dim=1)
         
     def forward(self, x = None, tabular_data = None):
-        x = maybePermuteInput(x, self.config)
-        p = self.encoder(x)
-        if self.config['model']['aggregation'] in ['max','mean']:
-            if self.dimension in ['3D', '2D+T']:
-                if self.config['model']['backbone'] not in [
-                    "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
-                    "vit_small_patch16_224", "vit_large_patch16_224",
-                    "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
-                    "vit_huge_patch14", "swin_s", "swin_tiny"]:
-                    
-                    if self.config['model']['backbone'] in [
-                    "vit_tiny_3d", "vit_small_3d", "vit_base_3d", "vit_large_3d"]:
-                        p = p.mean(dim=(-2))
+        ## TODO implement tabular only setting
+        if not self.config['loaders']['only_tabular']:
+            x = maybePermuteInput(x, self.config)
+            p = self.encoder(x)
+        
+            if self.config['model']['aggregation'] in ['max','mean']:
+                if self.dimension in ['3D', '2D+T']:
+                    if self.config['model']['backbone'] not in [
+                        "mvit_base_16x4", "mvit_base_32x3", "vit_base_patch16_224",
+                        "vit_small_patch16_224", "vit_large_patch16_224",
+                        "vit_base_patch16", "vit_small_patch16", "vit_large_patch16",
+                        "vit_huge_patch14", "swin_s", "swin_tiny"]:
+                        
+                        if self.config['model']['backbone'] in [
+                        "vit_tiny_3d", "vit_small_3d", "vit_base_3d", "vit_large_3d"]:
+                            p = p.mean(dim=(-2))
+                        else:
+                            p = p.mean(dim=(-3, -2, -1))
                     else:
-                        p = p.mean(dim=(-3, -2, -1))
+                        pass
+                elif self.dimension == 'tabular':
+                    p = p
                 else:
-                    pass
-            elif self.dimension == 'tabular':
-                p = p
-            else:
-                p = p.mean(dim=(-2, -1))
-            ps = []
-            if len(self.config['loaders']['tabular_data_names'])>0:
-                encode_num_and_cat_feat = self.tabular_forward(tabular_data)
-                tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
-                if self.config['loaders']['mode'] == 'testing':
-                    tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
-                p = torch.concat((p, tabular_features), dim=1)  # Combine the features from video and tabular data
+                    p = p.mean(dim=(-2, -1))
+                ps = []
+                if len(self.config['loaders']['tabular_data_names'])>0:
+                    encode_num_and_cat_feat = self.tabular_forward(tabular_data)
+                    tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
+                    if self.config['loaders']['mode'] == 'testing':
+                        tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
+                    p = torch.concat((p, tabular_features), dim=1)  # Combine the features from video and tabular data
 
-            for fc in self.fcs:
-                features = fc(p)
-                ps.append(features)
+                for fc in self.fcs:
+                    features = fc(p)
+                    ps.append(features)
+            else:
+                ps = [self.att_pool(p)]
+            
+            if self.config['loaders']['val_method']['saliency'] == True:
+                ps = torch.cat(ps, dim=1)
+                return ps
         else:
-        #    print('aggregation is cross attention')
-            ps = [self.att_pool(p)]
-          #  p = p.mean(dim=(1))
-          
-        if self.config['loaders']['val_method']['saliency'] == True:
-            ps = torch.cat(ps, dim=1)
-            return ps
+            encode_num_and_cat_feat = self.tabular_forward(tabular_data)
+            tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
+            if self.config['loaders']['mode'] == 'testing':
+                tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
+            p = tabular_features
+            ps = []
+            for fc in self.fcs:
+                    features = fc(p)
+                    ps.append(features)
         return ps
 
 

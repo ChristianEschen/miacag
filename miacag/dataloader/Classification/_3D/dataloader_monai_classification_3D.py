@@ -59,6 +59,11 @@ import torch
 import yaml
 from sklearn.impute import SimpleImputer
 import pickle
+from sklearn import preprocessing
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
+from collections import defaultdict
+
 # import matplotlib
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
@@ -74,6 +79,28 @@ def z_score_normalize(data, keys):
 
             normalized_data[key] = (value - mean) / (std +1e-6)
     return normalized_data
+
+def get_num_features(config):
+    column_names = config['loaders']['tabular_data_names']
+    column_types = config['loaders']['tabular_data_names_one_hot']  # 0: numeric, 1: categorical
+    num_features = []
+    for count, col_type in enumerate(column_types):
+        if col_type == 0:  # Numeric
+            num_features.append(column_names[count])
+    return num_features
+
+def z_score_denormalize(data, config):
+    column_names = config['loaders']['tabular_data_names']
+    column_types = config['loaders']['tabular_data_names_one_hot']  # 0: numeric, 1: categorical
+    num_features = []
+    for count, col_type in enumerate(column_types):
+        if col_type == 0:  # Numeric
+
+            num_features.append(column_names[count]
+                                )
+    scaler = preprocessing.StandardScaler().fit(data[num_features])
+    return scaler, num_features
+
 def impute_data(df, config):
     # Extract the configuration details
     column_names = config['loaders']['tabular_data_names']
@@ -246,6 +273,19 @@ def generate_weights_for_single_label(df, config):
     return df, labels_to_weight
     
 
+def determine_unique_values(df, config):
+    indices_of_ones = [index for index, value in enumerate(config['loaders']['tabular_data_names_one_hot'][:config['loaders']['new_columns_nr']]) if value == 1]
+    num_columns_cat = [config['loaders']['tabular_data_names'][:config['loaders']['new_columns_nr']][index] for index in indices_of_ones]
+    columns_cat_missing = [col + '_missing' for col in num_columns_cat]
+    unique_values = []
+    for column in config['loaders']['tabular_data_names']:
+        if column in num_columns_cat:
+            unique_values.append(max(len(df[column].unique()), 2))
+        elif column in columns_cat_missing:
+            unique_values.append(2)
+        else:
+            unique_values.append(0)
+    return unique_values
 def add_misisng_indicator_column_names(df, imputer, config, phase='train'):
     tabular_feature_missing_indicator = imputer.indicator_.features_
     missing_names = []
@@ -259,10 +299,12 @@ def add_misisng_indicator_column_names(df, imputer, config, phase='train'):
                 else:
                     is_categorical.append(0)
                 missing_names.append(config['loaders']['tabular_data_names'][i] +'_missing')
-        if config['loaders']['tabular_data_names_one_hot'][i] == 1:
-            uniques_if_categorical.append(len(df[config['loaders']['tabular_data_names'][i]].unique()))
-        else:
-            uniques_if_categorical.append(0)
+        if phase == 'train':
+
+            if config['loaders']['tabular_data_names_one_hot'][i] == 1:
+                uniques_if_categorical.append(len(df[config['loaders']['tabular_data_names'][i]].unique()))
+            else:
+                uniques_if_categorical.append(0)
     if phase == 'train':
         new_columns_nr = len(missing_names)
         config['loaders']['new_columns_nr'] = len(config['loaders']['tabular_data_names'])
@@ -299,7 +341,7 @@ class train_monai_classification_loader(base_monai_loader):
             df,
             config)
         # if config['weighted_sampler'] == 'True':
-        #     self.getSampler()
+        #     getSampler()
         self.features = self.get_input_features(self.df)
         self.set_data_path(self.features)
         # shuffle the data
@@ -343,15 +385,21 @@ class train_monai_classification_loader(base_monai_loader):
 
             self.labtrans = LabTransDiscreteTime(
                 cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
-                scheme='quantiles')
+             #   scheme='quantiles'
+                )
 
             get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
             print('get_target', get_target(self.df))
-            target_trains = self.labtrans.fit_transform(*get_target(self.df))
 
-            self.df[self.config['labels_names'][0]] = target_trains[0]
+            target_trains = self.labtrans.fit_transform(*get_target(self.df))
             
-            self.df['event'] = target_trains[1]
+
+            durations_train, events_train = get_target(self.df)
+            self.df[self.config['labels_names'][0]], self.df['event'] = self.labtrans.transform(durations_train, events_train)
+
+
+            
+           # self.df['event'] = target_trains[1]
             #self.config['labtrans'] = self.labtrans
             self.config['cuts'] = self.labtrans.cuts
             event = ['event']
@@ -386,10 +434,25 @@ class train_monai_classification_loader(base_monai_loader):
             # old
           #  self.data = impute_missing(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
-            self.imputer =SimpleImputer(add_indicator=True)
+            num_columns_cat = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] != 0]
+
+            self.imputer =SimpleImputer(add_indicator=True, strategy='most_frequent')
+
+ 
             self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
             
             self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='train')
+            
+            self.enc = defaultdict(LabelEncoder)
+            fit = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].fit_transform(x))
+            fit.apply(lambda x: self.enc[x.name].inverse_transform(x))
+            self.data[num_columns_cat] = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].transform(x))
+
+            # self.enc = LabelEncoder()
+            # self.enc.fit(self.data[num_columns_cat])
+            # self.data[num_columns_cat] = self.enc.transform(self.data[num_columns_cat])
+
+            self.config['loaders']['tabular_data_names_embed_dim'] = determine_unique_values(self.data, config)
            # self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
             ####
             
@@ -414,11 +477,18 @@ class train_monai_classification_loader(base_monai_loader):
             ####
             with open(os.path.join(self.config['output'], 'imputer.pkl'),'wb') as f:
                 pickle.dump(self.imputer,f)
+            with open(os.path.join(self.config['output'], 'encode_cat.pkl'),'wb') as f:
+                pickle.dump(self.enc,f)
+            self.scaler = preprocessing.StandardScaler().fit(self.data[num_columns])
+            self.data[num_columns] = self.scaler.transform(self.data[num_columns])
+            with open(os.path.join(self.config['output'], 'preprocessing.pkl'),'wb') as f:
+                pickle.dump(self.scaler, f)
             
-            self.data = z_score_normalize(self.data, num_columns)
 
         if config['labels_names'][0].startswith("sten"):
             self.data = self.data.dropna(subset=config['labels_names'])
+        if config['loaders']['only_tabular']:
+            self.data= self.data.drop_duplicates(subset=['StudyInstanceUID', 'PatientID'])
 
         check_nan_after_imputation(self.data)
         self.data[config['loaders']['tabular_data_names']].isna().sum()
@@ -577,6 +647,8 @@ class val_monai_classification_loader(base_monai_loader):
                 self.df['weights_' + label_name] = self.weights
 
         if self.config['loss']['name'][0] == 'NNL':
+            self.df = self.df.dropna(subset=['event', 'duration_transformed'])
+
             self.df['event'] = self.df.apply(lambda row: 0 if row['duration_transformed'] > self.config['loss']['censur_date'] else row['event'], axis=1)
 
             if config["is_already_trained"]:
@@ -595,17 +667,29 @@ class val_monai_classification_loader(base_monai_loader):
 
             self.labtrans = LabTransDiscreteTime(
                 cuts=cuts,
-                scheme='quantiles',
+                predefined_cuts=True,
+             #   scheme='quantiles',
                 #cuts=config['model']["num_classes"][0], #np.array((0, 100, 200, 300, 400, 500)),
                 )
+            if self.config['loaders']['mode'] not in ['testing', 'prediction']:
+                get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
+                print('get_target', get_target(self.df))
+
+                
+
+                durations_train, events_train = get_target(self.df)
+                self.df[self.config['labels_names'][0]], self.df['event'] = self.labtrans.transform(durations_train, events_train)
+
+
             
-            get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
+            # OLD
+            # get_target = lambda df: (self.df[self.config['labels_names'][0]].values, self.df['event'].values)
             
-            target_trains = self.labtrans.transform(*get_target(self.df))
+            # target_trains = self.labtrans.transform(*get_target(self.df))
             
-            self.df[self.config['labels_names'][0]] = target_trains[0]
+            # self.df[self.config['labels_names'][0]] = target_trains[0]
             
-            self.df['event'] = target_trains[1]
+            # self.df['event'] = target_trains[1]
            # self.config['labtrans'] = self.labtrans
            # self.config['cuts'] = self.labtrans.cuts
             event = ['event']
@@ -622,10 +706,7 @@ class val_monai_classification_loader(base_monai_loader):
 
 
 
-        self.data = self.df[
-            self.features + config['labels_names'] +
-            ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
-             "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed']+ config['loaders']['tabular_data_names']]
+
         ###############################################################################################333
         # OLD
      #   self.data = self.df[self.features + config['labels_names'] + ['rowid']]
@@ -641,7 +722,7 @@ class val_monai_classification_loader(base_monai_loader):
         # self.data = self.df[self.features + config['labels_names'] + ['rowid'] +
         #                     ['event'] +["labels_predictions"] +["treatment_transformed"] +
         #                     ["duration_transformed"] + ["koronarpatologi_transformed"] + w_label_names ]
-        
+        self.data = self.df
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
         #    self.data = impute_missing(self.data, config)
@@ -651,27 +732,51 @@ class val_monai_classification_loader(base_monai_loader):
                 with open(os.path.join(os.path.dirname(self.config['base_model']), 'imputer.pkl'), 'rb') as f:
                     self.imputer = pickle.load(f)
             else:
-                print('imputing')
-                print('imp path', os.path.join(self.config['output'], 'imputer.pkl'))
                 with open(os.path.join(self.config['output'], 'imputer.pkl'), 'rb') as f:
                     
                     self.imputer = pickle.load(f)
-                print('self impu', self.imputer)
                 
-          #  print('transforming', self.data[config['loaders']['tabular_data_names']])
             self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='val')
-        #    self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
-            print('transformed', self.data[config['loaders']['tabular_data_names']])
+            
 
             
-          #  self.data = impute_data(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
-            self.data = z_score_normalize(self.data, num_columns)
+            num_columns_cat = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] != 0]
+
+            
+            if self.config['is_already_trained']:
+               # if self.config['is_already_tested']:
+                with open(os.path.join(os.path.dirname(self.config['base_model']), 'preprocessing.pkl'), 'rb') as f:
+                    self.scalar = pickle.load(f)
+            else:
+                with open(os.path.join(self.config['output'], 'preprocessing.pkl'), 'rb') as f:
+                    
+                    self.scalar = pickle.load(f)
+            if self.config['is_already_trained']:
+               # if self.config['is_already_tested']:
+                with open(os.path.join(os.path.dirname(self.config['base_model']), 'encode_cat.pkl'), 'rb') as f:
+                    self.enc = pickle.load(f)
+            else:
+                with open(os.path.join(self.config['output'], 'encode_cat.pkl'), 'rb') as f:
+                    
+                    self.enc = pickle.load(f)
+            indices_of_ones = [index for index, value in enumerate(self.config['loaders']['tabular_data_names_one_hot'][:self.config['loaders']['new_columns_nr']]) if value == 1]
+            num_columns_cat = [self.config['loaders']['tabular_data_names'][:self.config['loaders']['new_columns_nr']][index] for index in indices_of_ones]
+            
+            #self.data[num_columns_cat] = self.enc.transform(self.data[num_columns_cat])
+            self.data[num_columns_cat] = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].transform(x))
+
+            self.data[num_columns] = self.scalar.transform(self.data[num_columns])
         # if config['labels_names][0] startswith "sten_"
         if config['labels_names'][0].startswith("sten"):
             self.data = self.data.dropna(subset=config['labels_names'])
+        if config['loaders']['only_tabular']:
+            self.data= self.data.drop_duplicates(subset=['StudyInstanceUID', 'PatientID'])
 
-            
+        self.data = self.df[
+            self.features + config['labels_names'] +
+            ['rowid', "SOPInstanceUID", 'SeriesInstanceUID',
+             "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed']+ config['loaders']['tabular_data_names']]
         
         self.data[config['loaders']['tabular_data_names']].isna().sum()
         check_nan_after_imputation(self.data)
@@ -765,9 +870,13 @@ class val_monai_classification_loader(base_monai_loader):
             #         num_workers=self.config['num_workers'],
             #         cache_num=self.config['cache_num_val'])
             # else:
-            val_ds = monai.data.Dataset(
-                    data=self.data_par_val,
-                transform=self.tansformations())
+            if self.config['loaders']['only_tabular']:
+                val_ds = monai.data.Dataset(
+                    data=self.data_par_val)
+            else:
+                val_ds = monai.data.Dataset(
+                        data=self.data_par_val,
+                    transform=self.tansformations())
         else:
             # if self.config['cache_test'] == "True":
             #     val_ds = monai.data.CacheDataset(
@@ -775,6 +884,10 @@ class val_monai_classification_loader(base_monai_loader):
             #             transform=self.tansformations(),
             #             copy_cache=True,
             #             num_workers=self.config['num_workers'])
+            if self.config['loaders']['only_tabular']:
+                val_ds = monai.data.Dataset(
+                    data=self.data_par_val)
+            else:
                 val_ds = monai.data.Dataset(
                         data=self.data_par_val,
                     transform=self.tansformations())

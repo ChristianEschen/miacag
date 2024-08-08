@@ -119,8 +119,9 @@ def get_final_layer(config,  device, in_features):
 class EncoderModel(nn.Module):
     def __init__(self, config, device):
         super(EncoderModel, self).__init__()
+        if not config['loaders']['only_tabular']:
 
-        self.encoder, self.in_features = get_encoder(config, device)
+            self.encoder, self.in_features = get_encoder(config, device)
         
     def forward(self, x):
         x = maybePermuteInput(x, self.config)
@@ -143,31 +144,47 @@ class ImageToScalarModel(EncoderModel):
         else:
             self.tab_feature = 0
         self.embeddings = nn.ModuleDict()
+        embedding_dims = [10 if i!= 0 else 0 for i in config['loaders']['tabular_data_names_embed_dim']]
+      #  embedding_dims = [min(50, i//2) for i in config['loaders']['tabular_data_names_embed_dim']]
         for i in range(0, len(config['loaders']['tabular_data_names'])):
             if config['loaders']['tabular_data_names_one_hot'][i] == 1:  # Embedding
-                self.embeddings[config['loaders']['tabular_data_names'][i]] = nn.Embedding(config['loaders']['tabular_data_names_embed_dim'][i], 10)
+                self.embeddings[config['loaders']['tabular_data_names'][i]] = nn.Embedding(config['loaders']['tabular_data_names_embed_dim'][i], embedding_dims[i])
+        
 
         self.num_indicator = [1 - x for x in self.config['loaders']['tabular_data_names_one_hot']]
-        self.layer_norm_func = nn.LayerNorm(normalized_shape=(sum(self.num_indicator)))
+        self.mask_tensor = torch.tensor(self.num_indicator, dtype=bool, device=device)
 
-        self.total_tab_features = sum(self.num_indicator) + sum(config['loaders']['tabular_data_names_one_hot'])*10
+      # self.layer_norm_func = nn.LayerNorm(normalized_shape=(sum(self.num_indicator)))
+
+       # self.total_tab_features = sum(self.num_indicator) + sum(config['loaders']['tabular_data_names_one_hot'])*10
+        self.total_tab_features = sum(self.num_indicator) + sum(embedding_dims)
+        self.layer_norm_func = nn.BatchNorm1d(sum(self.num_indicator))
+
         if len(self.config['loaders']['tabular_data_names'])>0:
-            self.tabular_mlp = nn.Sequential(
-                nn.LayerNorm(self.total_tab_features),
+            # self.tabular_mlp = nn.Sequential(
+            #     nn.LayerNorm(self.total_tab_features),
                 
-                nn.Linear(self.total_tab_features, self.tab_feature),
-                nn.Dropout(0.2),
-                nn.ReLU(),
-                nn.LayerNorm(self.tab_feature),
-                nn.Linear(self.tab_feature, self.tab_feature),
-                nn.Dropout(0.2),
-                nn.ReLU(),
-                nn.LayerNorm(self.tab_feature),
-                nn.Linear(self.tab_feature, self.tab_feature),
-                nn.Dropout(0.2),
-                nn.LayerNorm(self.tab_feature)
-              #  nn.LayerNorm((self.config['loaders']['batchSize'],self.tab_feature)),
+            #     nn.Linear(self.total_tab_features, self.tab_feature),
+            #     nn.Dropout(0.2),
+            #     nn.ReLU(),
+            #     nn.LayerNorm(self.tab_feature),
+            #     nn.Linear(self.tab_feature, self.tab_feature),
+            #     nn.Dropout(0.2),
+            #     nn.ReLU(),
+            #     nn.LayerNorm(self.tab_feature),
+            #     nn.Linear(self.tab_feature, self.tab_feature),
+            #     nn.Dropout(0.2),
+            #     nn.LayerNorm(self.tab_feature)
 
+            # ).to(device)
+            self.tabular_mlp = torch.nn.Sequential(
+                torch.nn.Linear(self.total_tab_features, self.tab_feature),
+                nn.Dropout(0.2),
+                torch.nn.ReLU(),
+                nn.BatchNorm1d(self.tab_feature),
+                torch.nn.Linear(self.tab_feature, self.tab_feature),
+                nn.Dropout(0.2),
+                torch.nn.ReLU(),
             ).to(device)
         self.keys_total = config['loaders']['tabular_data_names']
         
@@ -187,21 +204,40 @@ class ImageToScalarModel(EncoderModel):
                # self.fcs.append(nn.Linear(
                #         self.in_features,
                #         config['model']['num_classes'][loss_count_idx]).to(device))
+
+                    
                 self.fcs.append(
+                    
                         nn.Sequential(
-                            nn.LayerNorm(self.in_features + self.tab_feature),
+                            nn.BatchNorm1d(self.in_features + self.tab_feature),
                             nn.Linear(
                                 self.in_features + self.tab_feature, self.in_features+ self.tab_feature).to(device),
+                            torch.nn.Dropout(0.1),
                             nn.ReLU(),
+                            nn.BatchNorm1d(self.in_features + self.tab_feature),
                             nn.Linear(
                                 self.in_features+ self.tab_feature, self.in_features+ self.tab_feature).to(device),
+                            torch.nn.Dropout(0.1),
                             nn.ReLU(),
+                            nn.BatchNorm1d(self.in_features + self.tab_feature),
                             nn.Linear(
                                 self.in_features+ self.tab_feature,
                                 config['model']['num_classes'][loss_count_idx]).to(device),
-                           # nn.ReLU(),
-
                             ))
+                
+                # self.fcs.append(torch.nn.Sequential(
+                #     torch.nn.Linear(self.in_features + self.tab_feature, self.in_features + self.tab_feature),
+                #     torch.nn.ReLU(),
+                #     torch.nn.BatchNorm1d(self.in_features + self.tab_feature),
+                #     torch.nn.Dropout(0.1),
+                    
+                #     torch.nn.Linear(self.in_features + self.tab_feature, self.in_features + self.tab_feature),
+                #     torch.nn.ReLU(),
+                #     torch.nn.BatchNorm1d(self.in_features + self.tab_feature),
+                #     torch.nn.Dropout(0.1),
+                    
+                #     torch.nn.Linear(self.in_features + self.tab_feature, config['model']['num_classes'][loss_count_idx])
+                # ).to(device))
             elif loss_type.startswith(tuple(['BCE_multilabel'])):
                 self.fcs.append(
                     nn.Sequential(
@@ -262,18 +298,17 @@ class ImageToScalarModel(EncoderModel):
         counter = 0
         for key, flag in zip(self.config['loaders']['tabular_data_names'], self.config['loaders']['tabular_data_names_one_hot']):
             if flag == 1:  # Embedding
-                embedded = self.embeddings[key](tabular_data[:,counter].squeeze(-1).long())  # Remove the extra dimension if necessary
+                embedded = self.embeddings[key](tabular_data[:,counter].long())  # Remove the extra dimension if necessary
                 embedded_features.append(embedded)
 
             counter += 1
                             # Directly use the normalized numeric data
-        device = tabular_data.device
-        mask_tensor = torch.tensor(self.num_indicator, dtype=bool, device=device)
-        tabular_data = self.layer_norm_func(tabular_data[:,mask_tensor])
-        if len(embedded_features) > 0:
-            if len(embedded_features[0].shape) ==1:
-                embedded_features[0] = embedded_features[0].unsqueeze(0)
-        embedded_features.append(tabular_data)
+
+        tabular_data_numeric = self.layer_norm_func(tabular_data[:,self.mask_tensor])
+        # if len(embedded_features) > 0:
+        #     if len(embedded_features[0].shape) ==1:
+        #         embedded_features[0] = embedded_features[0].unsqueeze(0)
+        embedded_features.append(tabular_data_numeric)
         return torch.cat(embedded_features, dim=1)
         
     def forward(self, x = None, tabular_data = None):
@@ -331,51 +366,19 @@ class ImageToScalarModel(EncoderModel):
         return ps
 
 
-    def forward_saliency(self, x):
-        x = maybePermuteInput(x, self.config)
-        p = self.encoder(x)
-        if self.dimension in ['3D', '2D+T']:
-            if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
-               p = p.mean(dim=(-3, -2, -1))
-               # p = p[:, 1:, :].reshape(p.size(0), 8, 7, 7, p.size(2))
-            else:
-                pass
-        elif self.dimension == 'tabular':
-            p = p
-        else:
-            p = p.mean(dim=(-2, -1))
-        ps = self.fcs[0](p)
-        return ps
+    # def forward_saliency(self, x):
+    #     x = maybePermuteInput(x, self.config)
+    #     p = self.encoder(x)
+    #     if self.dimension in ['3D', '2D+T']:
+    #         if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
+    #            p = p.mean(dim=(-3, -2, -1))
+    #            # p = p[:, 1:, :].reshape(p.size(0), 8, 7, 7, p.size(2))
+    #         else:
+    #             pass
+    #     elif self.dimension == 'tabular':
+    #         p = p
+    #     else:
+    #         p = p.mean(dim=(-2, -1))
+    #     ps = self.fcs[0](p)
+    #     return ps
     
-
-
-class SimSiam(EncoderModel):
-    def __init__(self, config, device):
-        super(SimSiam, self).__init__(
-            config, device)
-        self.projector = projection_MLP(self.in_features,
-                                        config['model']['feat_dim'],
-                                        config['model']['num_proj_layers'],
-                                        config['model']['dimension'])
-
-        self.encoder_projector = nn.Sequential(
-            self.encoder,
-            self.projector
-        )
-
-        self.predictor = prediction_MLP(config['model']['feat_dim'])
-
-    def forward(self, x):
-        
-        im_aug1 = x[:, 0]
-        im_aug2 = x[:, 1]
-       # im_aug1 = maybePermuteInput(im_aug1, self.config)
-      #  im_aug2 = maybePermuteInput(im_aug2, self.config)
-        z1 = self.encoder_projector(im_aug1)
-        z2 = self.encoder_projector(im_aug2)
-
-        p1 = self.predictor(z1)
-        p2 = self.predictor(z2)
-
-        outputs = {'z1': z1, 'z2': z2, 'p1': p1, 'p2': p2}
-        return outputs

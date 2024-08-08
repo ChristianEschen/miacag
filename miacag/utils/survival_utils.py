@@ -272,14 +272,14 @@ class LabTransDiscreteTime:
         min_ {float} -- Starting duration (default: {0.})
         dtype {str, dtype} -- dtype of discretization.
     """
-    def __init__(self, cuts, scheme='equidistant', min_=0., dtype=None):
+    def __init__(self, cuts, scheme='equidistant', min_=0., dtype=None, predefined_cuts=False):
         self._cuts = cuts
         self._scheme = scheme
         self._min = min_
         self._dtype_init = dtype
         self._predefined_cuts = False
         self.cuts = None
-        if hasattr(cuts, '__iter__'):
+        if hasattr(cuts, '__iter__') or predefined_cuts:
             if type(cuts) is list:
                 cuts = np.array(cuts)
             self.cuts = cuts

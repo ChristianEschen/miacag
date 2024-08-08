@@ -464,7 +464,8 @@ class ClassificationLoader():
                 #  persistent_workers=True,
                 num_workers=0, #config['num_workers'],
                 collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate,
-                pin_memory=False) #True if config['cpu'] == "False" else False,)
+                pin_memory=False,
+                drop_last=True) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
                 val_loader = ThreadDataLoader(
                     val_ds,
@@ -481,7 +482,8 @@ class ClassificationLoader():
                 shuffle=False,
                 num_workers=config['num_workers'],
                 collate_fn=list_data_collate, #patches_pad_list_data_collate_read_patches_individual, #pad_list_data_collate,
-                pin_memory=True) #True if config['cpu'] == "False" else False,)
+                pin_memory=True,
+                drop_last=True) #True if config['cpu'] == "False" else False,)
             with torch.no_grad():
                 val_loader = DataLoader(
                     val_ds,

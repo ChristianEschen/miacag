@@ -182,7 +182,7 @@ def _reduction(loss: Tensor, reduction: str = 'mean') -> Tensor:
     raise ValueError(f"`reduction` = {reduction} is not valid. Use 'none', 'mean' or 'sum'.")
 
 def nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor,
-                        reduction: str = 'sum') -> Tensor:
+                        reduction: str = 'mean') -> Tensor:
     """Negative log-likelihood of the discrete time hazard parametrized model LogisticHazard [1].
     
     Arguments:
@@ -624,8 +624,8 @@ def get_loss_func(config, train=True):
             criterion = cox_ph_loss
             criterions.append(criterion)
         elif loss.startswith('NNL'):
-            criterion = NLLSurvLoss(alpha=0.0, eps=1e-7, reduction='sum')
-           # criterion = nll_logistic_hazard
+            criterion = NLLSurvLoss(alpha=0.5, eps=1e-7, reduction='mean')
+            criterion = nll_logistic_hazard
             criterions.append(criterion)
         else:
             raise ValueError("Loss type is not implemented")

@@ -16,7 +16,7 @@ import shutil
 import time
 import yaml
 import random
-
+from miacag.utils.feature_imortance import wrap_feature_names
 def shuffle_feature(data, feature):
     dcm_paths = [d[feature] for d in data]
 

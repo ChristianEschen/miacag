@@ -514,10 +514,10 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             #     else:
             #         raise ValueError('artery type not supported')
 
-                if dist.is_initialized():
-                    plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
-                else:
-                    plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
+                # if dist.is_initialized():
+                #     plot_task(config_task_i, output_table_name, conf_i, loss_names_i)
+                # else:
+                #     plot_task_not_ddp(config_task_i, output_table_name, conf, loss_names_i)
         else:
             config_task_list[0]['artery_type'] = 'both'
             config_task['artery_type'] = 'both'
@@ -538,10 +538,10 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
         config_task['artery_type'] = 'both'
         torch.cuda.empty_cache() # here empty
 
-        if dist.is_initialized():
-            plot_task(config_task, output_table_name, conf, loss_names)
-        else:
-            plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
+        # if dist.is_initialized():
+        #     plot_task(config_task, output_table_name, conf, loss_names)
+        # else:
+        #     plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
     return None
 
 def change_psql_col_to_dates(config, output_table_name, col):
@@ -713,6 +713,7 @@ def plot_time_to_event_tasks(config_task, output_table_name, output_plots_train,
       ##  low_risk_df, high_risk_df = get_high_low_risk_from_df(cuts, df_target, preds)
         get_high_low_risk_from_df_plots(cuts, df_target, preds, phase_plot, config_task)
            # return low_risk_df, high_risk_df
+
         surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False)
         
 

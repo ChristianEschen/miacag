@@ -310,7 +310,11 @@ def add_misisng_indicator_column_names(df, imputer, config, phase='train'):
         config['loaders']['new_columns_nr'] = len(config['loaders']['tabular_data_names'])
         config['loaders']['new_data_names'] = [0]*len(config['loaders']['tabular_data_names']) + [1]*new_columns_nr
     else:
-        config['loaders']['tabular_data_names'] = config['loaders']['tabular_data_names'][0:config['loaders']['new_columns_nr']]
+        if config['is_already_trained']:
+            config['loaders']['new_columns_nr'] = len(config['loaders']['tabular_data_names'])-len(list(tabular_feature_missing_indicator))
+            config['loaders']['tabular_data_names'] = config['loaders']['tabular_data_names'][0: len(config['loaders']['tabular_data_names'])-len(list(tabular_feature_missing_indicator))]
+        else:
+            config['loaders']['tabular_data_names'] = config['loaders']['tabular_data_names'][0:config['loaders']['new_columns_nr']]
     #if 
 
     imputed_missing_cols = imputer.transform(df[config['loaders']['tabular_data_names']])
@@ -435,12 +439,12 @@ class train_monai_classification_loader(base_monai_loader):
           #  self.data = impute_missing(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
             num_columns_cat = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] != 0]
+            self.data.at[2, "PatientSex"]=np.nan
 
             self.imputer =SimpleImputer(add_indicator=True, strategy='most_frequent')
 
  
             self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
-            
             self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='train')
             
             self.enc = defaultdict(LabelEncoder)
@@ -731,11 +735,16 @@ class val_monai_classification_loader(base_monai_loader):
                # if self.config['is_already_tested']:
                 with open(os.path.join(os.path.dirname(self.config['base_model']), 'imputer.pkl'), 'rb') as f:
                     self.imputer = pickle.load(f)
+                config_trained = yaml.load(open(os.path.join(self.config['base_model'], "config.yaml"), 'r'), Loader=yaml.FullLoader)
+                self.config["loaders"]["tabular_data_names"] = config_trained["loaders"]["tabular_data_names"]
+                self.config["loaders"]["tabular_data_names_one_hot"] = config_trained["loaders"]["tabular_data_names_one_hot"]
+                self.config["loaders"]["tabular_data_names_embed_dim"] = config_trained["loaders"]["tabular_data_names_embed_dim"]
+                
+
             else:
                 with open(os.path.join(self.config['output'], 'imputer.pkl'), 'rb') as f:
                     
                     self.imputer = pickle.load(f)
-                
             self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='val')
             
 
@@ -767,6 +776,9 @@ class val_monai_classification_loader(base_monai_loader):
             self.data[num_columns_cat] = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].transform(x))
 
             self.data[num_columns] = self.scalar.transform(self.data[num_columns])
+            # if self.config['is_already_trained']:
+            #    # if self.config['is_already_tested']:
+            #     self.config['loaders']['tabular_data_names_embed_dim'] = determine_unique_values(self.data, config)
         # if config['labels_names][0] startswith "sten_"
         if config['labels_names'][0].startswith("sten"):
             self.data = self.data.dropna(subset=config['labels_names'])

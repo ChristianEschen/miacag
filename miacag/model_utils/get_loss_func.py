@@ -220,7 +220,21 @@ def nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor,
     loss = bce.cumsum(1).gather(1, idx_durations).view(-1)
     return _reduction(loss, reduction)
 
-    
+
+
+# def gradient_blending_nnl_loss(total, tab, vis, total_w, tab_w, vis_w, targets):
+
+#         tv_loss = 
+#         t_loss = ModCELoss(tab_out, targ, self.ce) * self.scale
+#         v_loss = ModCELoss(visual_out, targ, self.ce) * self.scale
+        
+#         weighted_t_loss = t_loss * self.tab_weight
+#         weighted_v_loss = v_loss * self.visual_weight
+#         weighted_tv_loss = tv_loss * self.tab_vis_weight
+        
+#         loss = weighted_t_loss + weighted_v_loss + weighted_tv_loss
+#         return loss
+        
 def mse_loss_with_nans(input, target):
 
     # Missing data are nan's

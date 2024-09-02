@@ -23,6 +23,12 @@ from miacag.dataloader.get_dataloader import get_data_from_loader, convert_numpy
 from miacag.trainer import get_device
 from miacag.models.BuildModel import ModelBuilder
 from miacag.models.modules import get_loss_names_groups
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
+import concurrent.futures
+from itertools import repeat
+from miacag.dataloader.get_dataloader import get_data_from_loader
+
 def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, cuts, path_name='high_risk'):
     for i in range(0, len(df_group)):
         torch.cuda.empty_cache()
@@ -39,16 +45,58 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
             data[field] = torch.tensor(data[field]).unsqueeze(0)
           #  data['tabular_data'] = torch.cat([data[i].float().unsqueeze(1) for i in config['loaders']['tabular_data_names']], dim=1)
         data = get_data_from_loader(data, config_task, device)
+        
 
       #  data = to_device(data, device, ['tabular_data'])
         #if path_name == 'high_risk':
         class_idx = config_task['model']['num_classes'][0]-1
+        def mkDir(directory):
+            if not os.path.exists(directory):
+                os.makedirs(directory)
         #else:
         #    class_idx = 0
         if len(config_task['loaders']['tabular_data_names'])==0:
             data['tabular_data'] = None
+        # print('data', data['inputs'].shape)
+        #data['inputs'] = data['inputs'].permute(0, 1, 4, 2, 3)
+        
+                
+        # fig, axs = plt.subplots(1, 1, figsize=(10, 5))
+
+        # axs.imshow(data['inputs'][0, 0, data['inputs'].shape[2] // 2, :, :].cpu().numpy(), cmap='gray')
+        # axs.set_title('Central Slice of data["inputs"]')
+        # axs.axis('off')
+
+        # plt.show()
+        # mkDir(phase_plot)
+        # plt.savefig(os.path.join(phase_plot, f"{path_name}_cam_central_slice_before.png"))
+
+
         cam = calc_saliency_maps(
                 model, data['inputs'], data['tabular_data'], config_task, device, class_idx)
+
+        # cam = cam.permute(0,1,4,2,3)
+        # data['inputs'] = data['inputs'].permute(0, 1, 4, 2, 3)
+        
+        
+        # cam_central_slice = cam[0, 0, cam.shape[2] // 2, :, :].cpu().numpy()
+        # data_central_slice = data['inputs'][0, 0, data['inputs'].shape[2] // 2, :, :].cpu().numpy()
+        # fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+
+        # # Plot the cam central slice
+        # axs[0].imshow(cam_central_slice, cmap='jet')
+        # axs[0].set_title('Central Slice of cam')
+        # axs[0].axis('off')
+
+        # # Plot the data central slice
+        # axs[1].imshow(data_central_slice, cmap='gray')
+        # axs[1].set_title('Central Slice of data["inputs"]')
+        # axs[1].axis('off')
+
+        # plt.show()
+        # mkDir(phase_plot)
+        # plt.savefig(os.path.join(phase_plot, f"{path_name}_cam_central_slice.png"))
+
         data_path = df_i[0]["DcmPathFlatten"]
         patientID = df_i[0]['PatientID']
         studyInstanceUID = df_i[0]["StudyInstanceUID"]
@@ -60,7 +108,7 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
             prepare_cv2_img(
                 data['inputs'].cpu().numpy(),
                 'duration', # label_name,
-                cam,
+                cam, #data['inputs'],
                 data_path,
                 path_name,
                 patientID,
@@ -69,7 +117,7 @@ def get_grad_cams(df_group, config_task, model, device, transforms, phase_plot, 
                 SOPInstanceUID,
                 config_task,
                 phase_plot)
-      #  scores = feature_importance(model, data['inputs'], data['tabular_data'], data["duration_transformed"], data['event'], cuts, config_task)
+
 
 def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     surv_np = surv.to_numpy()
@@ -78,11 +126,12 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
 
     df_target = df_target[df_target['duration_transformed']<config_task['loss']['censur_date']]
     df_target = df_target.reset_index(drop=True)
-    if len(config_task['loaders']['tabular_data_names']) > 0:
-        with open(os.path.join(config_task['output'], 'imputer.pkl'), 'rb') as f:            
-            imputer = pickle.load(f)
-        df_target, config_task = add_misisng_indicator_column_names(df_target, imputer, config_task, phase='val')
-        df_target = z_score_normalize(df_target, config_task)
+    print('dont preprocess here')
+    # if len(config_task['loaders']['tabular_data_names']) > 0:
+    #     with open(os.path.join(config_task['output'], 'imputer.pkl'), 'rb') as f:            
+    #         imputer = pickle.load(f)
+    #     df_target, config_task = add_misisng_indicator_column_names(df_target, imputer, config_task, phase='val')
+    #     df_target = z_score_normalize(df_target, config_task)
     config_task['loss']['censur_date']
     event_1_indices = df_target[df_target["event"] == 1].index
     event_0_indices = df_target[df_target["event"] == 0].index
@@ -118,7 +167,6 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     df_low_risk = pd.concat([df_low_risk_event_1, df_low_risk_event_0])
 
     print('df high risk init', df_high_risk[['event', 'duration_transformed']])
-
     print('df low risk init', df_low_risk[['event', 'duration_transformed']])
 
     config=config_task
@@ -134,8 +182,7 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     # os.environ['LOCAL_RANK'] = "1"
     device = get_device(config_task)
     # config_task['use_DDP'] = "False"
-    BuildModel = ModelBuilder(config_task, device)
-    model = BuildModel()
+
     # model = torch.nn.parallel.DistributedDataParallel(
     #         model,
     #         device_ids=[device] if config["cpu"] == "False" else None)
@@ -146,8 +193,16 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
     print('df high risk', df_high_risk[['event', 'duration_transformed']])
 
     #  with torch.no_grad():
+    BuildModel = ModelBuilder(config_task, device)
+    model = BuildModel()
+    # print some of the model params
+    
     model.eval()
-    get_grad_cams(df_high_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
+   # torch.cuda.set_device("cuda:"+os.environ['LOCAL_RANK'])
+
+    get_grad_cams(pd.DataFrame(df_test.data), config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
+#    get_grad_cams(df_high_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='high_risk')
+
     # del df_test
 
 
@@ -161,7 +216,8 @@ def get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts):
 
 
     transforms = df_test.tansformations()
-    get_grad_cams(df_low_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
+    #get_grad_cams(df_low_risk, config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
+    get_grad_cams(pd.DataFrame(df_test.data), config_task, model, device, transforms, phase_plot,cuts, path_name='low_risk')
     config_task['loaders']['mode'] = 'testing'
     return None
 
@@ -189,6 +245,22 @@ def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
     #  surv =  pd.DataFrame(preds.transpose(), cuts)
 
     surv = predict_surv(preds, cuts)
+    risks_ = np.array(1-surv.sum())
+
+    # use sksurv to compute concordance index
+    c_idx, concordand, discordant, tied_risk, tied_time = concordance_index_censored(
+    np.array(df_target['event']).astype(bool),
+    np.array(df_target[config_task['labels_names'][0]]),
+    risks_)
+    print(f"Concordance index sksurv: {c_idx:.3f}")
+
+# use sksurv to compute time-dependent AUC
+# times = np.percentile(np.array(df_target[config_task['labels_names'][0]]), np.linspace(5, 95, 10))
+# from sksurv.metrics import cumulative_dynamic_auc
+# auc, mean_auc = cumulative_dynamic_auc(
+#     np.array(df_target['event']).astype(bool),
+#     np.array(df_target['event']).astype(bool),
+#     risks_, times)
     
     # get saliency maps:
 
@@ -204,14 +276,14 @@ def surv_plot(config_task, cuts, df_target, preds, phase_plot, agg=False):
             get_saliency_maps_discrete(df_target, config_task, surv, phase_plot, cuts)
         
 
-    plot_scores(out_dict, phase_plot, config_task)
+    plot_scores(out_dict, phase_plot, config_task, surv, config_task)
 def predict_surv(logits, duration_index):
     logits = torch.tensor(logits)
     hazard = torch.nn.Sigmoid()(logits)
     surv = (1 - hazard).add(1e-7).log().cumsum(1).exp()
     surv_np = surv.numpy()
     surv = pd.DataFrame(surv_np.transpose(), duration_index)
-    new_index = np.linspace(surv.index.min(), surv.index.max(), len(duration_index)*10)
+    new_index = np.linspace(surv.index.min(), surv.index.max(), len(duration_index)*100)
 
     # Interpolate DataFrame to new index
     surv = surv.reindex(surv.index.union(new_index)).interpolate('index').loc[new_index]
@@ -261,15 +333,14 @@ def plot_low_risk_high_risk(surv, phase_plot, config):
     low_risk_ci_lower = low_risk_mean_surv - 1.96 * low_risk_std_err
     high_risk_ci_upper = high_risk_mean_surv + 1.96 * high_risk_std_err
     high_risk_ci_lower = high_risk_mean_surv - 1.96 * high_risk_std_err
-
     # Plot the survival curves with confidence intervals
     plt.figure(figsize=(10, 6))
     plt.plot(surv.index, low_risk_mean_surv, label='Low Risk', color='b')
     plt.fill_between(surv.index, low_risk_ci_lower, low_risk_ci_upper, color='b', alpha=0.3)
     plt.plot(surv.index, high_risk_mean_surv, label='High Risk', color='r')
     plt.fill_between(surv.index, high_risk_ci_lower, high_risk_ci_upper, color='r', alpha=0.3)
-    plt.xlim(0, config['loss']['censur_date'] )
-    plt.xlabel('Time')
+    plt.xlim(0, min(config['loss']['censur_date'], max(surv.index)))
+    plt.xlabel('Time (days)')
     plt.ylabel('Survival Probability')
     plt.title('Survival Curves for High Risk vs Low Risk Patients')
     plt.legend()
@@ -284,9 +355,9 @@ def plot_x_individuals(surv, phase_plot,x_individuals=5, config_task=None):
     low_risk = range(0, int(np.round(surv.shape[1]/2)))
     
     surv.iloc[:, :x_individuals].plot(drawstyle='steps-post')
-    plt.ylabel('S(t | x)')
-    _ = plt.xlabel('Time')
-    plt.xlim(0, config_task['loss']['censur_date'])
+    plt.ylabel('Survival Probability')
+    _ = plt.xlabel('Time (days)')
+    plt.xlim(0, min(config_task['loss']['censur_date'], max(surv.index)))
     plt.show()
     plt.savefig(os.path.join(phase_plot, "survival_curves.png"))
     plt.close()
@@ -316,7 +387,7 @@ def get_roc_auc_ytest_1_year_surv(df_target, base_haz, bch, config_task, thresho
             "yprobs", "ytest"]}
     return variable_dict
 
-def plot_scores(out_dict, ouput_path, config_task):
+def plot_scores(out_dict, ouput_path, config_task, surv, config):
 
     mean_brier = out_dict["mean_brier"]
     uper_brier = out_dict["upper_brier"]
@@ -332,7 +403,7 @@ def plot_scores(out_dict, ouput_path, config_task):
     plt.xlabel('Time (days)')
     # add y label
     plt.ylabel('Brier score')
-    plt.xlim(0, config_task['loss']['censur_date'])
+    plt.xlim(0, min(config['loss']['censur_date'], max(surv.index)))
 
     # add legend
     plt.legend(loc='lower right')
@@ -347,7 +418,7 @@ def plot_scores(out_dict, ouput_path, config_task):
             label=f"Integregated brier score={mean_brier:.3f} ({ower_brier:.3f}-{uper_brier:.3f})")
     # add x label
     plt.xlabel('Time (days)')
-    plt.xlim(0, config_task['loss']['censur_date'])
+    plt.xlim(0, min(config['loss']['censur_date'], max(surv.index)))
 
     # add y label
     plt.ylabel('Brier score')
@@ -358,6 +429,7 @@ def plot_scores(out_dict, ouput_path, config_task):
     plt.savefig(os.path.join(ouput_path, "brier_scores.png"))
     plt.close()
     
+   
     
 def idx_at_times(index_surv, times, steps='pre', assert_sorted=True):
     """Gives index of `index_surv` corresponding to `time`, i.e. 
@@ -897,7 +969,7 @@ def compute_concordance_discrete(surv, duration, event, config_task):
     #         c_index = [0.5]
     # else:
     #c_index = concordance_index_censored(df_target['event'].values.astype(bool), df_target[config_task['labels_names'][0]].values, np.squeeze(surv_preds_observed.values))
-    c_index = ev.concordance_td('antolini')
+    c_index = ev.concordance_td()
     #c_index = c_index[0]
     return c_index
 def compute_brier_discrete(surv, duration, event, config_task):
@@ -946,44 +1018,142 @@ def compute_bootstrapped_scores(df_target, base_haz, bch, config_task, flag='con
             scores, brier_scores_ = compute_brier(df_target.iloc[indices], base_haz, bch, config_task)
         bootstrapped_scores.append(scores)
 
-    
 
 
     return bootstrapped_scores
 
+def is_picklable(obj):
+    import pickle
+    try:
+        pickle.dumps(obj)
+
+    except pickle.PicklingError:
+        return False
+    return True
+
+def compute_surv_metrics(flag, indices, surv, durations, event, config_task):
+    if flag == 'concordance':
+        try:
+            scores  = compute_concordance_discrete(surv[indices], durations[indices], event[indices], config_task)
+        except Exception as e:
+            print(f"Error in compute_surv_metrics_conc: {e}")
+            return None, None
+    else:
+        try:
+            scores, brier_scores_ = compute_brier_discrete(surv[indices], durations[indices], event[indices], config_task)
+        except Exception as e:
+            print(f"Error in compute_surv_metrics_brier: {e}")
+            return None, None
+    if flag == 'concordance':
+        return scores, None
+    else:
+        return scores, brier_scores_
+
+
 def compute_bootstrapped_scores_discrete(surv, durations, event, config_task, flag='concordance'):
     n_bootstraps = 1000
-    rng_seed = 42 # control reproducibility
+    rng_seed = 42  # control reproducibility
+    rng = np.random.RandomState(rng_seed)
+
+    indexes_total = []
+    for i in range(n_bootstraps):
+        indices = rng.randint(0, len(surv.columns), len(surv.columns))
+        if len(np.unique(event[indices])) >= 2:
+            #continue
+            indexes_total.append(indices)
 
     bootstrapped_scores = []
-    rng = np.random.RandomState(rng_seed)
-    for i in range (n_bootstraps):
-        
-        #bootstrap by sampling with replacement on the prediction indices
-        indices = rng.randint(0, len(surv), len(surv))
-        indices =  rng.randint(0, len(surv.columns), len(surv.columns))
-      #  surv_b = surv.iloc[indices].sort_index()
-      #  order = np.argsort(surv_b.index) 
+    maybe_brier = []
 
-       # if flag == 'concordance':
-        if len(np.unique(event[indices])) < 2:
-            # We need at least one positive and one negative sample for ROC AUC
-            # # to be defined: reject the sample
-            continue
-        if flag == 'concordance':
-          #  if len(np.unique(df_target['event'][indices])) < 2:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        result = executor.map(compute_surv_metrics,
+                    repeat(flag),
+                    indexes_total,
+                    repeat(surv),
+                    repeat(durations),
+                    repeat(event),
+                    repeat(config_task))
+    for i in result:
+        bootstrapped_scores.append(i[0])
+        maybe_brier.append(i[1])
+    
+    if flag == 'concordance':
+
+        return bootstrapped_scores# None #, maybe_brier
+    else:
+        return bootstrapped_scores, maybe_brier
+
+
+# def compute_bootstrapped_scores_discrete(surv, durations, event, config_task, flag='concordance'):
+#     n_bootstraps = 1000
+#     rng_seed = 42 # control reproducibility
+#     rng = np.random.RandomState(rng_seed)
+
+#     indexes_total = []
+#     for i in range(0, n_bootstraps):
+        
+#         indices =  rng.randint(0, len(surv.columns), len(surv.columns))
+#         if len(np.unique(event[indices])) < 2:
+#             continue
+#         indexes_total.append(indices)
+        
+        
+        
+#     bootstrapped_scores = []
+#     maybe_brier = []
+
+#     # for i in range (n_bootstraps):
+#     with concurrent.futures.ProcessPoolExecutor(
+#             max_workers=multiprocessing.cpu_count()) as executor:
+#         result = executor.map(compute_surv_metrics,
+#                     repeat(flag),
+#                     indexes_total,
+#                     repeat(surv),
+#                     repeat(durations),
+#                     repeat(event),
+#                     repeat(config_task))
+#     for i in result:
+#         bootstrapped_scores.append(i[0])
+#         maybe_brier.append(i[1])
+    
                 
-            scores = compute_concordance_discrete(surv[indices], durations[indices], event[indices], config_task)
-        else:
-            scores, brier_scores_ = compute_brier_discrete(surv[indices], durations[indices], event[indices],  config_task)
-        bootstrapped_scores.append(scores)
+#     return bootstrapped_scores, maybe_brier
+
+
+
+# def compute_bootstrapped_scores_discrete(surv, durations, event, config_task, flag='concordance'):
+#     n_bootstraps = 1000
+#     rng_seed = 42 # control reproducibility
+
+#     bootstrapped_scores = []
+#     rng = np.random.RandomState(rng_seed)
+#     for i in range (n_bootstraps):
+        
+#         #bootstrap by sampling with replacement on the prediction indices
+#         indices = rng.randint(0, len(surv), len(surv))
+#         indices =  rng.randint(0, len(surv.columns), len(surv.columns))
+#       #  surv_b = surv.iloc[indices].sort_index()
+#       #  order = np.argsort(surv_b.index) 
+
+#        # if flag == 'concordance':
+#         if len(np.unique(event[indices])) < 2:
+#             # We need at least one positive and one negative sample for ROC AUC
+#             # # to be defined: reject the sample
+#             continue
+#         if flag == 'concordance':
+#           #  if len(np.unique(df_target['event'][indices])) < 2:
+                
+#             scores = compute_concordance_discrete(surv[indices], durations[indices], event[indices], config_task)
+#         else:
+#             scores, brier_scores_ = compute_brier_discrete(surv[indices], durations[indices], event[indices],  config_task)
+#         bootstrapped_scores.append(scores)
 
     
 
-    if flag == 'concordance':
-        return bootstrapped_scores
-    else:
-        return bootstrapped_scores, brier_scores_
+#     if flag == 'concordance':
+#         return bootstrapped_scores
+#     else:
+#         return bootstrapped_scores, brier_scores_
 
 
 def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
@@ -1002,16 +1172,27 @@ def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
 
 
 def confidences_upper_lower_survival_discrete(surv, duration, test, config_task):
-    compute_bootstrapped_scores_conc = compute_bootstrapped_scores_discrete(
-        surv, duration, test, config_task, flag='concordance')
-    compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores_discrete(
-        surv, duration, test, config_task, flag='brier')
-    mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
-    mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
-    variable_dict = {
-        k: v for k, v in locals().items() if k in [
-            "mean_conc", "upper_conc", "lower_conc",
-            "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
+    import time
+    start = time.time() 
+    # compute_bootstrapped_scores_conc = compute_bootstrapped_scores_discrete(
+    #     surv, duration, test, config_task, flag='concordance')
+    # compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores_discrete(
+    #     surv, duration, test, config_task, flag='brier')
+    # mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
+    # mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
+    
+    # _, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
+    # variable_dict = {
+    #     k: v for k, v in locals().items() if k in [
+    #         "mean_conc", "upper_conc", "lower_conc",
+    #         "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
+    c_index = compute_concordance_discrete(surv, duration, test, config_task)
+    brier_ibs, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
+    variable_dict = {'mean_conc': c_index, 'mean_brier': brier_ibs,
+                     'lower_conc': c_index, 'upper_conc': c_index,
+                     'lower_brier': brier_ibs, 'upper_brier': brier_ibs, 'brier_scores': brier_scores}
+    print('variable_dict', variable_dict)
+    print('time for computing bootstraps', time.time() - start)
     return variable_dict
 
 def plot_auc_surv(variable_dict_1_year, variable_dict_5_year, output_plots):

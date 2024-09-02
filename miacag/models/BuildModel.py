@@ -79,7 +79,7 @@ class ModelBuilder():
         model = m(self.config, self.device)
         model = self.get_mayby_DDP(model)
 
-        if self.config['loaders']['mode'] in ['testing', 'prediction']: # or (self.config['model']['pretrain_model'] != 'None'):
+        if self.config['loaders']['mode'] in ['testing', 'prediction'] or self.config['loaders']['val_method']['saliency'] == True: # or (self.config['model']['pretrain_model'] != 'None'):
             if path_model != 'None':
                 if self.config["use_DDP"] == "False":
                     model.load_state_dict(

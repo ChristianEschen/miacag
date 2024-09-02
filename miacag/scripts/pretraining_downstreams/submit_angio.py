@@ -56,6 +56,8 @@ from miacag.plots.plotter import compute_aggregation
 from miacag.trainer import get_device
 from miacag.models.BuildModel import ModelBuilder
 
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ['TORCH_USE_CUDA_DSA'] = "1"
 
 parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)

@@ -222,19 +222,22 @@ def nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor,
 
 
 
-# def gradient_blending_nnl_loss(total, tab, vis, total_w, tab_w, vis_w, targets):
+def gradient_blending_nnl_loss(outputs, labels, events):
+    outputs_total = outputs[0]
+    outputs_tab = outputs[1]
+    outputs_vis = outputs[2]
 
-#         tv_loss = 
-#         t_loss = ModCELoss(tab_out, targ, self.ce) * self.scale
-#         v_loss = ModCELoss(visual_out, targ, self.ce) * self.scale
-        
-#         weighted_t_loss = t_loss * self.tab_weight
-#         weighted_v_loss = v_loss * self.visual_weight
-#         weighted_tv_loss = tv_loss * self.tab_vis_weight
-        
-#         loss = weighted_t_loss + weighted_v_loss + weighted_tv_loss
-#         return loss
-        
+    tv_loss = nll_logistic_hazard(outputs_total, labels, events)
+    t_loss = nll_logistic_hazard(outputs_tab, labels, events)
+    v_loss = nll_logistic_hazard(outputs_vis, labels, events)
+    
+    weighted_t_loss = t_loss * 1
+    weighted_v_loss = v_loss * 1 
+    weighted_tv_loss = tv_loss * 1
+    
+    loss = weighted_t_loss + weighted_v_loss + weighted_tv_loss
+    return loss
+    
 def mse_loss_with_nans(input, target):
 
     # Missing data are nan's
@@ -638,8 +641,9 @@ def get_loss_func(config, train=True):
             criterion = cox_ph_loss
             criterions.append(criterion)
         elif loss.startswith('NNL'):
-            criterion = NLLSurvLoss(alpha=0.5, eps=1e-7, reduction='mean')
+          #  criterion = NLLSurvLoss(alpha=0.5, eps=1e-7, reduction='mean')
             criterion = nll_logistic_hazard
+        #    criterion = gradient_blending_nnl_loss
             criterions.append(criterion)
         else:
             raise ValueError("Loss type is not implemented")

@@ -149,21 +149,32 @@ class ModelBuilder():
         # maybe freeze backbone
         if self.config['loaders']['mode'] not in ['testing', 'prediction']:
 #            print('freezing backbone', self.config['model']['freeze_backbone'])
+
             if self.config['model']['freeze_backbone']:
-                for param in model.module.encoder.parameters():
-                    param.requires_grad = False
-                if self.config['model']['aggregation'] == 'cross_attention':
-                    for param in model.module.att_pool.parameters():
-                        param.requires_grad = True
+                if self.config['loaders']['val_method']['saliency'] != True:
                         
-            #else:
-            #   if self.config['model']['model_name'] in "dinov2_vits14":
-                else:
-                    if self.config['task_type'] != 'regression':
-                        for param in model.module.fcs.parameters():
+                    for param in model.module.encoder.parameters():
+                        param.requires_grad = False
+                    if len(self.config['loaders']['tabular_data_names']) > 0:
+                        for param in model.module.embeddings.parameters():
+                            param.requires_grad = False
+                        for param in model.module.tabular_mlp.parameters():
+                            param.requires_grad = False
+                        for param in model.module.layer_norm_func.parameters():
+                            param.requires_grad = False
+                        
+                    if self.config['model']['aggregation'] == 'cross_attention':
+                        for param in model.module.att_pool.parameters():
                             param.requires_grad = True
-                        for param in model.module.attention.parameters():
-                            param.requires_grad = True
+                            
+                #else:
+                #   if self.config['model']['model_name'] in "dinov2_vits14":
+                    else:
+                        if self.config['task_type'] != 'regression':
+                            for param in model.module.fcs.parameters():
+                                param.requires_grad = True
+                            for param in model.module.attention.parameters():
+                                param.requires_grad = True
         return model
 
     def __call__(self):

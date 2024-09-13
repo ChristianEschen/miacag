@@ -150,9 +150,10 @@ def getPretrainedWeights(config, model, device):
             else:
 
                 pretrained_dict = torch.load(config['model']['checkpoint'], map_location='cuda:{}'.format(os.environ['LOCAL_RANK']))
+                
 
             # Load your current model's state dict
-            model_dict = model.module.state_dict()
+            model_dict = model.state_dict()
 
             # Filter out unnecessary keys from the pre-trained state dict
             pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and pretrained_dict[k].size() == model_dict[k].size()}
@@ -161,7 +162,10 @@ def getPretrainedWeights(config, model, device):
             model_dict.update(pretrained_dict)
 
             # Load the updated state dict into your current model
-            model.module.load_state_dict(model_dict)
+            model.load_state_dict(model_dict)
+    
+
+
     
 
 

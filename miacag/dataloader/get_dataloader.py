@@ -27,7 +27,7 @@ def to_dtype(data,fields, config):
             data[label_name] = data[label_name].long()
         elif config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth','wfocall1']:
             data[label_name] = data[label_name].float()
-        elif config['loss']['name'][c] in ['NNL']:
+        elif config['loss']['name'][c].startswith('NNL'):
             data[label_name] = data[label_name].float()
             data['event'] = data['event'].int()
         else:

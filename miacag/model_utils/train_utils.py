@@ -151,6 +151,8 @@ def train_one_epoch(model, criterion,
             cur_lr = lr_scheduler.optimizer.param_groups[0]['lr']
         else:
             cur_lr= lr_scheduler.get_last_lr()[0]
+        print('cur lr', cur_lr)
+        print('lr_scheduler', lr_scheduler)
         writer.add_scalar(
             "learning rate",
              cur_lr,  # losses[loss],

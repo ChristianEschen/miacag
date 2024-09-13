@@ -19,24 +19,21 @@ def get_optimizer(config, model, len_train):
             lr=config['optimizer']['learning_rate'],
             weight_decay=config['optimizer']['weight_decay'])
     elif config['optimizer']['type'] == 'sgd':
-        lr_image_encoder = 0.02
-        lr_tabular_encoder = 0.002
-
         # Create parameter groups
-        optimizer = torch.optim.Adam([
-            {'params': model.module.encoder.parameters(), 'lr': lr_image_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
-            {'params': model.module.layer_norm_func_img.parameters(), 'lr': lr_image_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
-            {'params': model.module.tabular_mlp.parameters(), 'lr': lr_tabular_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
-            {'params': model.module.embeddings.parameters(), 'lr': lr_tabular_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
-            {'params': model.module.layer_norm_func.parameters(), 'lr': lr_tabular_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
-            {'params': model.module.fcs.parameters(), 'lr': lr_image_encoder, 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},  # or a different learning rate if needed
-        ])
-        # optimizer = torch.optim.SGD(
-        #     model.parameters(),
-        #     lr=config['optimizer']['learning_rate'],
-        #     momentum=config['optimizer']['momentum'],
-        #     weight_decay=config['optimizer']
-        #                         ['weight_decay'])
+        # optimizer = torch.optim.SGD([
+        #     {'params': model.module.encoder.parameters(), 'lr': config['optimizer']['learning_rate'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
+        #     {'params': model.module.layer_norm_func_img.parameters(), 'lr': config['optimizer']['learning_rate'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
+        #     {'params': model.module.tabular_mlp.parameters(), 'lr': config['optimizer']['learning_rate_tab'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
+        #     {'params': model.module.embeddings.parameters(), 'lr': config['optimizer']['learning_rate_tab'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
+        #     {'params': model.module.layer_norm_func.parameters(), 'lr': config['optimizer']['learning_rate_tab'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},
+        #     {'params': model.module.fcs.parameters(), 'lr': config['optimizer']['learning_rate'], 'momentum':config['optimizer']['momentum'], 'weight_decay': config['optimizer']['momentum']},  # or a different learning rate if needed
+        # ])
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'],
+            momentum=config['optimizer']['momentum'],
+            weight_decay=config['optimizer']
+                                ['weight_decay'])
     # Set learning rate scheduler
     if config['lr_scheduler']['type'] == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(

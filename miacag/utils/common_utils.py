@@ -74,9 +74,12 @@ def get_losses_class(config, outputs, data, criterion, device):
             data["labels_predictions"]
         except:
             data["labels_predictions"]= None
+
+
         loss = get_loss(
             config, outputs[count_idx],
-            labels, criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
+            labels[:,count_idx], criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
+
         if torch.isnan(loss) == torch.tensor(True, device=device):
             print('loss is nan!')
             if count_idx == 0:

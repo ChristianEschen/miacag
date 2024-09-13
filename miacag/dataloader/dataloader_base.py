@@ -64,10 +64,10 @@ class DataloaderBase(data.Dataset):
             if config['model']['num_classes'] != 1:
                 if config['weighted_sampler'] == 'True':
                 #if self.df[config['labels_names']].isnull().sum().sum() > 1:
-                    self.df[config['labels_names']] = \
-                        self.df[config['labels_names']].astype(int)
+                    self.df[config['labels_names'][0]] = \
+                        self.df[config['labels_names'][0]].astype(int)
                     self.class_counts = \
-                        self.df[config['labels_names']].value_counts(ascending=True).to_list()
+                        self.df[config['labels_names'][0]].value_counts(ascending=True).to_list()
                  #   self.getSampler()
 
     def __len__(self):

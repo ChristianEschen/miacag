@@ -50,6 +50,10 @@ def get_index_for_labels_names_in_loss_group(config, group_name_unique):
 
 def get_loss_names_groups(config):
     group_name_unique,  indexes, counts = get_group_names(config)
+   # group_name_unique = ["dureation", "duration", "duration"]#config['loss']['name']
+  #  indexes = [0, 1, 2]
+   # counts= [1, 1, 1]
+    
     loss_group_names = []
     loss_lambda_weights = []
     for idx_c, index in enumerate(indexes):
@@ -63,10 +67,14 @@ def get_loss_names_groups(config):
 
 def get_group_names(config):
     group_names = [i.partition("_")[0] for i in config['labels_names']]
-    group_names_uniques, index, count = np.unique(np.array(
-        group_names), return_counts=True, return_index=True)
-    group_names_uniques = group_names_uniques.tolist()
-    return group_names_uniques, index.tolist(), count.tolist()
+    index = [i for i in range(len(group_names))]
+    group_names_uniques = group_names
+    count = [1 for i in range(len(group_names))]
+    return group_names_uniques, index, count
+   # group_names_uniques, index, count = np.unique(np.array(
+    #     group_names), return_counts=True, return_index=True)
+    # group_names_uniques = group_names_uniques.tolist()
+   # return group_names_uniques, index.tolist(), count.tolist()
 
 
 def maybePermuteInput(x, config):
@@ -116,6 +124,30 @@ def get_final_layer(config,  device, in_features):
     return fcs
 
 
+def read_tabular_data(config, checkpoint_tab_path, submodel):
+    import os
+            # and do it for tabular
+    if len(config['loaders']['tabular_data_names']) > 0:
+        if config['cpu'] == 'True':
+            pretrained_dict = torch.load(checkpoint_tab_path, map_location='cpu')
+        else:
+
+            pretrained_dict = torch.load(checkpoint_tab_path, map_location='cuda:{}'.format(os.environ['LOCAL_RANK']))
+            
+
+        # Load your current model's state dict
+        model_dict = submodel.state_dict()
+
+        # Filter out unnecessary keys from the pre-trained state dict
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and pretrained_dict[k].size() == model_dict[k].size()}
+
+        # Update your current model's state dict with the filtered pre-trained state dict
+        model_dict.update(pretrained_dict)
+
+        # Load the updated state dict into your current model
+        submodel.load_state_dict(model_dict)
+    return submodel
+
 class EncoderModel(nn.Module):
     def __init__(self, config, device):
         super(EncoderModel, self).__init__()
@@ -144,7 +176,7 @@ class ImageToScalarModel(EncoderModel):
         else:
             self.tab_feature = 0
         if len(self.config['loaders']['tabular_data_names'])>0:
-
+            
             self.embeddings = nn.ModuleDict()
             embedding_dims = [10 if i!= 0 else 0 for i in config['loaders']['tabular_data_names_embed_dim']]
             embedding_dims = [min(50, i//2) for i in config['loaders']['tabular_data_names_embed_dim']]
@@ -153,16 +185,9 @@ class ImageToScalarModel(EncoderModel):
                     self.embeddings[config['loaders']['tabular_data_names'][i]] = nn.Embedding(config['loaders']['tabular_data_names_embed_dim'][i], embedding_dims[i])
 
 
-            self.tabular_fc = \
-                nn.Linear(self.tab_feature,
-                                config['model']['num_classes'][loss_count_idx]).to(device)
-            self.vis_fc = \
-                nn.Linear(self.in_features,
-                                config['model']['num_classes'][loss_count_idx]).to(device)
-                
+
             self.num_indicator = [1 - x for x in self.config['loaders']['tabular_data_names_one_hot']]
             self.mask_tensor = torch.tensor(self.num_indicator, dtype=bool, device=device)
-
 
             self.total_tab_features = sum(self.num_indicator) + sum(embedding_dims)
             self.layer_norm_func = nn.BatchNorm1d(sum(self.num_indicator))
@@ -177,6 +202,14 @@ class ImageToScalarModel(EncoderModel):
                 nn.Dropout(0.2),
                 torch.nn.ReLU(),
             ).to(device)
+            self.layer_norm_before_tabular = nn.BatchNorm1d(self.tab_feature).to(device)
+
+        if len(self.config['loaders']['tabular_data_names'])>0:        
+            self.embeddings = read_tabular_data(config, config['model']['checkpoint_tab'], self.embeddings)
+            self.tabular_mlp = read_tabular_data(config, config['model']['checkpoint_tab'], self.tabular_mlp)
+            self.layer_norm_func = read_tabular_data(config, config['model']['checkpoint_tab'], self.layer_norm_func)
+        
+        
         self.keys_total = config['loaders']['tabular_data_names']
         
         self.numeric_keys = [self.keys_total[i] for i in range(len(self.keys_total)) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
@@ -184,6 +217,41 @@ class ImageToScalarModel(EncoderModel):
         self.dimension = config['model']['dimension']
         self.fcs = nn.ModuleList()
         for loss_count_idx, loss_type in enumerate(self.config['loss']['groups_names']):
+            if len(self.config['loaders']['tabular_data_names'])>0:
+                self.fcs_tab.append(
+                    nn.Sequential(
+                        nn.BatchNorm1d(self.tab_feature),
+                        nn.Linear(
+                            self.tab_feature, self.tab_feature).to(device),
+                        torch.nn.Dropout(0.2),
+                        nn.ReLU(),
+                        nn.BatchNorm1d(self.tab_feature),
+                        nn.Linear(
+                            self.tab_feature, self.in_features).to(device),
+                        torch.nn.Dropout(0.2),
+                        nn.ReLU(),
+                        nn.BatchNorm1d(self.tab_feature),
+                        nn.Linear(
+                            self.tab_feature,
+                            self.tab_feature).to(device),
+                        ))
+                ## Gradient blending###
+                self.tabular_fc = \
+                    nn.Sequential(
+                    torch.nn.Dropout(0.1),
+                    nn.ReLU(),
+                    nn.Linear(self.tab_feature,
+                                    config['model']['num_classes'][loss_count_idx]).to(device))
+
+                self.vis_fc = \
+                    nn.Sequential(
+                    torch.nn.Dropout(0.1),
+                    nn.ReLU(),
+                    nn.Linear(self.in_features,
+                                    config['model']['num_classes'][loss_count_idx]).to(device),
+                    )
+                #####
+                
            # count_loss = counts[loss_count_idx]
             count_loss = self.config['loss']['groups_counts'][loss_count_idx]
             if loss_type.startswith(tuple(['CE'])):
@@ -194,10 +262,10 @@ class ImageToScalarModel(EncoderModel):
             elif loss_type.startswith(tuple(['NNL'])):
                 self.fcs.append(
                         nn.Sequential(
-                            nn.BatchNorm1d(self.in_features + self.tab_feature),
+                            nn.BatchNorm1d(self.tab_feature + self.in_features),
                             nn.Linear(
-                                self.in_features + self.tab_feature, self.in_features+ self.tab_feature).to(device),
-                            torch.nn.Dropout(0.1),
+                                self.tab_feature + self.in_features, self.in_features+ self.tab_feature).to(device),
+                            torch.nn.Dropout(0.2),
                             nn.ReLU(),
                             nn.BatchNorm1d(self.in_features + self.tab_feature),
                             nn.Linear(
@@ -272,7 +340,6 @@ class ImageToScalarModel(EncoderModel):
 
             counter += 1
                             # Directly use the normalized numeric data
-
         tabular_data_numeric = self.layer_norm_func(tabular_data[:,self.mask_tensor])
         # if len(embedded_features) > 0:
         #     if len(embedded_features[0].shape) ==1:
@@ -310,10 +377,13 @@ class ImageToScalarModel(EncoderModel):
                 ps = []
                 if len(self.config['loaders']['tabular_data_names'])>0:
                     encode_num_and_cat_feat = self.tabular_forward(tabular_data)
-                 #   tabular_fc_out = self.tabular_fc(tabular_features)
-                 #   vis_fc_out = self.vis_fc(p)
-                    
                     tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
+                    ##### Gradient blending #####
+                    # tabular_features = self.layer_norm_before_tabular(tabular_features)
+
+                    # tabular_fc_out = self.tabular_fc(tabular_features)
+                    # vis_fc_out = self.vis_fc(p)
+                    #############################
                     if self.config['loaders']['mode'] == 'testing':
                         tabular_features = torch.cat([tabular_features] * x.shape[0], dim=0)
                     if not self.config['loaders']['only_tabular']:
@@ -342,8 +412,13 @@ class ImageToScalarModel(EncoderModel):
             for fc in self.fcs:
                     features = fc(p)
                     ps.append(features)
-    
-        return ps #, tabular_fc_out, vis_fc_out
+        if len(self.config['loaders']['tabular_data_names'])>0:
+            if len(self.confif['labels_names']>1):
+                return (ps[0],  tabular_fc_out, vis_fc_out)
+            else:
+                return [ps[0]]
+        else:
+            return [ps[0]]
 
 
     # def forward_saliency(self, x):

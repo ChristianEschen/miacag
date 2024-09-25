@@ -152,9 +152,10 @@ class ModelBuilder():
 
             if self.config['model']['freeze_backbone']:
                 if self.config['loaders']['val_method']['saliency'] != True:
-                        
-                    for param in model.module.encoder.parameters():
-                        param.requires_grad = False
+                    if not  self.config['loaders']['only_tabular']:
+                            
+                        for param in model.module.encoder.parameters():
+                            param.requires_grad = False
                     if len(self.config['loaders']['tabular_data_names']) > 0:
                         for param in model.module.embeddings.parameters():
                             param.requires_grad = False

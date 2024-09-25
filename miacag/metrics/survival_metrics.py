@@ -1174,23 +1174,23 @@ def confidences_upper_lower_survival(df_target, base_haz, bch, config_task):
 def confidences_upper_lower_survival_discrete(surv, duration, test, config_task):
     import time
     start = time.time() 
-    # compute_bootstrapped_scores_conc = compute_bootstrapped_scores_discrete(
-    #     surv, duration, test, config_task, flag='concordance')
-    # compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores_discrete(
-    #     surv, duration, test, config_task, flag='brier')
-    # mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
-    # mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
+    compute_bootstrapped_scores_conc = compute_bootstrapped_scores_discrete(
+        surv, duration, test, config_task, flag='concordance')
+    compute_bootstrapped_scores_ibs, brier_scores = compute_bootstrapped_scores_discrete(
+        surv, duration, test, config_task, flag='brier')
+    mean_conc, lower_conc, upper_conc  = compute_mean_lower_upper(compute_bootstrapped_scores_conc)
+    mean_brier, lower_brier, upper_brier  = compute_mean_lower_upper(compute_bootstrapped_scores_ibs)
     
-    # _, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
-    # variable_dict = {
-    #     k: v for k, v in locals().items() if k in [
-    #         "mean_conc", "upper_conc", "lower_conc",
-    #         "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
-    c_index = compute_concordance_discrete(surv, duration, test, config_task)
-    brier_ibs, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
-    variable_dict = {'mean_conc': c_index, 'mean_brier': brier_ibs,
-                     'lower_conc': c_index, 'upper_conc': c_index,
-                     'lower_brier': brier_ibs, 'upper_brier': brier_ibs, 'brier_scores': brier_scores}
+    _, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
+    variable_dict = {
+        k: v for k, v in locals().items() if k in [
+            "mean_conc", "upper_conc", "lower_conc",
+            "mean_brier", "upper_brier", "lower_brier", "brier_scores"]}
+    # c_index = compute_concordance_discrete(surv, duration, test, config_task)
+    # brier_ibs, brier_scores = compute_brier_discrete(surv, duration, test, config_task)
+    # variable_dict = {'mean_conc': c_index, 'mean_brier': brier_ibs,
+    #                  'lower_conc': c_index, 'upper_conc': c_index,
+    #                  'lower_brier': brier_ibs, 'upper_brier': brier_ibs, 'brier_scores': brier_scores}
     print('variable_dict', variable_dict)
     print('time for computing bootstraps', time.time() - start)
     return variable_dict

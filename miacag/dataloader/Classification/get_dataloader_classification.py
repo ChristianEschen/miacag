@@ -47,22 +47,7 @@ def patches_list_data_collate_fn(batch: collections.abc.Sequence, nr_patches=1, 
     '''
     batch_data =batch
 
-    # for i, item in enumerate(batch):
-    #     data = item[0]
-    #     data['inputs'] = torch.concatenate([it["inputs"] for it in item], dim=-1)
-    #  #   data["inputs"] = torch.stack([ix["inputs"] for ix in item], dim=0)
-    #     # zero pad if nr_patches is not reached
-    #     if data["inputs"].shape[-1] < nr_patches:
-    #         # zero pad
-    #         diff = nr_patches - data["inputs"].shape[-1]
-    #         data["inputs"] = torch.nn.functional.pad(data["inputs"], (diff, 0, 0, 0),  mode='constant', value=0)
-    #     # trim to nr_patches
-    #     data["inputs"] = data["inputs"][:, :, :, 0:nr_patches]
-    #     # drop SOPInstanceUID from dict
-    #     data.pop('SOPInstanceUID', None)
-    #     data["DcmPathFlatten"] = data["DcmPathFlatten"][0]
-    #     data["SeriesInstanceUID"] = data["SeriesInstanceUID"][0]
-    #     batch[i] = data
+  
     batch = default_collate(batch)
    # batch['inputs'] = batch['inputs'].permute(0, 4, 1, 2, 3)
     return batch
@@ -415,11 +400,20 @@ class ClassificationLoader():
             config_data = copy.deepcopy(train_ds.config)
             train_ds = train_ds()
             if self.config['loss']['name'][0] == 'CE':
+                print('weighted sampling here is not correct!')
                 sampler = DistributedWeightedRandomSampler(
                     dataset=train_ds,
                     weights=weights,
                     even_divisible=True,
                     shuffle=True)
+            elif self.config['loss']['name'][0].startswith('wfocall1'):
+                weights = [train_ds.data[i]['weights'] for i in range(0, len(train_ds.data))]
+                sampler = DistributedWeightedRandomSampler(
+                    dataset=train_ds,
+                    weights=weights,
+                    even_divisible=True,
+                    shuffle=True,
+                    config=config)
             elif self.config['loss']['name'][0] == 'NNL':
                 # weights = [train_ds.data[i]['weights_duration_transformed'] for i in range(0, len(train_ds.data))]
                 # sampler = DistributedBalancedRandomSampler(
@@ -492,7 +486,7 @@ class ClassificationLoader():
                     num_workers=config['num_workers'],
                     collate_fn=list_data_collate, #patches_list_data_collate_read_patches_individual, #pad_list_data_collate, #pad_list_data_collate if config['loaders']['val_method']['type'] == 'sliding_window' else list_data_collate,
                     pin_memory=False) 
-        return train_loader, val_loader, train_ds, val_ds, config_data
+        return train_loader, val_loader, train_ds, val_ds, config
 
     def get_classificationloader_patch_lvl_test(self, config):
         if config['loaders']['format'] == 'dicom':

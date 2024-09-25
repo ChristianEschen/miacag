@@ -63,7 +63,9 @@ from sklearn import preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
 from collections import defaultdict
-
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+import copy
 # import matplotlib
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
@@ -287,6 +289,7 @@ def determine_unique_values(df, config):
             unique_values.append(0)
     return unique_values
 def add_misisng_indicator_column_names(df, imputer, config, phase='train'):
+
     tabular_feature_missing_indicator = imputer.indicator_.features_
     missing_names = []
     is_categorical = []
@@ -350,17 +353,6 @@ class train_monai_classification_loader(base_monai_loader):
         self.set_data_path(self.features)
         # shuffle the data
         self.df = self.df.sample(frac=1).reset_index(drop=True)
-        #######################################################################
-        # # old
-        # w_label_names = []
-        # for label_name in config['labels_names']:
-            
-        #     self.weights = self._prepare_weights(reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
-        #     w_label_names.append('weights_' + label_name)
-        #     self.df['weights_' + label_name] = self.weights
-        # self.data = self.df[self.features + config['labels_names'] + ['rowid'] + ['event'] +["labels_predictions"] + w_label_names]
-        ########################################################################
-
         if self.config['labels_names'][0].startswith('treatment'):
             # drop rows where the column self.config['labels_names'][0] is equal to 4
             self.df = self.df[self.df[self.config['labels_names'][0]] != 4]
@@ -375,6 +367,9 @@ class train_monai_classification_loader(base_monai_loader):
             self.max_target = 3
         else:
             self.max_target = 100    
+        # define hard cases based on presence if any labels_names are between 0.001 and 0.999 and add to new column
+        self.df['weights'] = self.df[config['labels_names']].apply(lambda x: any([0.001 < i < 0.999 for i in x]), axis=1).astype(int)
+        self.df['weights'] = _get_weights_classification(self.df, ["weights"],config)
         for label_name in config['labels_names']:
             self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
             w_label_names.append('weights_' + label_name)
@@ -407,6 +402,7 @@ class train_monai_classification_loader(base_monai_loader):
             #self.config['labtrans'] = self.labtrans
             self.config['cuts'] = self.labtrans.cuts
             event = ['event']
+            self.df['weights'] = 1
         else:
             event = []
         
@@ -417,8 +413,8 @@ class train_monai_classification_loader(base_monai_loader):
           #  self.weights_cat = self._compute_weights(self.df, config)
             #self.df[w_label_names]= self.weights
             self.df['weights'] = self.weights
-        else:
-            self.df['weights'] = 1
+       # else:
+           # self.df['weights'] = 1
 
         self.data = self.df[
             self.features + config['labels_names'] + ["weights"] +
@@ -426,58 +422,33 @@ class train_monai_classification_loader(base_monai_loader):
              "StudyInstanceUID", "PatientID"] + event+ w_label_names + ['duration_transformed'] + config['loaders']['tabular_data_names']]
         self.data.fillna(value=np.nan, inplace=True)
         if len(config['loaders']['tabular_data_names']) > 0:
-            # print('before impu')
-            # check_nan_after_imputation(self.data)
-            # for i in config['loaders']['tabular_data_names']:
-            #     print('unique', self.data[i].unique())
-            # self.data[config['loaders']['tabular_data_names']].isna().sum()
-           # self.data = impute_data(self.data, config)
-            ## TODO: add indicator for missing values  
-            # self.imputer.indicator_.features_
 
-            # old
-          #  self.data = impute_missing(self.data, config)
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
             num_columns_cat = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] != 0]
-            self.data.at[2, "PatientSex"]=np.nan
+            # self.data.at[2, "PatientSex"]=np.nan
+            # self.data.at[10, "sten_proc_15_dist_lcx_transformed"]=np.nan
+            # self.data.at[6, "sten_proc_1_prox_rca_transformed"]=np.nan
 
             self.imputer =SimpleImputer(add_indicator=True, strategy='most_frequent')
+            
+
+            
 
  
             self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
             self.data, self.config = add_misisng_indicator_column_names(self.data, self.imputer, config, phase='train')
-            
+
             self.enc = defaultdict(LabelEncoder)
             fit = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].fit_transform(x))
             fit.apply(lambda x: self.enc[x.name].inverse_transform(x))
             self.data[num_columns_cat] = self.data[num_columns_cat].apply(lambda x: self.enc[x.name].transform(x))
 
-            # self.enc = LabelEncoder()
-            # self.enc.fit(self.data[num_columns_cat])
-            # self.data[num_columns_cat] = self.enc.transform(self.data[num_columns_cat])
 
             self.config['loaders']['tabular_data_names_embed_dim'] = determine_unique_values(self.data, config)
-           # self.data[config['loaders']['tabular_data_names']] = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
-            ####
-            
-            # new
+
             num_columns = [config['loaders']['tabular_data_names'][i] for i in range(len(config['loaders']['tabular_data_names'])) if config['loaders']['tabular_data_names_one_hot'][i] == 0]
 
-            # # Imputer with add_indicator=True
-            # self.imputer = SimpleImputer(add_indicator=True)
-
-            # # Fit the imputer on the specified columns
-            # self.imputer.fit(self.data[config['loaders']['tabular_data_names']])
-
-            # # Transform the data
-            # imputed_data = self.imputer.transform(self.data[config['loaders']['tabular_data_names']])
-
-            # # Create a DataFrame for the imputed data
-            # imputed_columns = config['loaders']['tabular_data_names'] + [f'{col}_indicator' for col in range(0, imputed_data.shape[1]- len(config['loaders']['tabular_data_names']))]
-            # imputed_df = pd.DataFrame(imputed_data, columns=imputed_columns)
-            # self.config['n_features'] = len(imputed_columns)
-            # # Update the original DataFrame with the imputed data
-            # self.data[imputed_columns] = imputed_df
+       
             ####
             with open(os.path.join(self.config['output'], 'imputer.pkl'),'wb') as f:
                 pickle.dump(self.imputer,f)
@@ -582,43 +553,7 @@ class train_monai_classification_loader(base_monai_loader):
             #     num_workers=self.config['num_workers'])
         return train_ds
 
-    def _prepare_weights(self, reweight, target_name, max_target=0.99, lds=False, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
-            assert reweight in {'none', 'inverse', 'sqrt_inv'}
-            assert reweight != 'none' if lds else True, \
-                "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
-
-            value_dict = {x: 0 for x in range(max_target)}
-            labels = self.df[target_name].values*100
-         #   labels = generate_values()*100
-            labels = [int(i) for i in labels]
-            for label in labels:
-                value_dict[min(max_target - 1, int(label))] += 1
-            if reweight == 'sqrt_inv':
-                value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
-            elif reweight == 'inverse':
-                value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}  # clip weights for inverse re-weight
-            num_per_label = [value_dict[min(max_target - 1, int(label))] for label in labels]
-            if not len(num_per_label) or reweight == 'none':
-                return None
-            print(f"Using re-weighting: [{reweight.upper()}]")
-            
-            if lds:
-                lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
-                print(f'Using LDS: [{lds_kernel.upper()}] ({lds_ks}/{lds_sigma})')
-                smoothed_value = convolve1d(
-                    np.asarray([v for _, v in value_dict.items()]), weights=lds_kernel_window, mode='constant')
-                num_per_label = [smoothed_value[min(max_target - 1, int(label))] for label in labels]
-         #   plt.hist(labels)
-         #   plt.show()
-          #  plt.hist(smoothed_value)
-          #  plt.show()
-            weights = [np.float32(1 / x) for x in num_per_label]
-            scaling = len(weights) / np.sum(weights)
-            weights = [scaling * x for x in weights]
-          #plt.hist(weights)
-          #  plt.show()
-            return weights
-
+   
 class val_monai_classification_loader(base_monai_loader):
     def __init__(self, df, config):
         super(val_monai_classification_loader, self).__init__(df,

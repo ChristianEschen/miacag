@@ -42,13 +42,14 @@ def _get_weights_classification(df, labels_names, config):
     df[labels_name] = \
                    df[labels_name].astype(int)
     class_counts = \
-        df[labels_name].value_counts(ascending=True).to_list()
+        df[labels_name].value_counts().to_list()
     num_samples = len(df)
     class_weights = [num_samples/class_counts[i] for
                                 i in range(len(class_counts))]  # [::-1]
     weights = [class_weights[
         df[labels_name].squeeze().to_list()[i]]
                     for i in range(int(num_samples))]
+   # weights = [i for i in weights]
     return weights
 
 class DataloaderBase(data.Dataset):

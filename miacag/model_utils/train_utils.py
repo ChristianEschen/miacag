@@ -43,13 +43,15 @@ def train_one_step(model, data, criterion,
                    epoch,
                    tb_step_writer, scaler, device, iter_minibatch):
     model.train()    
+    
+    if config['loaders']['tabular_data_names'] == []:
+        data['tabular_data'] = None
+    if config['loaders']['only_tabular']:
+        data['inputs'] = None
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
-            if config['loaders']['tabular_data_names'] == []:
-                data['tabular_data'] = None
-            if config['loaders']['only_tabular']:
-                data['inputs'] = None
+
             outputs = model(data['inputs'], data['tabular_data'])
             losses, loss = get_losses_class(config,
                                             outputs,
@@ -132,7 +134,7 @@ def train_one_epoch(model, criterion,
        # running_loss_train = increment_metrics(running_loss_train, loss)
     
     running_metric_train, metric_tb = normalize_metrics(
-    metrics, device)
+        metrics, device)
     running_loss_train, loss_tb = normalize_metrics(
         loss_metric, device)
 

@@ -427,7 +427,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     raw_trues_all = np.concatenate(raw_trues_list)
     trues = np.concatenate(trues)
     probas_bin = np.concatenate(probas_bin)
-    positives_total = np.sum(probas_bin)
+    positives_total = np.sum(raw_trues_all)
     support = len(probas_bin)
     #DEBUG
    # probas_bin = np.random.randint(2, size=8)

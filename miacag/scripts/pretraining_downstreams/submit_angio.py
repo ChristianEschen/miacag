@@ -467,13 +467,14 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
     pred = [i + '_predictions' for i in config_task['labels_names']]
     
     
-   # torch.distributed.barrier()
-    if loss_names[0] in ['CE']:
-        config_task['weighted_sampler'] = "True"
-    elif loss_names[0] in ['NNL']:
-        config_task['weighted_sampler'] = "True"
-    else:
-        config_task['weighted_sampler'] = "False"
+#    # torch.distributed.barrier()
+#     if loss_names[0] in ['CE']:
+#         config_task['weighted_sampler'] = "True"
+#     elif loss_names[0] in ['NNL']:
+#         config_task['weighted_sampler'] = "True"
+#     else:
+#         raise ValueError('this loss is not implementeed:', loss_names)
+#         #config_task['weighted_sampler'] = "False"
         
     # train(config_task)
     # TODO manipulate config_task
@@ -528,10 +529,10 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
             loss_names_i = config_task_list[0]['loss']['name']
             torch.cuda.empty_cache() # here empty
 
-            if dist.is_initialized():
-                plot_task(config_task_list[0], output_table_name, conf_i, loss_names_i)
-            else:
-                plot_task_not_ddp(config_task_list[0], output_table_name, conf, loss_names_i)
+            # if dist.is_initialized():
+            #     plot_task(config_task_list[0], output_table_name, conf_i, loss_names_i)
+            # else:
+            #     plot_task_not_ddp(config_task_list[0], output_table_name, conf, loss_names_i)
         
             count+=1
 
@@ -540,10 +541,10 @@ def run_task(config, task_index, output_directory, output_table_name, cpu, train
         config_task['artery_type'] = 'both'
         torch.cuda.empty_cache() # here empty
 
-        # if dist.is_initialized():
-        #     plot_task(config_task, output_table_name, conf, loss_names)
-        # else:
-        #     plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
+        if dist.is_initialized():
+            plot_task(config_task, output_table_name, conf, loss_names)
+        else:
+            plot_task_not_ddp(config_task, output_table_name, conf, loss_names)
     return None
 
 def change_psql_col_to_dates(config, output_table_name, col):

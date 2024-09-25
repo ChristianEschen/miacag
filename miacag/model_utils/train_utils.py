@@ -15,7 +15,7 @@ from miacag.utils.common_utils import get_losses_class, wrap_outputs_to_dict
 from miacag.models.BuildModel import ModelBuilder
 from miacag.models.modules import get_loss_names_groups
 from torch.nn.utils.clip_grad import clip_grad_norm
-
+import tqdm
 
 def set_random_seeds(random_seed=0):
     torch.manual_seed(random_seed)
@@ -48,11 +48,14 @@ def train_one_step(model, data, criterion,
         data['tabular_data'] = None
     if config['loaders']['only_tabular']:
         data['inputs'] = None
+    if config['model']['fds']:
+        targets = torch.concat([data[q] for q in config['labels_names']], dim=0)
+
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():
        # with torch.autocast(device_type='cuda', dtype=torch.float16):
 
-            outputs = model(data['inputs'], data['tabular_data'])
+            outputs, _ = model(data['inputs'], data['tabular_data'], targets, epoch)
             losses, loss = get_losses_class(config,
                                             outputs,
                                             data,
@@ -69,7 +72,9 @@ def train_one_step(model, data, criterion,
             optimizer.zero_grad()
 
     else:
-        outputs = model(data['inputs'], data['tabular_data'])
+        outputs, _ = model(data['inputs'], data['tabular_data'], targets, epoch)
+
+
         losses, loss = get_losses_class(config,
                                         outputs,
                                         data,
@@ -133,6 +138,23 @@ def train_one_epoch(model, criterion,
         #                                          metrics)
        # running_loss_train = increment_metrics(running_loss_train, loss)
     
+    if config['model']['fds'] and epoch >= 0:
+        print(f"Create Epoch [{epoch}] features of all training data...")
+        encodings, labels = [], []
+        with torch.no_grad():
+            for c, data in enumerate(train_loader, 0):
+                if config['loaders']['tabular_data_names'] == []:
+                        data['tabular_data'] = None
+                data['inputs'] = data['inputs'].cuda(non_blocking=True)
+                targets = torch.concat([data[q] for q in config['labels_names']], dim=0)
+                _, feature = model(data['inputs'],data['tabular_data'],targets, epoch)
+                encodings.extend(feature.data.squeeze().cpu().numpy())
+                labels.extend(targets.data.squeeze().cpu().numpy())
+
+        encodings, labels = torch.from_numpy(np.vstack(encodings)).cuda(), torch.from_numpy(np.hstack(labels)).cuda()
+        model.module.FDS.update_last_epoch_stats(epoch)
+        model.module.FDS.update_running_stats(encodings, labels, epoch)
+
     running_metric_train, metric_tb = normalize_metrics(
         metrics, device)
     running_loss_train, loss_tb = normalize_metrics(

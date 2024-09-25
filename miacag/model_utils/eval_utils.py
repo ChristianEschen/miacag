@@ -77,8 +77,14 @@ def eval_one_step(model, data, device, criterion,
         # forward
     
         if config['loaders']['tabular_data_names'] == []:
-                data['tabular_data'] = None
-        outputs = maybe_sliding_window(data['inputs'], model, config, data['tabular_data'])
+            data['tabular_data'] = None
+        if config['loaders']['only_tabular']:
+            data['inputs'] = None
+        if config['model']['fds']:
+            targets = torch.concat([data[q] for q in config['labels_names']], dim=0)
+
+     #   outputs = maybe_sliding_window(data['inputs'], model, config, data['tabular_data'])
+        outputs, _ = model(data['inputs'], data['tabular_data'], targets, None)
         # max pooling on first dimension
         if config['loaders']['mode'] == 'testing':
             if config['labels_names'][0].startswith('ffr'):

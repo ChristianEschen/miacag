@@ -5,7 +5,7 @@ from miacag.models.get_encoder import get_encoder, modelsRequiredPermute
 import torch.nn.functional as F
 import torch
 import numpy as np
-
+from miacag.models.fds import FDS
 def getCountsLoss(losses):
     count_regression = 0
     count_classification = 0
@@ -66,15 +66,19 @@ def get_loss_names_groups(config):
 
 
 def get_group_names(config):
-    group_names = [i.partition("_")[0] for i in config['labels_names']]
-    index = [i for i in range(len(group_names))]
-    group_names_uniques = group_names
-    count = [1 for i in range(len(group_names))]
-    return group_names_uniques, index, count
-   # group_names_uniques, index, count = np.unique(np.array(
-    #     group_names), return_counts=True, return_index=True)
-    # group_names_uniques = group_names_uniques.tolist()
-   # return group_names_uniques, index.tolist(), count.tolist()
+    if config['loss']['name'][0].startswith(tuple(['NNL'])):
+        group_names = [i.partition("_")[0] for i in config['labels_names']]
+        index = [i for i in range(len(group_names))]
+        group_names_uniques = group_names
+        count = [1 for i in range(len(group_names))]
+        return group_names_uniques, index, count
+    else:
+        group_names = [i.partition("_")[0] for i in config['labels_names']]
+
+        group_names_uniques, index, count = np.unique(np.array(
+            group_names), return_counts=True, return_index=True)
+        group_names_uniques = group_names_uniques.tolist()
+        return group_names_uniques, index.tolist(), count.tolist()
 
 
 def maybePermuteInput(x, config):
@@ -182,7 +186,10 @@ class ImageToScalarModel(EncoderModel):
             embedding_dims = [min(50, i//2) for i in config['loaders']['tabular_data_names_embed_dim']]
             for i in range(0, len(config['loaders']['tabular_data_names'])):
                 if config['loaders']['tabular_data_names_one_hot'][i] == 1:  # Embedding
-                    self.embeddings[config['loaders']['tabular_data_names'][i]] = nn.Embedding(config['loaders']['tabular_data_names_embed_dim'][i], embedding_dims[i])
+                    self.embeddings[config['loaders']['tabular_data_names'][i]] = torch.nn.Sequential(
+                        nn.Embedding(config['loaders']['tabular_data_names_embed_dim'][i], embedding_dims[i]), 
+                        nn.BatchNorm1d(embedding_dims[i])
+                    ).to(device)
 
 
 
@@ -208,6 +215,20 @@ class ImageToScalarModel(EncoderModel):
             self.embeddings = read_tabular_data(config, config['model']['checkpoint_tab'], self.embeddings)
             self.tabular_mlp = read_tabular_data(config, config['model']['checkpoint_tab'], self.tabular_mlp)
             self.layer_norm_func = read_tabular_data(config, config['model']['checkpoint_tab'], self.layer_norm_func)
+            
+        
+        if self.config['loaders']['only_tabular']:
+            if len(self.config['loaders']['tabular_data_names'])>0:
+                self.drop_out = nn.Dropout(0.5)
+        #         if self.config['model']['aggregation'] == 'attention':
+        #             self.att_pool = AttentiveClassifier(
+        #                     embed_dim=self.encoder.embed_dim,
+        #                     num_heads=self.encoder.num_heads,
+        #                     depth=1,
+        #                     num_classes=count_loss,
+        #                 ).to(device)
+        #         else:
+        #             pass
         
         
         self.keys_total = config['loaders']['tabular_data_names']
@@ -217,40 +238,7 @@ class ImageToScalarModel(EncoderModel):
         self.dimension = config['model']['dimension']
         self.fcs = nn.ModuleList()
         for loss_count_idx, loss_type in enumerate(self.config['loss']['groups_names']):
-            if len(self.config['loaders']['tabular_data_names'])>0:
-                self.fcs_tab.append(
-                    nn.Sequential(
-                        nn.BatchNorm1d(self.tab_feature),
-                        nn.Linear(
-                            self.tab_feature, self.tab_feature).to(device),
-                        torch.nn.Dropout(0.2),
-                        nn.ReLU(),
-                        nn.BatchNorm1d(self.tab_feature),
-                        nn.Linear(
-                            self.tab_feature, self.in_features).to(device),
-                        torch.nn.Dropout(0.2),
-                        nn.ReLU(),
-                        nn.BatchNorm1d(self.tab_feature),
-                        nn.Linear(
-                            self.tab_feature,
-                            self.tab_feature).to(device),
-                        ))
-                ## Gradient blending###
-                self.tabular_fc = \
-                    nn.Sequential(
-                    torch.nn.Dropout(0.1),
-                    nn.ReLU(),
-                    nn.Linear(self.tab_feature,
-                                    config['model']['num_classes'][loss_count_idx]).to(device))
 
-                self.vis_fc = \
-                    nn.Sequential(
-                    torch.nn.Dropout(0.1),
-                    nn.ReLU(),
-                    nn.Linear(self.in_features,
-                                    config['model']['num_classes'][loss_count_idx]).to(device),
-                    )
-                #####
                 
            # count_loss = counts[loss_count_idx]
             count_loss = self.config['loss']['groups_counts'][loss_count_idx]
@@ -296,17 +284,13 @@ class ImageToScalarModel(EncoderModel):
                 if config['model']['aggregation'] == 'mean':   
                     self.fcs.append(
                         nn.Sequential(
-                            nn.LayerNorm((self.in_features + self.tab_feature) * self.factor_fusion),
-                            nn.Linear(
-                                self.in_features + self.tab_feature, self.in_features).to(device),
-                            nn.ReLU(),
                             nn.Linear(
                                 self.in_features, self.in_features).to(device),
                             nn.ReLU(),
                             nn.Linear(
                                 self.in_features,
                                 count_loss).to(device),
-                            #nn.ReLU(),
+                            nn.ReLU(),
 
                             ))
                 elif config['model']['aggregation'] == 'cross_attention':
@@ -324,10 +308,17 @@ class ImageToScalarModel(EncoderModel):
 
             else:
                 raise ValueError('loss not implemented')
+        if self.config['model']['fds'] == True:
 
-
-     #   self.FDS = FDS(**self.fds_config)
+            if self.config['model']['fds'] == True:
+                start_smooth = self.config['model']['start_smooth']
+                self.FDS = FDS(
+                    feature_dim=self.in_features, bucket_num=100, bucket_start=3,
+                    start_update=0, start_smooth=start_smooth, kernel="gaussian", ks=9, sigma=1, momentum=0.9
+                )
         
+            self.fds =self.config['model']['fds'] 
+            self.start_smooth = start_smooth
     def tabular_forward(self, tabular_data):
         embedded_features = []
         counter = 0
@@ -347,14 +338,13 @@ class ImageToScalarModel(EncoderModel):
         embedded_features.append(tabular_data_numeric)
         return torch.cat(embedded_features, dim=1)
         
-    def forward(self, x = None, tabular_data = None):
+    def forward(self, x = None, tabular_data = None, targets = None, epoch = None):
         ## TODO implement tabular only setting
         if not self.config['loaders']['only_tabular']:
           #  if self.config['loaders']['val_method']['saliency'] == False:
             x = maybePermuteInput(x, self.config)
             
             p = self.encoder(x)
-        
             if self.config['model']['aggregation'] in ['max','mean']:
                 if self.dimension in ['3D', '2D+T']:
                     if self.config['model']['backbone'] not in [
@@ -374,6 +364,15 @@ class ImageToScalarModel(EncoderModel):
                     p = p
                 else:
                     p = p.mean(dim=(-2, -1))
+                    
+                
+                # apply the FDS
+                encoding_s = p
+
+                if self.training and self.fds:
+                    if epoch >= self.start_smooth:
+                        encoding_s = self.FDS.smooth(encoding_s, targets, epoch, self.config)
+
                 ps = []
                 if len(self.config['loaders']['tabular_data_names'])>0:
                     encode_num_and_cat_feat = self.tabular_forward(tabular_data)
@@ -389,6 +388,9 @@ class ImageToScalarModel(EncoderModel):
                     if not self.config['loaders']['only_tabular']:
                         p = self.layer_norm_func_img(p)
                     p = torch.concat((p, tabular_features), dim=1)  # Combine the features from video and tabular data
+                    if self.config['loaders']['only_tabular']:
+                        if len(self.config['tabular_data_names'])>0:
+                            p = self.drop_out(p)
 
                 for fc in self.fcs:
                     features = fc(p)
@@ -413,27 +415,11 @@ class ImageToScalarModel(EncoderModel):
                     features = fc(p)
                     ps.append(features)
         if len(self.config['loaders']['tabular_data_names'])>0:
-            if len(self.confif['labels_names']>1):
+            if len(self.config['labels_names'])>1:
                 return (ps[0],  tabular_fc_out, vis_fc_out)
             else:
                 return [ps[0]]
         else:
-            return [ps[0]]
+            return (ps, encoding_s)
 
-
-    # def forward_saliency(self, x):
-    #     x = maybePermuteInput(x, self.config)
-    #     p = self.encoder(x)
-    #     if self.dimension in ['3D', '2D+T']:
-    #         if self.config['model']['backbone'] not in ["mvit_base_16x4", "mvit_base_32x3"]:
-    #            p = p.mean(dim=(-3, -2, -1))
-    #            # p = p[:, 1:, :].reshape(p.size(0), 8, 7, 7, p.size(2))
-    #         else:
-    #             pass
-    #     elif self.dimension == 'tabular':
-    #         p = p
-    #     else:
-    #         p = p.mean(dim=(-2, -1))
-    #     ps = self.fcs[0](p)
-    #     return ps
-    
+   

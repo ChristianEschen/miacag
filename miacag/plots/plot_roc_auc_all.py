@@ -256,8 +256,8 @@ def classification_report_func(trues, preds):
     return report_df, cm
 
 def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plot_type, config, theshold=0.5):
-       # Define a result table as a DataFrame
-    roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc', 'auc_lower', 'auc_upper', ' precision', 'recall', 'f1', 'f1_lower', 'f1_upper'])
+    # Define a result table as a DataFrame
+    roc_result_table = pd.DataFrame(columns=['segments', 'fpr','tpr','auc', 'auc_lower', 'auc_upper', 'precision', 'recall', 'f1', 'f1_lower', 'f1_upper'])
 
     probas = []
     trues = []
@@ -272,7 +272,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         maybeRCA = ""
         # result_table_copy[confidences_names[idx]] = transform_confidences_to_by_label_type(
         #     result_table_copy[confidences_names[idx]], seg)
-   #    if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth']:
+    #    if config['loss']['name'][0] in ['MSE', '_L1', 'L1smooth']:
         raw_trues = result_table_copy[trues_names[idx]]
         # deep copy raw trues
         raw_trues = copy.deepcopy(raw_trues.values)
@@ -289,17 +289,17 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         raw_trues = raw_trues[~mask]
         y_test = copy.deepcopy(y_test)
         yproba = yproba[~mask]
-       # yproba = simulate_ffr(raw_trues)
+        # yproba = simulate_ffr(raw_trues)
         # deepcopy yprobam
         threshold_preds= config['loaders']['val_method']['classifier_threshold']
         ypred_bin = copy.deepcopy(yproba)
         ypred_bin = threshold_continues(
             pd.DataFrame(ypred_bin), threshold=threshold_preds, name=seg)
-    
+
         print('ypred_bin', ypred_bin)
         print('y_test', y_test)
         print('yproba', yproba)
-      #  yproba = np.clip(yproba, a_min=0, a_max=1)
+        #  yproba = np.clip(yproba, a_min=0, a_max=1)
         print('yproba post clip', yproba)
         #DEBUG
         # sum ypred_bin
@@ -357,7 +357,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
             compute_linear_regression(raw_trues, yproba, output_plots, seg)
         except:
             pass
-       # except:
+        # except:
         # #    mean_mae = np.nan
         #     lower_mae = np.nan
         #     upper_mae = np.nan
@@ -409,28 +409,28 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         
     # save the roc_result_table to a csv file
     roc_result_table.set_index('segments', inplace=True)
-    
+
     # make a copy for saving to csv
     roc_result_table_save = roc_result_table.copy()
     roc_result_table_save = roc_result_table_save.reset_index()
     roc_result_table_save = roc_result_table_save[["segments","auc", 'auc_lower', 'auc_upper', 'pr_auc', 'pr_auc_lower', 'pr_auc_upper',
-                                                   'mae', 'mae_lower', 'mae_upper', 'positives', 'support',
-                                                   'f1', 'f1_lower', 'f1_upper', 'specificity', 'specificity_lower', 'specificity_upper',
-                                                   'precision_mean', 'precision_lower', 'precision_upper',
-                                                   'senstivity', 'senstivity_lower', 'senstivity_upper', 'pearson', 'pearson_lower', 'pearson_upper']]
-    
+                                                    'mae', 'mae_lower', 'mae_upper', 'positives', 'support',
+                                                    'f1', 'f1_lower', 'f1_upper', 'specificity', 'specificity_lower', 'specificity_upper',
+                                                    'precision_mean', 'precision_lower', 'precision_upper',
+                                                    'senstivity', 'senstivity_lower', 'senstivity_upper', 'pearson', 'pearson_lower', 'pearson_upper']]
+
 
     # concatenate list of numpy arrays for trues and probas
     probas = np.concatenate(probas)
     #DEBUG
-   # probas = np.random.rand(8)
+    # probas = np.random.rand(8)
     raw_trues_all = np.concatenate(raw_trues_list)
     trues = np.concatenate(trues)
     probas_bin = np.concatenate(probas_bin)
     positives_total = np.sum(raw_trues_all)
     support = len(probas_bin)
     #DEBUG
-   # probas_bin = np.random.randint(2, size=8)
+    # probas_bin = np.random.randint(2, size=8)
 
     # plot roc curve for all segments combined
     fpr, tpr, _ = roc_curve(trues,  probas)
@@ -477,7 +477,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     baseline_precision = positives_total / support
     plt.plot([0, 1], [baseline_precision, baseline_precision], color='orange', linestyle='--',
             label='Baseline PR AUC={:.3f}'.format(baseline_precision))
-  #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
+    #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
     plt.xticks(np.arange(0.0, 1.1, step=0.1))
     plt.xlabel("Recall (sensitivity)", fontsize=15)
 
@@ -485,7 +485,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.ylabel("Precision (positive predictive value)", fontsize=15)
 
     plt.title('Precision recall curve', fontweight='bold', fontsize=15)
-    
+
     plt.legend(prop={'size':10}, loc='lower right')
 
     plt.show()
@@ -496,12 +496,12 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         output_plots, plot_type + '_precision_recall_comb.pdf'), dpi=100,
                 bbox_inches='tight')
     plt.close()
-    
+
     fscore = (2 * precision * recall) / (precision + recall+ 1e-10)
     ix= np.argmax(fscore)
     print('Best Threshold=%f, F-Score=%.3f' % (pr_thresholds[ix], fscore[ix]))
-    
-# Convert probabilities into binary predictions using the user-defined threshold
+
+    # Convert probabilities into binary predictions using the user-defined threshold
     preds_ = (probas >= config['loaders']['val_method']['classifier_threshold']).astype(int)
 
     class_report, cm = classification_report_func(trues, preds_)
@@ -520,17 +520,17 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     roc_result_table_save["f1_score_threshold"] = fscore[ix]
 
     roc_result_table_save.to_csv(os.path.join(output_plots, 'segments_results_table.csv'), index=False)
-    
+
     mean_mae, lower_mae, upper_mae = get_mean_lower_upper(probas, raw_trues_all, 'mae_score')
     mean_std, lower_std, upper_std = get_mean_lower_upper(probas, raw_trues_all, 'std_score')
     mean_pearson, lower_pearson, upper_pearson = get_mean_lower_upper(probas, raw_trues_all, 'pearson_score')
-    
+
     # cast mae and std to dataframe and save to csv
     mae_std_df = pd.DataFrame({'mae': [mean_mae], 'mae_lower': [lower_mae], 'mae_upper': [upper_mae],
-                               'std': [mean_std], 'std_lower': [lower_std], 'std_upper': [upper_std],
-                               'pearson': [mean_pearson], 'pearson_lower': [lower_pearson], 'pearson_upper': [upper_pearson]})
+                                'std': [mean_std], 'std_lower': [lower_std], 'std_upper': [upper_std],
+                                'pearson': [mean_pearson], 'pearson_lower': [lower_pearson], 'pearson_upper': [upper_pearson]})
     mae_std_df.to_csv(os.path.join(output_plots, 'mae_std_all.csv'), index=False)
-    
+
 
     compute_linear_regression(raw_trues_all, probas, output_plots, '_all')
 
@@ -540,44 +540,44 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     dataframe.to_csv(os.path.join(output_plots, 'probas_trues.csv'), index=False)
     # rename row values for segments based on part of the name:
     dictionary = {'sten_proc_1_': '1 Proximal RCA',
-                  'sten_proc_2_': '2 Mid RCA',
-                  'sten_proc_3_': '3 Distal RCA',
-                  'sten_proc_4_': '4 PDA RCA/LCA',
-                  'sten_proc_5_': '5 LM LCA',
-                  'sten_proc_6_': '6 Proximal LAD',
-                  'sten_proc_7_': '7 Mid LAD',
-                  'sten_proc_8_': '8 Distal LAD',
-                  'sten_proc_9_': '9 Diagonal 1',
-                  'sten_proc_10_': '10 Diagonal 2',
-                  'sten_proc_11_': '11 Proximal LCX',
-                  'sten_proc_12_': '12 Marginal 1',
-                  'sten_proc_13_': '13 Mid LCX',
-                  'sten_proc_14_': '14 Marginal 2',
-                  'sten_proc_15_': '15 Distal LCX',
-                  'sten_proc_16_': '16 PLA RCA/LCX',
-                  'ffr_proc_1_': '1 Proximal RCA',
-                  'ffr_proc_2_': '2 Mid RCA',
-                  'ffr_proc_3_': '3 Distal RCA',
-                  'ffr_proc_4_': '4 PDA RCA/LCA',
-                  'ffr_proc_5_': '5 LM LCA',
-                  'ffr_proc_6_': '6 Proximal LAD',
-                  'ffr_proc_7_': '7 Mid LAD',
-                  'ffr_proc_8_': '8 Distal LAD',
-                  'ffr_proc_9_': '9 Diagonal 1',
-                  'ffr_proc_10_': '10 Diagonal 2',
-                  'ffr_proc_11_': '11 Proximal LCX',
-                  'ffr_proc_12_': '12 Marginal 1',
-                  'ffr_proc_13_': '13 Mid LCX',
-                  'ffr_proc_14_': '14 Marginal 2',
-                  'ffr_proc_15_': '15 Distal LCX',
-                  'ffr_proc_16_': '16 PLA RCA/LCX'}
+                    'sten_proc_2_': '2 Mid RCA',
+                    'sten_proc_3_': '3 Distal RCA',
+                    'sten_proc_4_': '4 PDA RCA/LCA',
+                    'sten_proc_5_': '5 LM LCA',
+                    'sten_proc_6_': '6 Proximal LAD',
+                    'sten_proc_7_': '7 Mid LAD',
+                    'sten_proc_8_': '8 Distal LAD',
+                    'sten_proc_9_': '9 Diagonal 1',
+                    'sten_proc_10_': '10 Diagonal 2',
+                    'sten_proc_11_': '11 Proximal LCX',
+                    'sten_proc_12_': '12 Marginal 1',
+                    'sten_proc_13_': '13 Mid LCX',
+                    'sten_proc_14_': '14 Marginal 2',
+                    'sten_proc_15_': '15 Distal LCX',
+                    'sten_proc_16_': '16 PLA RCA/LCX',
+                    'ffr_proc_1_': '1 Proximal RCA',
+                    'ffr_proc_2_': '2 Mid RCA',
+                    'ffr_proc_3_': '3 Distal RCA',
+                    'ffr_proc_4_': '4 PDA RCA/LCA',
+                    'ffr_proc_5_': '5 LM LCA',
+                    'ffr_proc_6_': '6 Proximal LAD',
+                    'ffr_proc_7_': '7 Mid LAD',
+                    'ffr_proc_8_': '8 Distal LAD',
+                    'ffr_proc_9_': '9 Diagonal 1',
+                    'ffr_proc_10_': '10 Diagonal 2',
+                    'ffr_proc_11_': '11 Proximal LCX',
+                    'ffr_proc_12_': '12 Marginal 1',
+                    'ffr_proc_13_': '13 Mid LCX',
+                    'ffr_proc_14_': '14 Marginal 2',
+                    'ffr_proc_15_': '15 Distal LCX',
+                    'ffr_proc_16_': '16 PLA RCA/LCX'}
     id = 0
     roc_result_table_2 = roc_result_table.copy()
     for row in roc_result_table.index:
         for key in dictionary.keys():
             if row.startswith(key):
                 roc_result_table_2 = roc_result_table_2.rename(index={row: dictionary[key]})
-         #   roc_result_table.rename(index={row: dictionary[row]}, inplace=True)
+            #   roc_result_table.rename(index={row: dictionary[row]}, inplace=True)
 
     fig = plt.figure(figsize=(8,6))
 
@@ -609,8 +609,11 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
         output_plots, plot_type + '_roc_all.pdf'), dpi=100,
                 bbox_inches='tight')
     plt.close()
+    plt.close(fig)
     # plot precision recall curve
-    
+    roc_result_table_2 = roc_result_table_2[~roc_result_table_2.index.duplicated(keep='first')]
+    fig = plt.figure(figsize=(8,6))
+
     for i in roc_result_table_2.index:
         #     df_plot, prediction_name, label_name)
         plt.plot(roc_result_table_2.loc[i]['recall'], 
@@ -620,7 +623,7 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
                     roc_result_table_2.loc[i]['pr_auc_lower'],
                     roc_result_table_2.loc[i]['pr_auc_upper']))
         
-  #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
+    #  plt.plot([0,1], [0,1], color='orange', linestyle='--')
 
     plt.xticks(np.arange(0.0, 1.1, step=0.1))
     plt.xlabel("Recall (sensitivity)", fontsize=15)
@@ -638,7 +641,8 @@ def plot_roc_all(result_table, trues_names, confidences_names, output_plots, plo
     plt.savefig(os.path.join(
         output_plots, plot_type + '_' + '_precision_recall.pdf'), dpi=100,
                 bbox_inches='tight')
-    
+    plt.close()
+
 
 def plot_regression_all(result_table, trues_names, confidences_names, output_plots, config):
        # Define a result table as a DataFrame

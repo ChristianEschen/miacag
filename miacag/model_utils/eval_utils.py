@@ -82,6 +82,8 @@ def eval_one_step(model, data, device, criterion,
             data['inputs'] = None
         if config['model']['fds']:
             targets = torch.concat([data[q] for q in config['labels_names']], dim=0)
+        else:
+            targets = None
 
      #   outputs = maybe_sliding_window(data['inputs'], model, config, data['tabular_data'])
         outputs, _ = model(data['inputs'], data['tabular_data'], targets, None)
@@ -151,6 +153,7 @@ def run_val_one_step(model, config, validation_loader, device, criterion,
             if config['loaders']['mode'] == 'testing':
                 # list comprehension on the dict outputs
                # print('outputs testing', outputs)
+             #   outputs = [outputs]
                 outputs_i_i = []
                 for o_idx in range(0, len(data['rowid'])):
                     outputs_i = {key: value.cpu().numpy().tolist()[o_idx]

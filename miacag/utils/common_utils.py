@@ -41,8 +41,11 @@ def wrap_outputs_to_dict(outputs, config):
     for group_count, group in enumerate(config['loss']['groups_names']):
         outputs_group = outputs[group_count]
         if group.startswith(tuple(['CE', 'NNL'])):
-            dim = 0
-            outputs_dict[config['labels_names'][dim]] = outputs[dim]
+           # dim = 0
+          #  outputs_dict[config['labels_names'][dim]] = outputs[dim]
+            output_name = config['labels_names'][0]
+            outputs_dict[output_name] = outputs
+
         else:
             dim = outputs_group.shape[-1]
             for segment_idx in range(0, dim):
@@ -70,8 +73,10 @@ def get_losses_class(config, outputs, data, criterion, device):
         if loss_name.startswith('NNL'):
             labels_i = labels[:,count_idx]
             event = data['event']
+            outputs = outputs
         else:
             labels_i = labels
+            outputs =outputs[count_idx]
         # a hack
         try:
             data["labels_predictions"]
@@ -80,7 +85,7 @@ def get_losses_class(config, outputs, data, criterion, device):
 
 
         loss = get_loss(
-            config, outputs[count_idx],
+            config, outputs,
             labels_i, criterion[count_idx], loss_name, event, weights, data["labels_predictions"])
 
         if torch.isnan(loss) == torch.tensor(True, device=device):

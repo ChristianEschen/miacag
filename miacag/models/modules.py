@@ -211,11 +211,13 @@ class ImageToScalarModel(EncoderModel):
             ).to(device)
             self.layer_norm_before_tabular = nn.BatchNorm1d(self.tab_feature).to(device)
 
-        if len(self.config['loaders']['tabular_data_names'])>0:        
-            self.embeddings = read_tabular_data(config, config['model']['checkpoint_tab'], self.embeddings)
-            self.tabular_mlp = read_tabular_data(config, config['model']['checkpoint_tab'], self.tabular_mlp)
-            self.layer_norm_func = read_tabular_data(config, config['model']['checkpoint_tab'], self.layer_norm_func)
+        if len(self.config['loaders']['tabular_data_names'])>0:
+            if self.config['model']['checkpoint_tab'] != False:
             
+                self.embeddings = read_tabular_data(config, config['model']['checkpoint_tab'], self.embeddings)
+                self.tabular_mlp = read_tabular_data(config, config['model']['checkpoint_tab'], self.tabular_mlp)
+                self.layer_norm_func = read_tabular_data(config, config['model']['checkpoint_tab'], self.layer_norm_func)
+                
         
         if self.config['loaders']['only_tabular']:
             if len(self.config['loaders']['tabular_data_names'])>0:
@@ -372,6 +374,8 @@ class ImageToScalarModel(EncoderModel):
                 if self.training and self.fds:
                     if epoch >= self.start_smooth:
                         encoding_s = self.FDS.smooth(encoding_s, targets, epoch, self.config)
+                else:
+                    encoding_s = None
 
                 ps = []
                 if len(self.config['loaders']['tabular_data_names'])>0:
@@ -405,6 +409,7 @@ class ImageToScalarModel(EncoderModel):
                 ps = torch.cat(ps, dim=1)
                 return ps
         else:
+            encoding_s = None
             encode_num_and_cat_feat = self.tabular_forward(tabular_data)
             tabular_features = self.tabular_mlp(encode_num_and_cat_feat)
             if self.config['loaders']['mode'] == 'testing':
@@ -418,7 +423,7 @@ class ImageToScalarModel(EncoderModel):
             if len(self.config['labels_names'])>1:
                 return (ps[0],  tabular_fc_out, vis_fc_out)
             else:
-                return [ps[0]]
+                return [ps[0], encoding_s]
         else:
             return (ps, encoding_s)
 

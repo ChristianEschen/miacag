@@ -205,9 +205,15 @@ def get_metrics(outputs,
                             argmax=True, to_onehot=config['model']['num_classes'][0]),
                         ])
                             
-                        
-
+                        # send output to gpu:
+                        #outputs = outputs.device('cuda:0')
                         outputs = [post_trans(i) for i in decollate_batch(outputs)]
+                        if config['cpu'] == 'True':
+                            device = 'cpu'
+                        else:
+                            device = 'cuda:' + os.environ["LOCAL_RANK"]
+                        outputs = [i.to(device) for i in outputs]
+
                         metrics[metric](y_pred=outputs, y=labels)
                         metrics_dicts[metric] = metrics[metric]
 

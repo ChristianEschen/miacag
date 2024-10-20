@@ -50,6 +50,9 @@ def train_one_step(model, data, criterion,
         data['inputs'] = None
     if config['model']['fds']:
         targets = torch.concat([data[q] for q in config['labels_names']], dim=0)
+    else:
+        targets = None
+    
 
     if scaler is not None:  # use AMP
         with torch.cuda.amp.autocast():

@@ -756,13 +756,13 @@ def wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
     for i in ffr_cols_true:
         df_ffr[i] = 1 - df_ffr[i]
 
-    # substract 1- confidences
-    output_plots 
+    # # substract 1- confidences
+    # # output_plots 
     plot_roc_all(df_ffr, ffr_cols_true, ffr_cols_conf, output_plots,
                     plot_type='FFR',
                     config=config,
                     theshold=0.2)
-    # else:
+    # # else:
     #     print('No FFR labels found in database')
     
 

@@ -394,7 +394,7 @@ def l1_loss_smooth(predictions, targets, beta=1):
         return loss
 
 
-def bce_with_nans(predictions, targets, config=None):
+def bce_with_nans(predictions, targets, config=None, train=True):
     # mask = torch.isnan(targets)
     # loss = 0
     # predictions = predictions[~mask]
@@ -406,8 +406,10 @@ def bce_with_nans(predictions, targets, config=None):
     pos_weights = torch.concatenate(pos_weights).to(predictions.device)
     # cat pos_weights to the same dtype as predictions
     pos_weights = pos_weights.float()
-        
-    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weights, reduction='mean')
+    if train:
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weights, reduction='mean')
+    else:
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='mean')
     predictions = predictions.float()
     targets = targets.float()   
 
@@ -590,7 +592,7 @@ def get_loss_func(config, train=True):
             criterions.append(criterion)
         elif loss.startswith('BCE_multilabel'):
             criterion = bce_with_nans
-            criterion.__defaults__ = (config,)
+            criterion.__defaults__ = (config,train)
 
             criterions.append(criterion)
         elif loss.startswith('MSE'):

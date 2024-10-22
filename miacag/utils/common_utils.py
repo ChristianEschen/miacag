@@ -3,18 +3,21 @@ import torch
 def stack_labels(data, config, loss_name):
     stacked_data = []
     for count_idx, label_name in enumerate(config['labels_names']):
-        if label_name.partition("_")[0] == loss_name.partition("_")[-1]:
-            if loss_name.startswith(tuple(['MSE', '_L1', 'L1smooth','wfocall1'])):
-                stacked_data.append(data[label_name])
-            elif loss_name.startswith(tuple(['BCE_multilabel'])):
-                stacked_data.append(data[label_name])
-            elif loss_name.startswith(tuple(['CE'])):
-                stacked_data.append(data[label_name])
-            elif loss_name.startswith(tuple(['NNL'])):
-                stacked_data.append(data[label_name])
-                
-            else:
-                raise ValueError('this loss is not implementeed:', loss_name)
+        # if loss_name.startswith(tuple(['BCE_multilabel'])):
+        #     pass
+        # elif label_name.partition("_")[0] == loss_name.partition("_")[-1]:
+        if loss_name.startswith(tuple(['MSE', '_L1', 'L1smooth','wfocall1'])):
+            stacked_data.append(data[label_name])
+        elif loss_name.startswith(tuple(['BCE_multilabel'])):
+            stacked_data.append(data[label_name])
+        elif loss_name.startswith(tuple(['CE'])):
+            stacked_data.append(data[label_name])
+        elif loss_name.startswith(tuple(['NNL'])):
+            stacked_data.append(data[label_name])
+            
+        else:
+            raise ValueError('this loss is not implementeed:', loss_name)
+    
     return torch.stack(stacked_data, 1)
 
 def stack_weights(data, config, loss_name):

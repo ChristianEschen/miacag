@@ -434,6 +434,7 @@ class ClassificationLoader():
                     even_divisible=True,
                     shuffle=True,
                     config=config)
+
             else:
                 raise ValueError('sampler not implemented')
         else:

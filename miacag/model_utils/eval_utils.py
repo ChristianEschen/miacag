@@ -249,7 +249,7 @@ def maybe_softmax_transform(df, config):
         elif config['loss']['name'][c] in ['_L1', 'L1smooth', 'wfocall1']:
             df[logit_conf] = df[logit]
         elif config['loss']['name'][c].startswith('BCE'):
-            logits_return.append(torch.nn.Sigmoid()(logit.float()))
+            logits_return.append(torch.nn.Sigmoid()(torch.from_numpy(np.array(df[logit]))))
         elif config['loss']['name'][c].startswith('NNL'):
             df[logit_conf] = df[logit]
             #df[logit_conf] = torch.nn.Sigmoid()(df[logit].float())

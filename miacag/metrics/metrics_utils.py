@@ -185,12 +185,16 @@ def get_metrics(outputs,
             c = 0
             if metric.startswith('acc_top_1'):
             #    labels, outputs = remove_nans(labels, outputs)
+                if config['loss']['name'][0] == 'BCE_multilabel':
+                    num_classes = 2
+                else:
+                    num_classes = num_classes
                 labels = labels.long()
                 if outputs.nelement() != 0:
                     labels = F.one_hot(
                         labels,
                         num_classes=num_classes)
-                    if metric.startswith('acc_top_1_BCE'):
+                    if metric.startswith('acc_top_1_sten'):
                         outputs = torch.nn.Sigmoid()(outputs)
                         outputs = (outputs >= 0.5).float()
                         metrics[metric](
@@ -352,6 +356,9 @@ def normalize_metrics(running_metrics, device):
             running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('BCE'):
+            running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)
+            running_metrics[running_metric].count = running_metrics[running_metric].count.to(device)# Move to GPU memory if available
+            running_metrics[running_metric].sum = running_metrics[running_metric].sum.to(device)
             metric_tb = running_metrics[running_metric].aggregate().item()
         elif running_metric.startswith('total'):
             running_metrics[running_metric].val = running_metrics[running_metric].val.to(device)

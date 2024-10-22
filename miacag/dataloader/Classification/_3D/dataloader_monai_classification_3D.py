@@ -70,6 +70,28 @@ import copy
 # import matplotlib.pyplot as plt
 # plt.style.use('ggplot')
 # matplotlib.use( 'tkagg' )
+
+def get_pos_weights(df, labels_names):
+    # Ensure the column is binary and convert to int if necessary
+    labels_name = labels_names[0]
+    df[labels_name] = df[labels_name].astype(int)
+
+    # Count the number of samples for each class (0 and 1)
+    class_counts = df[labels_name].value_counts().sort_index().to_list()
+
+    if len(class_counts) == 1:
+        print('Warning: Only samples of one class found')
+        # Set the weight to 1.0 to avoid division by zero error
+        pos_weight = torch.tensor([1.0])
+    else:
+        # Calculate the number of samples for each class
+        num_negatives = class_counts[0]  # Number of 0s
+        num_positives = class_counts[1]  # Number of 1s
+
+        # Compute the positive weight (pos_weight) as the ratio of negatives to positives
+        pos_weight = torch.tensor([num_negatives / num_positives], dtype=torch.float32)
+    
+    return pos_weight
 def z_score_normalize(data, keys):
     normalized_data = data.copy()  # Copy the original data to avoid in-place modification
     for key in keys:
@@ -371,9 +393,26 @@ class train_monai_classification_loader(base_monai_loader):
         self.df['weights'] = self.df[config['labels_names']].apply(lambda x: any([0.001 < i < 0.999 for i in x]), axis=1).astype(int)
         self.df['weights'] = _get_weights_classification(self.df, ["weights"],config)
         for label_name in config['labels_names']:
-            self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
-            w_label_names.append('weights_' + label_name)
-            self.df['weights_' + label_name] = self.weights
+            if self.config['task_type'] == 'classification':
+                # compute inverse frequency of the target
+                th = self.config['loaders']['val_method']['threshold_sten']
+                # stack all labels in one column
+                self.df[label_name] = (self.df[label_name]>=th).astype(int)
+                self.weights = get_pos_weights(self.df, [label_name])
+                config['labels_' + label_name + '_weights'] = self.weights
+            
+            else:
+
+                self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+                
+                self.weights = pd.Series(self.weights, index=self.df.index)    
+        # Create a mask to identify rows between 0.5 and 0.9 in the current label column
+                mask = (self.df[label_name] >= 0.5) & (self.df[label_name] <= 0.9)
+                # Multiply weights for rows where the mask condition is True
+                self.weights[mask] *= 10
+                self.weights = self.weights.to_list()
+                w_label_names.append('weights_' + label_name)
+                self.df['weights_' + label_name] = self.weights
         #self.data = self.df[self.features + config['labels_na
         if self.config['loss']['name'][0] == 'NNL':
             # start with censor after followup
@@ -577,13 +616,19 @@ class val_monai_classification_loader(base_monai_loader):
             self.max_target = 100    
         if config['labels_names'][0].startswith('sten') or config['labels_names'][0].startswith('ffr') or config['labels_names'][0].startswith('timi'):
             for label_name in config['labels_names']:
-                if config['labels_names'][0].startswith('ffr'):
-                    print('consider if we should implement replacement of ffr nan values just for validation...')
-                #self.df[label_name] = self.df[label_name].fillna(0)
+                if self.config['task_type'] == 'classification':
+                    # compute inverse frequency of the target
+                    th = self.config['loaders']['val_method']['threshold_sten']
+                    # stack all labels in one column
+                    self.df[label_name] = (self.df[label_name]>=th).astype(int)
+                else:
+                    if config['labels_names'][0].startswith('ffr'):
+                        print('consider if we should implement replacement of ffr nan values just for validation...')
+                    #self.df[label_name] = self.df[label_name].fillna(0)
 
-                self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
-                w_label_names.append('weights_' + label_name)
-                self.df['weights_' + label_name] = self.weights
+                    self.weights = _prepare_weights(self.df, reweight="inverse", target_name=label_name, max_target=100, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2)
+                    w_label_names.append('weights_' + label_name)
+                    self.df['weights_' + label_name] = self.weights
 
         if self.config['loss']['name'][0] == 'NNL':
             self.df = self.df.dropna(subset=['event', 'duration_transformed'])

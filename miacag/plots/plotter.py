@@ -999,7 +999,12 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
                 subset=['StudyInstanceUID', "PatientID"])
         support = len(df_label)
         print('max 3', df[["sten_proc_4_pda_lca_transformed"]].max())
-        if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth', 'wfocall1']:
+        if config['loss']['name'][c] in ['MSE', '_L1', 'L1smooth', 'wfocall1', 'BCE_multilabel']:
+            if config['loss']['name'][c] == 'BCE_multilabel':
+                # sigmoid transformation
+                df_label[confidence_name] = 1 / (1 + np.exp(-df_label[confidence_name]))
+                df_label[prediction_name] = 1 / (1 + np.exp(-df_label[prediction_name]))
+            
             df_to_process = df_label.copy()
             try:
                 plot_results_regression(df_to_process, confidence_name,
@@ -1034,22 +1039,26 @@ def plot_wrapper(df, label_names, prediction_names, confidence_names, output_plo
                     print('Error in FFR correction')
 
 
-        elif config['loss']['name'][c].startswith('CE') or \
-                config['loss']['name'][c] == 'BCE_multilabel':
-            plot_results_classification(df_label,
-                                        label_name,
-                                        prediction_name,
-                                        confidence_name,
-                                        output_plots,
-                                        config,
-                                        support,
-                                        c,
-                                        group_aggregated)
-    print('max 4', df[["sten_proc_4_pda_lca_transformed"]].max())
+        # elif config['loss']['name'][c].startswith('CE') or \
+        #         config['loss']['name'][c] == 'BCE_multilabel':
+        #     plot_results_classification(df_label,
+        #                                 label_name,
+        #                                 prediction_name,
+        #                                 confidence_name,
+        #                                 output_plots,
+        #                                 config,
+        #                                 support,
+        #                                 c,
+        #                                 group_aggregated)
+    for c, label_name in enumerate(label_names):
+        if config['loss']['name'][c] == 'BCE_multilabel':
+            confidence_name = confidence_names[c]
+            prediction_name = prediction_names[c]
+            df[confidence_name] = 1 / (1 + np.exp(-df[confidence_name]))
+            df[prediction_name] = 1 / (1 + np.exp(-df[prediction_name]))
 
     wrap_plot_all_sten_reg(df, label_names, confidence_names, output_plots,
                         group_aggregated, config)    
-    print('max last', df[["sten_proc_4_pda_lca_transformed"]].max())
 
     wrap_plot_all_roc(df, label_names, confidence_names, output_plots,
                       group_aggregated,

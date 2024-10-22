@@ -321,6 +321,8 @@ class ImageToScalarModel(EncoderModel):
         
             self.fds =self.config['model']['fds'] 
             self.start_smooth = start_smooth
+        else:
+            self.fds = False
     def tabular_forward(self, tabular_data):
         embedded_features = []
         counter = 0

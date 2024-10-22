@@ -17,6 +17,8 @@ import time
 import yaml
 import random
 from miacag.utils.feature_imortance import wrap_feature_names
+from miacag.configs.config import cast_tensors_to_numpy, cast_np_array_to_float
+
 def shuffle_feature(data, feature):
     dcm_paths = [d[feature] for d in data]
 
@@ -105,6 +107,7 @@ class TestPipeline():
                 del config[False]
             except:
                 pass
+            config = cast_np_array_to_float(cast_tensors_to_numpy(config))
             with open(
                 os.path.join(config['output_directory'], log_name),
                     'w') as file:
@@ -424,6 +427,13 @@ class TestPipeline():
             confidence_col = [
                 label_name + '_confidence_' +
                 str(i) for i in range(0, config['model']['num_classes'][count])]
+        elif config['loss']['name'][count].startswith(tuple(['BCE_multi'])):
+            confidences = label_name
+            #   df[confidences] = np.expand_dims(df[confidences], 1)
+            confidence_col = [
+                    label_name + '_confidence_' +
+                    str(i) for i in range(0, 1)]
+            csv_files = os.path.join(config['output_directory'], 'csv_files_pred')
         else:
             confidences = label_name + '_confidence'
          #   df[confidences] = np.expand_dims(df[confidences], 1)

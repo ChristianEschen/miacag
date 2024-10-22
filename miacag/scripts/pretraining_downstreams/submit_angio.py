@@ -375,7 +375,7 @@ def plot_task(config_task, output_table_name, conf, loss_names):
     torch.distributed.barrier()
     config_task['loaders']['mode'] = 'testing'
         # plot results
-    if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1']:
+    if loss_names[0] in ['L1smooth', 'MSE', 'wfocall1', 'BCE_multilabel']:
         if torch.distributed.get_rank() == 0:
 
             plot_regression_tasks(config_task, output_table_name, output_plots_train,
